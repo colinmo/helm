@@ -1,0 +1,83 @@
+package main
+
+import (
+	"fmt"
+	"time"
+
+	webview "github.com/jchv/go-webview-selector"
+)
+
+func GetToParentalControlsAndClick(lookfor string) {
+	debug := false
+	webView := webview.New(debug)
+	webView.SetTitle("Test")
+	webView.SetSize(800, 600, webview.HintFixed)
+	webView.Navigate("http://192.168.1.1")
+	go func() {
+		fmt.Printf("in here")
+		time.Sleep(5 * time.Second)
+		fmt.Printf("Sigh")
+		webView.Dispatch(func() {
+			webView.Eval(fmt.Sprintf(`
+			function waitForElement(css_search) {
+				while (typeof document.querySelector(css_search) == 'undefined') {
+					sleep(200);
+				}
+			}
+			waitForElement('#pc-login-user')
+			document.querySelector('#pc-login-user').value='%s';
+			waitForElement('#pc-login-password')
+			document.querySelector('#pc-login-password').value='%s';
+			waitForElement('#pc-login-btn')
+			document.querySelector('#pc-login-btn').click();
+				`, appPreferences.RouterUsername, appPreferences.RouterPassword))
+		})
+		time.Sleep(2 * time.Second)
+		webView.Dispatch(func() {
+			webView.Eval(`
+			if (typeof document.querySelector('#confirm-yes') != 'undefined') {
+				document.querySelector('#confirm-yes').click()
+			}
+			`)
+		})
+		time.Sleep(5 * time.Second)
+		webView.Dispatch(func() {
+			webView.Eval(`
+			function waitForElement(css_search) {
+				while (typeof document.querySelector(css_search) == 'undefined') {
+					sleep(200);
+				}
+			}
+			waitForElement("a[url='parentCtrl.htm'] span")
+			document.querySelector("a[url='parentCtrl.htm'] span").click();
+				`)
+		})
+		time.Sleep(5 * time.Second)
+		webView.Dispatch(func() {
+			webView.Eval(fmt.Sprintf(`
+			function waitForElement(css_search) {
+				var waitTime = 0
+				while (typeof document.querySelector(css_search) == 'undefined' && waitTime < 3000) {
+					sleep(200);
+					waitTime += 200
+				}
+			}
+			waitForElement("%s")
+			if (typeof document.querySelector("%s") != 'undefined') {
+				document.querySelector("%s").click();
+			}
+				`, lookfor, lookfor, lookfor))
+		})
+		time.Sleep(5 * time.Second)
+		webView.Terminate()
+		fmt.Printf("Terminated")
+	}()
+	webView.Run()
+}
+
+func DisableParentalControls() {
+	GetToParentalControlsAndClick("#enableParentalCtrlOff")
+}
+func EnableParentalControls() {
+	GetToParentalControlsAndClick("#enableParentalCtrlOn")
+}
