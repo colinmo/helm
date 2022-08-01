@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"image/color"
 	"io/ioutil"
 	"os"
 	"path"
@@ -13,6 +14,7 @@ import (
 
 	fyne "fyne.io/fyne/v2"
 	app "fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
@@ -148,9 +150,14 @@ func buildMonthSelect(dateToShow time.Time, owningDialog *dialog.Dialog) *fyne.C
 		widget.NewLabel("S"),
 	}
 	thisDay := startOfMonthDisplay
+	todayString := time.Now().Format("01/02/2006")
 	for i := 0; i < totalDays; i++ {
 		mike := thisDay
-		days = append(days, widget.NewButton(fmt.Sprintf("%d", thisDay.Day()), func() {
+		bg := canvas.NewRectangle(color.NRGBA{R: 220, G: 220, B: 220, A: 0})
+		if thisDay.Format("01/02/2006") == todayString {
+			bg = canvas.NewRectangle(color.NRGBA{R: 100, G: 200, B: 150, A: 255})
+		}
+		days = append(days, container.NewMax(bg, widget.NewButton(fmt.Sprintf("%d", thisDay.Day()), func() {
 			x, _ := appStatus.CurrentZettleDKB.Get()
 			saveZettle(markdownInput.Text, x)
 
@@ -160,7 +167,7 @@ func buildMonthSelect(dateToShow time.Time, owningDialog *dialog.Dialog) *fyne.C
 			markdownInput.Text = getFileContentsAndCreateIfMissing(path.Join(appPreferences.ZettlekastenHome, x))
 			markdownInput.Refresh()
 			(*owningDialog).Hide()
-		}))
+		})))
 		thisDay = thisDay.AddDate(0, 0, 1)
 	}
 	return container.NewGridWithColumns(7,
