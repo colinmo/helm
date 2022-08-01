@@ -141,13 +141,13 @@ func buildMonthSelect(dateToShow time.Time, owningDialog *dialog.Dialog) *fyne.C
 	}
 
 	days := []fyne.CanvasObject{
-		widget.NewLabel("S"),
-		widget.NewLabel("M"),
-		widget.NewLabel("T"),
-		widget.NewLabel("W"),
-		widget.NewLabel("T"),
-		widget.NewLabel("F"),
-		widget.NewLabel("S"),
+		widget.NewLabelWithStyle("S", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("M", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("T", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("W", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("T", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("F", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("S", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 	}
 	thisDay := startOfMonthDisplay
 	todayString := time.Now().Format("01/02/2006")
