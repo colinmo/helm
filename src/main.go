@@ -151,6 +151,7 @@ func buildMonthSelect(dateToShow time.Time, owningDialog *dialog.Dialog) *fyne.C
 	}
 	thisDay := startOfMonthDisplay
 	todayString := time.Now().Format("01/02/2006")
+	fmt.Printf("Today is %s\n", todayString)
 	for i := 0; i < totalDays; i++ {
 		mike := thisDay
 		bg := canvas.NewRectangle(color.NRGBA{R: 220, G: 220, B: 220, A: 0})
