@@ -357,27 +357,6 @@ func markdownWindowSetup() {
 		container.NewHBox(
 			widget.NewButtonWithIcon("", theme.DocumentPrintIcon(), func() {
 				if prevWindowVisible {
-					prevWindowVisible = false
-					previewWindow.Hide()
-				} else {
-					var previewMarkdown *widget.RichText
-					if markdownInput.Text[0:3] == "---" {
-						previewMarkdown = widget.NewRichTextFromMarkdown(strings.Split(markdownInput.Text, "...")[1])
-					} else {
-						previewMarkdown = widget.NewRichTextFromMarkdown(markdownInput.Text)
-					}
-					previewMarkdown.Wrapping = fyne.TextWrapWord
-					previewWindow.SetContent(
-						container.NewMax(
-							previewMarkdown,
-						),
-					)
-					prevWindowVisible = true
-					previewWindow.Show()
-				}
-			}),
-			widget.NewButtonWithIcon("", theme.DocumentPrintIcon(), func() {
-				if prevWindowVisible {
 				} else {
 					var mep string
 					if markdownInput.Text[0:3] == "---" {
