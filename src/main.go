@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image/color"
@@ -23,7 +24,18 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/pkg/browser"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer/html"
 )
+
+/**
+* This is a systray item for:
+*   - Markdown Daily status
+*   - Internet Parent control
+**/
 
 type AppStatus struct {
 	CurrentZettleDBDate time.Time
@@ -362,6 +374,37 @@ func markdownWindowSetup() {
 					)
 					prevWindowVisible = true
 					previewWindow.Show()
+				}
+			}),
+			widget.NewButtonWithIcon("", theme.DocumentPrintIcon(), func() {
+				if prevWindowVisible {
+				} else {
+					var mep string
+					if markdownInput.Text[0:3] == "---" {
+						mep = strings.Split(markdownInput.Text, "...")[1]
+					} else {
+						mep = markdownInput.Text
+					}
+					md := goldmark.New(
+						goldmark.WithExtensions(extension.GFM),
+						goldmark.WithParserOptions(
+							parser.WithAutoHeadingID(),
+						),
+						goldmark.WithRendererOptions(
+							html.WithHardWraps(),
+							html.WithXHTML(),
+						),
+					)
+					var buf bytes.Buffer
+					if err := md.Convert([]byte(mep), &buf); err != nil {
+						panic(err)
+					}
+					tmpFile, _ := ioutil.TempFile(os.TempDir(), "markdownpreview-*.html")
+					defer os.Remove(tmpFile.Name())
+					tmpFile.Write([]byte(buf.String()))
+					tmpFile.Close()
+					browser.OpenFile(tmpFile.Name())
+					time.Sleep(time.Second * 2)
 				}
 			}),
 			widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() {

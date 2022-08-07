@@ -8,7 +8,9 @@ This is meant to be a main controller for my day-to-day work and other tasks. Cu
 ## Todo
 
 * Add in a `@tag` search capability
-* Add in a Markdown preview 
-* Add in navigation by calendar dates
+* [x] Add in a Markdown preview 
+  * [ ] Fyne's Markdown preview is crap. Use another?
+* [x] Add in navigation by calendar dates
 * Integration with Planner and JIRA and Cherwell for a combined task view
-* [ ] Add a search, integrate with Finder/ Win search?
+* [x] Add a search, integrate with Finder/ Win search?
+  * Couldn't find out how to integrate, so just used `grep` and `findstr`

@@ -1,5 +1,5 @@
 build-windows:
-	set GOOS=windows&&set GOARCH=amd64&&cd src&&set CGO_ENABLED=1&&set CC="x86_64-w64-mingw32-gcc"&&go build -ldflags "-w -s  -H=windowsgui" -o ../bin/helm.exe
+	set GOOS=windows&&set GOARCH=amd64&&cd src&&set CGO_ENABLED=1&&set CC="x86_64-w64-mingw32-gcc"&&go build -ldflags "-w -s  -H=windowsgui" -o ../bin/helm.exe -mod=readonly
 
 #build-osx:
 #	set GOOS=linux&&setGOARCH=amd64&&cd src&&go build -ldflags "-w -s" -o ../bin/helm .
