@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"runtime"
 	"strings"
 	"time"
 
@@ -72,7 +73,9 @@ func main() {
 				markdownInput.Refresh()
 			}),
 			fyne.NewMenuItem("Internet control", func() {
-				internetWindow.Show()
+				if runtime.GOOS == "windows" {
+					internetWindow.Show()
+				}
 			}),
 			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem("Preferences", func() {
@@ -267,9 +270,67 @@ func markdownWindowSetup() {
 		createDatePicker(dateToShow, &deepdeep),
 		mainWindow,
 	)
+	searchEntry := widget.NewEntry()
 	menu := container.NewBorder(
 		nil,
-		nil,
+		container.NewBorder(
+			nil,
+			nil,
+			nil,
+			widget.NewButton(
+				"Search",
+				func() {
+					finds, err := searchFiles(
+						appPreferences.ZettlekastenHome,
+						searchEntry.Text,
+					)
+					if err == nil {
+						var selectFile dialog.Dialog
+						fileList := widget.NewList(
+							func() int {
+								return len(finds)
+							},
+							func() fyne.CanvasObject {
+								return widget.NewButton("FoundMe", func() {})
+							},
+							func(i widget.ListItemID, o fyne.CanvasObject) {
+								o.(*widget.Button).SetText(finds[i])
+								o.(*widget.Button).OnTapped = func() {
+									// Save and Load
+									x, _ := appStatus.CurrentZettleDKB.Get()
+									saveZettle(markdownInput.Text, x)
+									appStatus.CurrentZettleDBDate, _ = time.Parse("20060102", o.(*widget.Button).Text[0:8])
+									appStatus.CurrentZettleDKB.Set(zettleFileName(appStatus.CurrentZettleDBDate))
+									x, _ = appStatus.CurrentZettleDKB.Get()
+									markdownInput.Text = getFileContentsAndCreateIfMissing(path.Join(appPreferences.ZettlekastenHome, x))
+									markdownInput.Refresh()
+									selectFile.Hide()
+								}
+							},
+						)
+						selectFile = dialog.NewCustom(
+							fmt.Sprintf("Found %d", len(finds)),
+							"Nevermind",
+							container.NewMax(
+								fileList,
+							),
+							mainWindow,
+						)
+						selectFile.Show()
+						fileList.Resize(fileList.MinSize().AddWidthHeight(100, 400))
+						selectFile.Resize(selectFile.MinSize().AddWidthHeight(100, 400))
+					} else {
+						dialog.ShowInformation(
+							"Search failed",
+							err.Error(),
+							mainWindow,
+						)
+					}
+					fmt.Printf("Finds: %s\nError: %s\n", finds, err)
+				},
+			),
+			searchEntry,
+		),
 		container.NewHBox(
 			widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() {
 				x, _ := appStatus.CurrentZettleDKB.Get()

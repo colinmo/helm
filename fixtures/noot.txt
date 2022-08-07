@@ -1,0 +1,1 @@
+search\a\b\found.md:here is a searchterm search termsearch\a\found.markdown:here is a searchterm search term
