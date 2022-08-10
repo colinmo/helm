@@ -3,17 +3,28 @@
 package main
 
 import (
-	"os"
+	"errors"
+	"fmt"
+	"os/exec"
+	"strings"
 )
 
 /**
  * This code searches text files in Linux mode
  */
+type saveOutput struct {
+	savedOutput []byte
+}
 
+func (so *saveOutput) Write(p []byte) (n int, err error) {
+	so.savedOutput = append(so.savedOutput, p...)
+	return len(p), nil
+}
 func searchFiles(directory string, lookfor string) ([]string, error) {
-	cmdVariables := []string{"find", `\(`, "-name", "*.markdown", "-o", "-name", "*.md", `\)`, "-exec", "grep", "-li", lookfor, "{}", `\;`}
+	cmdVariables := []string{`/bin/sh`, "-c", `find . \( -name '*.markdown' -o -name '*.md' \) -exec grep -li '` + lookfor + `' {} \;`}
 	cmd := exec.Command(cmdVariables[0], cmdVariables[1:]...)
 	cmd.Dir = directory
+	fmt.Print(strings.Join(cmdVariables, " ") + "\n")
 
 	var so saveOutput
 	cmd.Stdout = &so
@@ -30,6 +41,10 @@ func searchFiles(directory string, lookfor string) ([]string, error) {
 		}
 		fmt.Printf("Failed with %s\n", bob)
 	}
-
-	return strings.Split(strings.Trim(string(so.savedOutput), "\r\n"), "\r\n"), nil
+	output := strings.Split(strings.Trim(string(so.savedOutput), "./\n"), "\n")
+	for i, x := range output {
+		output[i] = strings.Trim(x, "./")
+	}
+	fmt.Printf("%v\n", output)
+	return output, nil
 }
