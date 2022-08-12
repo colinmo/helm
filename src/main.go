@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image/color"
 	"io/ioutil"
+	"log"
 	"os"
 	"path"
 	"runtime"
@@ -37,15 +38,20 @@ import (
 *   - Internet Parent control
 **/
 
-type AppStatus struct {
+type AppStatusStruct struct {
 	CurrentZettleDBDate time.Time
 	CurrentZettleDKB    binding.String
+	TaskList            binding.StringList
+	TasksFromGSM        [][]string
 }
 
 type AppPreferences struct {
 	ZettlekastenHome string
 	RouterUsername   string
 	RouterPassword   string
+	MSAccessToken    string
+	MSRefreshToken   string
+	MSExpiresAt      time.Time
 }
 
 var activeInternetTimeChan (chan time.Duration)
@@ -53,18 +59,21 @@ var thisApp fyne.App
 var mainWindow fyne.Window
 var preferencesWindow fyne.Window
 var internetWindow fyne.Window
+var taskWindow fyne.Window
 var markdownInput *widget.Entry
-var appStatus AppStatus
+var AppStatus AppStatusStruct
 var appPreferences AppPreferences
 
 func main() {
-	// Get initial statuses for things
-	activeInternetTimeChan = make(chan time.Duration, 10)
-	appStatus = AppStatus{
+	os.Setenv("TZ", "Australia/Brisbane")
+	AppStatus = AppStatusStruct{
 		CurrentZettleDBDate: time.Now().Local(),
 		CurrentZettleDKB:    binding.NewString(),
+		TaskList:            binding.NewStringList(),
 	}
-	appStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
+	// Get initial statuses for things
+	activeInternetTimeChan = make(chan time.Duration, 10)
+	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
 	go waitingForInternetCommand()
 
 	thisApp = app.NewWithID("com.vonexplaino.helm.preferences")
@@ -75,12 +84,16 @@ func main() {
 	internetWindowSetup()
 	mainWindow = thisApp.NewWindow("Markdown Daily Knowledgebase")
 	markdownWindowSetup()
+	taskWindow = thisApp.NewWindow("Tasks")
+	taskWindowSetup()
+	// TASKS
+	GetAllTasks()
 	if desk, ok := thisApp.(desktop.App); ok {
 		m := fyne.NewMenu("MyApp",
 			fyne.NewMenuItem("Todays Notes", func() {
 				mainWindow.Show()
 				// Reload from file
-				x, _ := appStatus.CurrentZettleDKB.Get()
+				x, _ := AppStatus.CurrentZettleDKB.Get()
 				markdownInput.Text = getFileContentsAndCreateIfMissing(path.Join(appPreferences.ZettlekastenHome, x))
 				markdownInput.Refresh()
 			}),
@@ -88,6 +101,9 @@ func main() {
 				if runtime.GOOS == "windows" {
 					internetWindow.Show()
 				}
+			}),
+			fyne.NewMenuItem("Tasks", func() {
+				taskWindow.Show()
 			}),
 			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem("Preferences", func() {
@@ -133,9 +149,9 @@ func saveZettle(content string, filename string) error {
 }
 
 func moveZettleDate(hours time.Duration) string {
-	appStatus.CurrentZettleDBDate = appStatus.CurrentZettleDBDate.Add(time.Hour * hours)
-	appStatus.CurrentZettleDKB.Set(zettleFileName(appStatus.CurrentZettleDBDate))
-	x, _ := appStatus.CurrentZettleDKB.Get()
+	AppStatus.CurrentZettleDBDate = AppStatus.CurrentZettleDBDate.Add(time.Hour * hours)
+	AppStatus.CurrentZettleDKB.Set(zettleFileName(AppStatus.CurrentZettleDBDate))
+	x, _ := AppStatus.CurrentZettleDKB.Get()
 	return getFileContentsAndCreateIfMissing(path.Join(appPreferences.ZettlekastenHome, x))
 }
 
@@ -174,12 +190,12 @@ func buildMonthSelect(dateToShow time.Time, owningDialog *dialog.Dialog) *fyne.C
 			bg = canvas.NewRectangle(color.NRGBA{R: 100, G: 200, B: 150, A: 255})
 		}
 		days = append(days, container.NewMax(bg, widget.NewButton(fmt.Sprintf("%d", thisDay.Day()), func() {
-			x, _ := appStatus.CurrentZettleDKB.Get()
+			x, _ := AppStatus.CurrentZettleDKB.Get()
 			saveZettle(markdownInput.Text, x)
 
-			appStatus.CurrentZettleDBDate = mike
-			appStatus.CurrentZettleDKB.Set(zettleFileName(appStatus.CurrentZettleDBDate))
-			x, _ = appStatus.CurrentZettleDKB.Get()
+			AppStatus.CurrentZettleDBDate = mike
+			AppStatus.CurrentZettleDKB.Set(zettleFileName(AppStatus.CurrentZettleDBDate))
+			x, _ = AppStatus.CurrentZettleDKB.Get()
 			markdownInput.Text = getFileContentsAndCreateIfMissing(path.Join(appPreferences.ZettlekastenHome, x))
 			markdownInput.Refresh()
 			(*owningDialog).Hide()
@@ -274,7 +290,7 @@ func markdownWindowSetup() {
 		prevWindowVisible = false
 		previewWindow.Hide()
 	})
-	dateToShow := appStatus.CurrentZettleDBDate
+	dateToShow := AppStatus.CurrentZettleDBDate
 	var deepdeep dialog.Dialog
 	deepdeep = dialog.NewCustom(
 		"Change date",
@@ -309,11 +325,11 @@ func markdownWindowSetup() {
 								o.(*widget.Button).SetText(finds[i])
 								o.(*widget.Button).OnTapped = func() {
 									// Save and Load
-									x, _ := appStatus.CurrentZettleDKB.Get()
+									x, _ := AppStatus.CurrentZettleDKB.Get()
 									saveZettle(markdownInput.Text, x)
-									appStatus.CurrentZettleDBDate, _ = time.Parse("20060102", o.(*widget.Button).Text[0:8])
-									appStatus.CurrentZettleDKB.Set(zettleFileName(appStatus.CurrentZettleDBDate))
-									x, _ = appStatus.CurrentZettleDKB.Get()
+									AppStatus.CurrentZettleDBDate, _ = time.Parse("20060102", o.(*widget.Button).Text[0:8])
+									AppStatus.CurrentZettleDKB.Set(zettleFileName(AppStatus.CurrentZettleDBDate))
+									x, _ = AppStatus.CurrentZettleDKB.Get()
 									markdownInput.Text = getFileContentsAndCreateIfMissing(path.Join(appPreferences.ZettlekastenHome, x))
 									markdownInput.Refresh()
 									selectFile.Hide()
@@ -345,7 +361,7 @@ func markdownWindowSetup() {
 		),
 		container.NewHBox(
 			widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() {
-				x, _ := appStatus.CurrentZettleDKB.Get()
+				x, _ := AppStatus.CurrentZettleDKB.Get()
 				saveZettle(markdownInput.Text, x)
 				markdownInput.Text = moveZettleDate(-24)
 				markdownInput.Refresh()
@@ -380,45 +396,63 @@ func markdownWindowSetup() {
 					}
 					tmpFile, _ := ioutil.TempFile(os.TempDir(), "markdownpreview-*.html")
 					defer os.Remove(tmpFile.Name())
-					tmpFile.Write([]byte(buf.String()))
+					tmpFile.Write(buf.Bytes())
 					tmpFile.Close()
 					browser.OpenFile(tmpFile.Name())
 					time.Sleep(time.Second * 2)
 				}
 			}),
 			widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() {
-				x, _ := appStatus.CurrentZettleDKB.Get()
+				x, _ := AppStatus.CurrentZettleDKB.Get()
 				saveZettle(markdownInput.Text, x)
 				markdownInput.Text = moveZettleDate(24)
 				markdownInput.Refresh()
 			}),
 		),
 		widget.NewButton("Save", func() {
-			x, _ := appStatus.CurrentZettleDKB.Get()
+			x, _ := AppStatus.CurrentZettleDKB.Get()
 			writeFileContents(path.Join(appPreferences.ZettlekastenHome, x), markdownInput.Text)
 		}),
 	)
-	content := container.NewBorder(menu, widget.NewLabelWithData(appStatus.CurrentZettleDKB), nil, nil, markdownInput)
+	content := container.NewBorder(menu, widget.NewLabelWithData(AppStatus.CurrentZettleDKB), nil, nil, markdownInput)
 	mainWindow.SetContent(content)
 	mainWindow.SetCloseIntercept(func() {
 		mainWindow.Hide()
 		// Save contents
-		x, _ := appStatus.CurrentZettleDKB.Get()
+		x, _ := AppStatus.CurrentZettleDKB.Get()
 		saveZettle(markdownInput.Text, x)
 	})
 }
 
 func preferencesWindowSetup() {
+	stringDateFormat := "20060102T15:04:05"
 	appPreferences = AppPreferences{}
 	appPreferences.ZettlekastenHome = thisApp.Preferences().StringWithFallback("ZettlekastenHome", "F:\\")
 	appPreferences.RouterUsername = thisApp.Preferences().StringWithFallback("RouterUsername", "")
 	appPreferences.RouterPassword = thisApp.Preferences().StringWithFallback("RouterPassword", "")
+	appPreferences.MSAccessToken = thisApp.Preferences().StringWithFallback("MSAccessToken", "")
+	appPreferences.MSRefreshToken = thisApp.Preferences().StringWithFallback("MSRefreshToken", "")
+	fmt.Printf("%s\n", thisApp.Preferences().String("MSExpiresAt"))
+	var e error
+	appPreferences.MSExpiresAt, e = time.Parse(stringDateFormat, thisApp.Preferences().StringWithFallback("MSExpiresAt", "20060102T15:04:05"))
+	if e != nil {
+		log.Fatalf("Nope %s\n", e)
+	}
+	fmt.Printf("%s\n", appPreferences.MSExpiresAt.Local())
+
 	zettlePath := widget.NewEntry()
 	zettlePath.SetText(appPreferences.ZettlekastenHome)
 	routerUser := widget.NewEntry()
 	routerUser.SetText(appPreferences.RouterUsername)
 	routerPass := widget.NewPasswordEntry()
 	routerPass.SetText(appPreferences.RouterPassword)
+	accessToken := widget.NewEntry()
+	accessToken.SetText(appPreferences.MSAccessToken)
+	refreshToken := widget.NewEntry()
+	refreshToken.SetText(appPreferences.MSRefreshToken)
+	expiresAt := widget.NewEntry()
+	expiresAt.SetText(appPreferences.MSExpiresAt.Local().Format(stringDateFormat))
+
 	preferencesWindow.Resize(fyne.NewSize(400, 400))
 	preferencesWindow.Hide()
 	preferencesWindow.SetCloseIntercept(func() {
@@ -430,30 +464,30 @@ func preferencesWindowSetup() {
 		thisApp.Preferences().SetString("RouterUsername", appPreferences.RouterUsername)
 		appPreferences.RouterPassword = routerPass.Text
 		thisApp.Preferences().SetString("RouterPassword", appPreferences.RouterPassword)
+		appPreferences.MSAccessToken = accessToken.Text
+		thisApp.Preferences().SetString("MSAccessToken", appPreferences.MSAccessToken)
+		appPreferences.MSRefreshToken = refreshToken.Text
+		thisApp.Preferences().SetString("MSRefreshToken", appPreferences.MSRefreshToken)
+		appPreferences.MSExpiresAt, _ = time.Parse("20060102T15:04:05", expiresAt.Text)
+		fmt.Printf("New: %s\n", appPreferences.MSExpiresAt.Local())
+		thisApp.Preferences().SetString("MSExpiresAt", appPreferences.MSExpiresAt.Format(stringDateFormat))
+		fmt.Printf("New: %s\n", thisApp.Preferences().String("MSExpiresAt"))
 	})
 	preferencesWindow.SetContent(
-		container.NewVBox(
-			container.NewBorder(
-				nil,
-				nil,
-				widget.NewLabel("Zettlekasten Path"),
-				nil,
-				zettlePath,
-			),
-			container.NewBorder(
-				nil,
-				nil,
-				widget.NewLabel("Username"),
-				nil,
-				routerUser,
-			),
-			container.NewBorder(
-				nil,
-				nil,
-				widget.NewLabel("Password"),
-				nil,
-				routerPass,
-			),
+		container.New(
+			layout.NewFormLayout(),
+			widget.NewLabel("Zettlekasten Path"),
+			zettlePath,
+			widget.NewLabel("Username"),
+			routerUser,
+			widget.NewLabel("Password"),
+			routerPass,
+			widget.NewLabel("MS Access Token"),
+			accessToken,
+			widget.NewLabel("MS Refresh Token"),
+			refreshToken,
+			widget.NewLabel("MS Expires At"),
+			expiresAt,
 		),
 	)
 }
@@ -480,7 +514,7 @@ func internetWindowSetup() {
 func getFileContentsAndCreateIfMissing(filename string) string {
 	content, err := ioutil.ReadFile(filename)
 	if errors.Is(err, os.ErrNotExist) {
-		content = []byte(fmt.Sprintf("---\nDate: %s\n...\n", appStatus.CurrentZettleDBDate.Local().Format("2006-01-02")))
+		content = []byte(fmt.Sprintf("---\nDate: %s\n...\n", AppStatus.CurrentZettleDBDate.Local().Format("2006-01-02")))
 		os.WriteFile(filename, content, 0666)
 	}
 	return string(content)
@@ -495,4 +529,81 @@ func writeFileContents(filename string, content string) {
 
 func zettleFileName(date time.Time) string {
 	return fmt.Sprintf("%s-retro.markdown", date.Local().Format("20060102"))
+}
+
+func taskWindowSetup() {
+	taskWindow.Resize(fyne.NewSize(430, 250))
+	taskWindow.Hide()
+	taskWindow.SetCloseIntercept(func() {
+		taskWindow.Hide()
+	})
+}
+
+func taskWindowRefresh() {
+	var list fyne.CanvasObject
+	if len(AppStatus.TasksFromGSM) == 0 {
+		list = widget.NewLabel("No tasks")
+	} else {
+		cells := []fyne.CanvasObject{}
+		cells = append(cells, widget.NewLabelWithStyle("Incident", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
+		cells = append(cells, widget.NewLabelWithStyle("Task", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
+		cells = append(cells, widget.NewLabelWithStyle("Status", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
+		cells = append(cells, widget.NewLabelWithStyle("Task Age", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
+		cells = append(cells, widget.NewLabelWithStyle("Priority", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
+		for _, x := range AppStatus.TasksFromGSM[1:] {
+			cells = append(cells, gsmTaskToRow(x)...)
+		}
+		list = container.NewGridWithColumns(5, cells...)
+	}
+
+	taskWindow.SetContent(container.NewVScroll(list))
+	taskWindow.Content().Refresh()
+}
+
+func gsmTaskToRow(row []string) []fyne.CanvasObject {
+	cells := []fyne.CanvasObject{}
+	cells = append(cells, widget.NewButton(
+		fmt.Sprintf("[%s] %s", row[1], row[2]),
+		func() {
+			browser.OpenURL(
+				fmt.Sprintf(
+					"https://griffith.cherwellondemand.com/CherwellClient/Access/Command/Queries.GoToRecord?BusObID=6dd53665c0c24cab86870a21cf6434ae&PublicID=%s&EditMode=True",
+					row[1],
+				))
+		}))
+	cells = append(cells, widget.NewLabel(row[3]))
+	cells = append(cells, widget.NewLabel(row[4]))
+	x, _ := time.Parse("1/2/2006 3:04:05 PM", row[0])
+	cells = append(cells, widget.NewLabel(dateSinceNowInString(x)))
+	cells = append(cells, widget.NewLabel(row[9]))
+	return cells
+}
+
+func dateSinceNowInString(oldDate time.Time) string {
+	bob := time.Since(oldDate)
+	mep := bob.Seconds()
+	metric := ""
+	switch {
+	case mep >= 31540000:
+		metric = "yr"
+		mep = mep / 31540000
+	case mep >= 2628333.332282:
+		metric = "mo"
+		mep = mep / 2628333.332282
+	case mep >= 604800:
+		metric = "wk"
+		mep = mep / 604800
+	case mep >= 86400:
+		metric = "dy"
+		mep = mep / 86400
+	case mep >= 3600:
+		metric = "hr"
+		mep = mep / 3600
+	case mep >= 60:
+		metric = "mi"
+		mep = mep / 60
+	default:
+		metric = "sc"
+	}
+	return fmt.Sprintf("%d %s", int(mep), metric)
 }
