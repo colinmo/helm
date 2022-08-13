@@ -617,7 +617,7 @@ func gsmTaskToRow(row []string) fyne.CanvasObject {
 				container.NewHBox(
 					widget.NewButton("Visit", func() {}),
 					widget.NewButton("Reassign", func() {}),
-					widget.NewButton("Status", func() {})),
+					widget.NewButton("Status", func() {}),
 					widget.NewButton("Journals", func() {})),
 			),
 		),
