@@ -85,7 +85,7 @@ func GetGSM() {
 		var tasksResponse CherwellSearchResponse
 		// Get my Tasks
 		AppStatus.TasksFromGSM = [][]string{}
-
+		// Download Tasks
 		for page := 1; page < 200; page++ {
 			response, _ := GetTasksFromGSMForPage(page)
 			_ = json.Unmarshal(response, &tasksResponse)
@@ -104,15 +104,12 @@ func GetGSM() {
 					AppStatus.TasksFromGSM = append(AppStatus.TasksFromGSM, row)
 				}
 			}
-			fmt.Printf("Found %d tasks\n", len(tasksResponse.BusinessObjects))
 			if len(tasksResponse.BusinessObjects) != 200 {
 				break
 			}
 		}
-		fmt.Printf("Done")
 		taskWindowRefresh()
 		// Download Incidents
-		// Download Tasks
 		// Add personal priorities
 		// Return
 	}

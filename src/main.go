@@ -193,7 +193,6 @@ func buildMonthSelect(dateToShow time.Time, owningDialog *dialog.Dialog) *fyne.C
 	}
 	thisDay := startOfMonthDisplay
 	todayString := time.Now().Format("01/02/2006")
-	fmt.Printf("Today is %s\n", todayString)
 	for i := 0; i < totalDays; i++ {
 		mike := thisDay
 		bg := canvas.NewRectangle(color.NRGBA{R: 220, G: 220, B: 220, A: 0})
@@ -443,13 +442,11 @@ func preferencesWindowSetup() {
 	appPreferences.RouterPassword = thisApp.Preferences().StringWithFallback("RouterPassword", "")
 	appPreferences.MSAccessToken = thisApp.Preferences().StringWithFallback("MSAccessToken", "")
 	appPreferences.MSRefreshToken = thisApp.Preferences().StringWithFallback("MSRefreshToken", "")
-	fmt.Printf("%s\n", thisApp.Preferences().String("MSExpiresAt"))
 	var e error
 	appPreferences.MSExpiresAt, e = time.Parse(stringDateFormat, thisApp.Preferences().StringWithFallback("MSExpiresAt", "20060102T15:04:05"))
 	if e != nil {
 		log.Fatalf("Nope %s\n", e)
 	}
-	fmt.Printf("%s\n", appPreferences.MSExpiresAt.Local())
 
 	zettlePath := widget.NewEntry()
 	zettlePath.SetText(appPreferences.ZettlekastenHome)
