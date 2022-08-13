@@ -555,30 +555,52 @@ func taskWindowRefresh() {
 	if len(AppStatus.TasksFromGSM) == 0 {
 		list = widget.NewLabel("No tasks")
 	} else {
-		col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Incident`))
-		col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Task`))
-		col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
-		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
-		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
-		for _, x := range AppStatus.TasksFromGSM[1:] {
-			col1.Objects = append(col1.Objects, widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-			col2.Objects = append(col2.Objects, widget.NewLabel(fmt.Sprintf("[%s] %s", x[8], x[3])))
-			dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
-			col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
-			col4.Objects = append(col4.Objects, container.NewMax(
-				canvas.NewRectangle(priorityColours[x[9]]),
-				container.NewPadded(widget.NewLabel("Priority: "+x[9]))))
-			col5.Objects = append(col5.Objects, widget.NewLabel(x[4]))
+		/*
+			col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Incident`))
+			col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Task`))
+			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
+			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
+			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
+			for _, x := range AppStatus.TasksFromGSM[1:] {
+				col1.Objects = append(col1.Objects, widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				col2.Objects = append(col2.Objects, widget.NewLabel(fmt.Sprintf("[%s] %s", x[8], x[3])))
+				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+				col4.Objects = append(col4.Objects, container.NewMax(
+					canvas.NewRectangle(priorityColours[x[9]]),
+					container.NewPadded(widget.NewLabel("Priority: "+x[9]))))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x[4]))
+			}
+			list = container.NewVScroll(
+				container.NewHBox(
+					col1,
+					col2,
+					col3,
+					col4,
+					col5,
+				),
+			)
+		*/
+		stuff := []fyne.CanvasObject{}
+		for _, row := range AppStatus.TasksFromGSM {
+			dt, _ := time.Parse("1/2/2006 3:04:05 PM", row[0])
+			crd := widget.NewCard(
+				fmt.Sprintf("[%s] %s", row[1], row[2]),
+				fmt.Sprintf("[%s] %s", row[8], row[3]),
+				container.NewVBox(
+					container.NewGridWithColumns(2, widget.NewLabel(dateSinceNowInString(dt)), widget.NewLabel(row[4])),
+					container.NewHBox(
+						widget.NewButton("Visit", func() {}),
+						widget.NewButton("Reassign", func() {}),
+						widget.NewButton("Status", func() {}),
+						widget.NewButton("Journals", func() {}))),
+			)
+			stuff = append(
+				stuff,
+				crd,
+			)
 		}
-		list = container.NewVScroll(
-			container.NewHBox(
-				col1,
-				col2,
-				col3,
-				col4,
-				col5,
-			),
-		)
+		list = container.NewGridWrap(fyne.NewSize(300, 200), stuff...)
 	}
 
 	taskWindow.SetContent(list)
