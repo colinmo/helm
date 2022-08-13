@@ -555,42 +555,33 @@ func taskWindowRefresh() {
 	if len(AppStatus.TasksFromGSM) == 0 {
 		list = widget.NewLabel("No tasks")
 	} else {
-		cells := []fyne.CanvasObject{}
+		col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Incident`))
+		col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Task`))
+		col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
+		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
+		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
 		for _, x := range AppStatus.TasksFromGSM[1:] {
-			cells = append(cells, gsmTaskToRow(x))
+			col1.Objects = append(col1.Objects, widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+			col2.Objects = append(col2.Objects, widget.NewLabel(fmt.Sprintf("[%s] %s", x[8], x[3])))
+			dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
+			col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+			col4.Objects = append(col4.Objects, container.NewMax(
+				canvas.NewRectangle(priorityColours[x[9]]),
+				container.NewPadded(widget.NewLabel("Priority: "+x[9]))))
+			col5.Objects = append(col5.Objects, widget.NewLabel(x[4]))
 		}
-		list = container.NewGridWrap(fyne.NewSize(350, 200), cells...)
+		list = container.NewVScroll(
+			container.NewHBox(
+				col1,
+				col2,
+				col3,
+				col4,
+				col5,
+			),
+		)
 	}
 
-	taskWindow.SetContent(
-		container.NewBorder(
-			widget.NewToolbar(
-				widget.NewToolbarAction(
-					theme.ViewRefreshIcon(),
-					func() {
-						fmt.Printf("Refresh\n")
-					},
-				),
-				widget.NewToolbarSeparator(),
-				widget.NewToolbarAction(
-					theme.HistoryIcon(),
-					func() {
-						fmt.Printf("Sort Date")
-					},
-				),
-				widget.NewToolbarAction(
-					theme.ErrorIcon(),
-					func() {
-						fmt.Printf("Sort Priority")
-					},
-				),
-			),
-			nil,
-			nil,
-			nil,
-			container.NewVScroll(list),
-		),
-	)
+	taskWindow.SetContent(list)
 	taskWindow.Content().Refresh()
 }
 
