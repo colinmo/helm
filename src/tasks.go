@@ -82,59 +82,71 @@ func GetGSM() {
 		}()
 		browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
 	} else {
-		var response []byte
 		var tasksResponse CherwellSearchResponse
 		// Get my Tasks
 		AppStatus.TasksFromGSM = [][]string{}
-		response, _ = SearchCherwellFor(GSMSearchQuery{
-			Filters: []GSMFilter{
-				{FieldId: "93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf", Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
-				{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "Acknowledged"},
-				{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "New"},
-				{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "In Progress"},
-				{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "On Hold"},
-			},
-			BusObjId:   "9355d5ed41e384ff345b014b6cb1c6e748594aea5b",
-			PageNumber: 1,
-			PageSize:   200,
-			Fields: []string{
-				"BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:9355d5ed416bbc9408615c4145978ff8538a3f6eb4",                                     // Created Date/Time
-				"BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",           // Incident ID
-				"BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676", // Incident Short Desc
-				"93ad98a2d68a61778eda3d4d9cbb30acbfd458aea4", // Task Title
-				"9368f0fb7b744108a666984c21afc932562eb7dc16", // Status
-				"9355d6d84625cc7c1a7a48435ea878328f1646c7af", // Parent Type ID
-				"9355d6d6f3d7531087eab4456482100476d46ac59b", // Parent RecID
-				"9355d5fabd7763ad02894d43eca25b5432e555e1c6", // Completion DEtails
-				"93d5409c4bcbf7a38ed75a47dd92671f374236fa32", // TaskID
-				"BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676", // Incident Priority
-			},
-			Sorting: []GSMSort{
-				{FieldID: "9355d5ed416bbc9408615c4145978ff8538a3f6eb4", SortDirection: 1},
-			},
-		})
-		_ = json.Unmarshal(response, &tasksResponse)
-		if len(tasksResponse.BusinessObjects) > 0 {
-			row := []string{}
-			for _, y := range tasksResponse.BusinessObjects[0].Fields {
-				row = append(row, y.DisplayName)
-			}
-			AppStatus.TasksFromGSM = append(AppStatus.TasksFromGSM, row)
 
-			for _, x := range tasksResponse.BusinessObjects {
+		for page := 1; page < 200; page++ {
+			response, _ := GetTasksFromGSMForPage(page)
+			_ = json.Unmarshal(response, &tasksResponse)
+			if len(tasksResponse.BusinessObjects) > 0 {
 				row := []string{}
-				for _, y := range x.Fields {
-					row = append(row, y.Value)
+				for _, y := range tasksResponse.BusinessObjects[0].Fields {
+					row = append(row, y.DisplayName)
 				}
 				AppStatus.TasksFromGSM = append(AppStatus.TasksFromGSM, row)
+
+				for _, x := range tasksResponse.BusinessObjects {
+					row := []string{}
+					for _, y := range x.Fields {
+						row = append(row, y.Value)
+					}
+					AppStatus.TasksFromGSM = append(AppStatus.TasksFromGSM, row)
+				}
+			}
+			fmt.Printf("Found %d tasks\n", len(tasksResponse.BusinessObjects))
+			if len(tasksResponse.BusinessObjects) != 200 {
+				break
 			}
 		}
+		fmt.Printf("Done")
 		taskWindowRefresh()
 		// Download Incidents
 		// Download Tasks
 		// Add personal priorities
 		// Return
 	}
+}
+
+func GetTasksFromGSMForPage(page int) ([]byte, error) {
+	return SearchCherwellFor(GSMSearchQuery{
+		Filters: []GSMFilter{
+			{FieldId: "93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf", Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
+			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "Acknowledged"},
+			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "New"},
+			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "In Progress"},
+			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "On Hold"},
+		},
+		BusObjId:   "9355d5ed41e384ff345b014b6cb1c6e748594aea5b",
+		PageNumber: page,
+		PageSize:   200,
+		Fields: []string{
+			"BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:9355d5ed416bbc9408615c4145978ff8538a3f6eb4",                                     // Created Date/Time
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",           // Incident ID
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676", // Incident Short Desc
+			"93ad98a2d68a61778eda3d4d9cbb30acbfd458aea4", // Task Title
+			"9368f0fb7b744108a666984c21afc932562eb7dc16", // Status
+			"9355d6d84625cc7c1a7a48435ea878328f1646c7af", // Parent Type ID
+			"9355d6d6f3d7531087eab4456482100476d46ac59b", // Parent RecID
+			"9355d5fabd7763ad02894d43eca25b5432e555e1c6", // Completion DEtails
+			"93d5409c4bcbf7a38ed75a47dd92671f374236fa32", // TaskID
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676", // Incident Priority
+		},
+		Sorting: []GSMSort{
+			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676", SortDirection: 1},
+			{FieldID: "9355d5ed416bbc9408615c4145978ff8538a3f6eb4", SortDirection: 1},
+		},
+	})
 }
 
 func SearchCherwellFor(toSend GSMSearchQuery) ([]byte, error) {

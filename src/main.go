@@ -550,92 +550,107 @@ func taskWindowSetup() {
 	})
 }
 
+// TAPPABLE ICON
+type tappableIcon struct {
+	widget.Icon
+}
+
+func newTappableIcon(res fyne.Resource) *tappableIcon {
+	icon := &tappableIcon{}
+	icon.ExtendBaseWidget(icon)
+	icon.SetResource(res)
+	return icon
+}
+
+func (t *tappableIcon) Tapped(_ *fyne.PointEvent) {
+	log.Println("I have been tapped")
+}
+
+func (t *tappableIcon) TappedSecondary(_ *fyne.PointEvent) {
+}
+
+// TAPPABLE LABEL
+type tappableLabel struct {
+	widget.Label
+}
+
+func newTappableLabel(textLabel string) *tappableLabel {
+	label := &tappableLabel{}
+	label.ExtendBaseWidget(label)
+	label.SetText(textLabel)
+	return label
+}
+
+func (t *tappableLabel) Tapped(_ *fyne.PointEvent) {
+	log.Println("I have been tapped (label)")
+}
+
+func (t *tappableLabel) TappedSecondary(_ *fyne.PointEvent) {
+}
+
 func taskWindowRefresh() {
 	var list fyne.CanvasObject
 	if len(AppStatus.TasksFromGSM) == 0 {
 		list = widget.NewLabel("No tasks")
 	} else {
-		/*
-			col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Incident`))
-			col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Task`))
-			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
-			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
-			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
-			for _, x := range AppStatus.TasksFromGSM[1:] {
-				col1.Objects = append(col1.Objects, widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-				col2.Objects = append(col2.Objects, widget.NewLabel(fmt.Sprintf("[%s] %s", x[8], x[3])))
-				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
-				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
-				col4.Objects = append(col4.Objects, container.NewMax(
-					canvas.NewRectangle(priorityColours[x[9]]),
-					container.NewPadded(widget.NewLabel("Priority: "+x[9]))))
-				col5.Objects = append(col5.Objects, widget.NewLabel(x[4]))
-			}
-			list = container.NewVScroll(
-				container.NewHBox(
-					col1,
-					col2,
-					col3,
-					col4,
-					col5,
-				),
-			)
-		*/
-		stuff := []fyne.CanvasObject{}
-		for _, row := range AppStatus.TasksFromGSM {
-			dt, _ := time.Parse("1/2/2006 3:04:05 PM", row[0])
-			crd := widget.NewCard(
-				fmt.Sprintf("[%s] %s", row[1], row[2]),
-				fmt.Sprintf("[%s] %s", row[8], row[3]),
-				container.NewVBox(
-					container.NewGridWithColumns(2, widget.NewLabel(dateSinceNowInString(dt)), widget.NewLabel(row[4])),
-					container.NewHBox(
-						widget.NewButton("Visit", func() {}),
-						widget.NewButton("Reassign", func() {}),
-						widget.NewButton("Status", func() {}),
-						widget.NewButton("Journals", func() {}))),
-			)
-			stuff = append(
-				stuff,
-				crd,
-			)
+		col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`## `))
+		col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Incident`))
+		col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Task`))
+		col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
+		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
+		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
+		for _, x := range AppStatus.TasksFromGSM[1:] {
+			col0.Objects = append(
+				col0.Objects,
+				container.NewMax(
+					widget.NewLabel(""),
+					newTappableIcon(theme.DocumentIcon()),
+				))
+			col1.Objects = append(col1.Objects,
+				widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+			col2.Objects = append(col2.Objects, newTappableLabel(fmt.Sprintf("[%s] %s", x[8], x[3])))
+			dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
+			col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+			col4.Objects = append(col4.Objects, container.NewMax(
+				canvas.NewRectangle(priorityColours[x[9]]),
+				widget.NewLabelWithStyle(x[9], fyne.TextAlignCenter, fyne.TextStyle{})))
+			col5.Objects = append(col5.Objects, widget.NewLabel(x[4]))
 		}
-		list = container.NewGridWrap(fyne.NewSize(300, 200), stuff...)
+		list = container.NewVScroll(
+			container.NewHBox(
+				col0,
+				col1,
+				col2,
+				col3,
+				col4,
+				col5,
+			),
+		)
 	}
 
-	taskWindow.SetContent(list)
-	taskWindow.Content().Refresh()
-}
-
-func gsmTaskToRow(row []string) fyne.CanvasObject {
-	x, _ := time.Parse("1/2/2006 3:04:05 PM", row[0])
-	header := widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", row[1], row[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	header.Wrapping = fyne.TextWrapWord
-	block := container.NewMax(
-		canvas.NewRectangle(color.Black),
-		container.NewPadded(
-			canvas.NewRectangle(color.White),
-			container.NewVBox(
-				container.NewBorder(
-					nil,
-					nil,
-					nil,
-					container.NewMax(
-						canvas.NewRectangle(priorityColours[row[9]]),
-						container.NewPadded(widget.NewLabel("Priority: "+row[9]))),
-					header,
+	taskWindow.SetContent(
+		container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {},
 				),
-				widget.NewLabel(fmt.Sprintf("[%s] %s", row[8], row[3])),
-				container.NewGridWithColumns(2, widget.NewLabel(dateSinceNowInString(x)), widget.NewLabel(row[4])),
-				container.NewHBox(
-					widget.NewButton("Visit", func() {}),
-					widget.NewButton("Reassign", func() {}),
-					widget.NewButton("Status", func() {}),
-					widget.NewButton("Journals", func() {})),
+				widget.NewToolbarSeparator(),
+				widget.NewToolbarAction(
+					theme.HistoryIcon(),
+					func() {},
+				),
+				widget.NewToolbarAction(
+					theme.ErrorIcon(),
+					func() {},
+				),
 			),
-		),
-	)
-	return block
+			nil,
+			nil,
+			nil,
+			list,
+		))
+	taskWindow.Content().Refresh()
 }
 
 func dateSinceNowInString(oldDate time.Time) string {
