@@ -63,14 +63,25 @@ var taskWindow fyne.Window
 var markdownInput *widget.Entry
 var AppStatus AppStatusStruct
 var appPreferences AppPreferences
+var priorityColours map[string]color.Color
 
-func main() {
+func setup() {
 	os.Setenv("TZ", "Australia/Brisbane")
+	priorityColours = map[string]color.Color{
+		"1": color.NRGBA{R: 255, B: 0, G: 0, A: 255},
+		"2": color.NRGBA{R: 255, B: 125, G: 125, A: 255},
+		"3": color.NRGBA{R: 0, B: 255, G: 255, A: 255},
+		"4": color.NRGBA{R: 0, B: 125, G: 255, A: 255},
+		"5": color.NRGBA{R: 0, B: 0, G: 255, A: 255},
+	}
 	AppStatus = AppStatusStruct{
 		CurrentZettleDBDate: time.Now().Local(),
 		CurrentZettleDKB:    binding.NewString(),
 		TaskList:            binding.NewStringList(),
 	}
+}
+func main() {
+	setup()
 	// Get initial statuses for things
 	activeInternetTimeChan = make(chan time.Duration, 10)
 	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
@@ -545,38 +556,73 @@ func taskWindowRefresh() {
 		list = widget.NewLabel("No tasks")
 	} else {
 		cells := []fyne.CanvasObject{}
-		cells = append(cells, widget.NewLabelWithStyle("Incident", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
-		cells = append(cells, widget.NewLabelWithStyle("Task", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
-		cells = append(cells, widget.NewLabelWithStyle("Status", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
-		cells = append(cells, widget.NewLabelWithStyle("Task Age", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
-		cells = append(cells, widget.NewLabelWithStyle("Priority", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
 		for _, x := range AppStatus.TasksFromGSM[1:] {
-			cells = append(cells, gsmTaskToRow(x)...)
+			cells = append(cells, gsmTaskToRow(x))
 		}
-		list = container.NewGridWithColumns(5, cells...)
+		list = container.NewGridWrap(fyne.NewSize(350, 200), cells...)
 	}
 
-	taskWindow.SetContent(container.NewVScroll(list))
+	taskWindow.SetContent(
+		container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {
+						fmt.Printf("Refresh\n")
+					},
+				),
+				widget.NewToolbarSeparator(),
+				widget.NewToolbarAction(
+					theme.HistoryIcon(),
+					func() {
+						fmt.Printf("Sort Date")
+					},
+				),
+				widget.NewToolbarAction(
+					theme.ErrorIcon(),
+					func() {
+						fmt.Printf("Sort Priority")
+					},
+				),
+			),
+			nil,
+			nil,
+			nil,
+			container.NewVScroll(list),
+		),
+	)
 	taskWindow.Content().Refresh()
 }
 
-func gsmTaskToRow(row []string) []fyne.CanvasObject {
-	cells := []fyne.CanvasObject{}
-	cells = append(cells, widget.NewButton(
-		fmt.Sprintf("[%s] %s", row[1], row[2]),
-		func() {
-			browser.OpenURL(
-				fmt.Sprintf(
-					"https://griffith.cherwellondemand.com/CherwellClient/Access/Command/Queries.GoToRecord?BusObID=6dd53665c0c24cab86870a21cf6434ae&PublicID=%s&EditMode=True",
-					row[1],
-				))
-		}))
-	cells = append(cells, widget.NewLabel(row[3]))
-	cells = append(cells, widget.NewLabel(row[4]))
+func gsmTaskToRow(row []string) fyne.CanvasObject {
 	x, _ := time.Parse("1/2/2006 3:04:05 PM", row[0])
-	cells = append(cells, widget.NewLabel(dateSinceNowInString(x)))
-	cells = append(cells, widget.NewLabel(row[9]))
-	return cells
+	header := widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", row[1], row[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	header.Wrapping = fyne.TextWrapWord
+	block := container.NewMax(
+		canvas.NewRectangle(color.Black),
+		container.NewPadded(
+			canvas.NewRectangle(color.White),
+			container.NewVBox(
+				container.NewBorder(
+					nil,
+					nil,
+					nil,
+					container.NewMax(
+						canvas.NewRectangle(priorityColours[row[9]]),
+						container.NewPadded(widget.NewLabel("Priority: "+row[9]))),
+					header,
+				),
+				widget.NewLabel(fmt.Sprintf("[%s] %s", row[8], row[3])),
+				container.NewGridWithColumns(2, widget.NewLabel(dateSinceNowInString(x)), widget.NewLabel(row[4])),
+				container.NewHBox(
+					widget.NewButton("Visit", func() {}),
+					widget.NewButton("Reassign", func() {}),
+					widget.NewButton("Status", func() {})),
+					widget.NewButton("Journals", func() {})),
+			),
+		),
+	)
+	return block
 }
 
 func dateSinceNowInString(oldDate time.Time) string {
@@ -585,25 +631,28 @@ func dateSinceNowInString(oldDate time.Time) string {
 	metric := ""
 	switch {
 	case mep >= 31540000:
-		metric = "yr"
+		metric = "year"
 		mep = mep / 31540000
 	case mep >= 2628333.332282:
-		metric = "mo"
+		metric = "month"
 		mep = mep / 2628333.332282
 	case mep >= 604800:
-		metric = "wk"
+		metric = "week"
 		mep = mep / 604800
 	case mep >= 86400:
-		metric = "dy"
+		metric = "day"
 		mep = mep / 86400
 	case mep >= 3600:
-		metric = "hr"
+		metric = "hour"
 		mep = mep / 3600
 	case mep >= 60:
-		metric = "mi"
+		metric = "minute"
 		mep = mep / 60
 	default:
-		metric = "sc"
+		metric = "second"
+	}
+	if mep > 1 {
+		metric = metric + "s"
 	}
 	return fmt.Sprintf("%d %s", int(mep), metric)
 }

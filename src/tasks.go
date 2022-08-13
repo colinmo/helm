@@ -60,14 +60,14 @@ func GetAllTasks() {
 var GSMAuthWebServer *http.Server
 
 func GetGSM() {
-	AppStatus.TasksFromGSM = [][]string{
-		{"1/1/2020 3:04:05 am", "1", "Desc", "Task", "Acknowledged", "X", "X", "Comp", "TaskID", "4"},
-		{"1/1/2020 3:04:05 am", "1", "Desc", "Task", "Acknowledged", "X", "X", "Comp", "TaskID", "4"},
-		{"1/1/2020 3:04:05 am", "1", "Desc", "Task", "Acknowledged", "X", "X", "Comp", "TaskID", "4"},
-		{"1/1/2020 3:04:05 am", "1", "Desc", "Task", "Acknowledged", "X", "X", "Comp", "TaskID", "4"},
-	}
-	taskWindowRefresh()
-	return
+	//	AppStatus.TasksFromGSM = [][]string{
+	//		{"1/1/2020 3:04:05 AM", "1", "Desc", "Task", "Acknowledged", "X", "X", "Comp", "TaskID", "4"},
+	//		{"1/1/2020 3:04:05 AM", "1", "Desc", "Task", "Acknowledged", "X", "X", "Comp", "TaskID", "4"},
+	//		{"1/1/2022 3:04:05 AM", "1", "Desc", "Task", "Acknowledged", "X", "X", "Comp", "TaskID", "4"},
+	//		{"6/6/2022 3:04:05 AM", "1", "Desc", "Task", "Acknowledged", "X", "X", "Comp", "TaskID", "4"},
+	//	}
+	//	taskWindowRefresh()
+	//	return
 	//	AuthenticationTokens.GSM.access_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1bmlxdWVfbmFtZSI6InM0NTc5NzIiLCJjbGllbnRfaWQiOiI4MTRmOWE3NC1jODZhLTQ1MWUtYjZiYi1kZWVhNjVhY2Y3MmEiLCJpZGVudCI6IntcImFwcGxpY2F0aW9uX3R5cGVcIjpcIkJyb3dzZXJDbGllbnRcIixcImF1dGhlbnRpY2F0aW9uX3R5cGVcIjpcIlNBTUxcIixcInVzZXJfaWRcIjpcInM0NTc5NzJcIixcInNlY19ncnBcIjpcIjkzZDVhYTcwYzg4OTMwMTRhMmI3ZGM0NzMzOTUzYzYxODU3NzdlOTJiZlwiLFwicGVyc29uYVwiOlwiOTQxOGFiYTk3Y2JlMTk4ZWI0ZThiZTQ0NDVhNGUxMmJjMDcxM2UwZTZjXCIsXCJ0b2tlblwiOm51bGwsXCJkZWZfdHlwZV9pZFwiOlwiOTMzODIxNmIzYzU0OWI3NTYwN2NmNTQ2NjdhNGU2N2QxZjY0NGQ5ZmVkXCIsXCJidXNfb2JfaWRcIjpcIjk0MTg2OWVmOTZmNmM4NGJiMzYzZDI0ZTVmOTFjMmIxMWYyOWRhY2ZlYVwiLFwibW9kdWxlX2NvZGVcIjpcIlJFU1RBUElcIixcImxpY19wcm9kX2NvZGVcIjpcIkNTRFwiLFwibG9nZ2VkX2luX3Nlc3Npb25cIjpcIm8ySmZoeW52aWdWS3dxbnNxeEZqTSs4aTRXa3VLN2gwXCIsXCJ2aWV3X2lkXCI6XCJcIixcInNwZWNpZmljX2N1bHR1cmVcIjpcIlwiLFwiY3VycmVudF9jdWx0dXJlXCI6XCJlbi1BVVwiLFwiYWxsX2N1bHR1cmVzXCI6ZmFsc2V9IiwiaXNzIjoiaHR0cHM6Ly9jaGVyd2VsbC5jb20iLCJhdWQiOiI4MTRmOWE3NC1jODZhLTQ1MWUtYjZiYi1kZWVhNjVhY2Y3MmEiLCJleHAiOjE2NjAzMTAxNDgsIm5iZiI6MTY2MDI5NTc0OH0.vB1GWFC1RCu36kLOCRVpw0uiwKHonfixcaa-2vfgIqc"
 	//	AuthenticationTokens.GSM.expiration = time.Now().Add(200 * time.Hour)
 	//	AuthenticationTokens.GSM.cherwelluser = "941869ef96f6c84bb363d24e5f91c2b11f29dacfea"
