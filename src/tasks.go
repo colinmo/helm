@@ -25,6 +25,7 @@ type Tokens struct {
 		userid        string
 		expiration    time.Time
 		cherwelluser  string
+		teams         []string
 	}
 	MS struct {
 		access_token  string
@@ -60,17 +61,6 @@ func GetAllTasks() {
 var GSMAuthWebServer *http.Server
 
 func GetGSM() {
-	//	AppStatus.TasksFromGSM = [][]string{
-	//		{"1/1/2020 3:04:05 AM", "1", "Desc", "Task", "Acknowledged", "X", "X", "Comp", "TaskID", "4"},
-	//		{"1/1/2020 3:04:05 AM", "1", "Desc", "Task", "Acknowledged", "X", "X", "Comp", "TaskID", "4"},
-	//		{"1/1/2022 3:04:05 AM", "1", "Desc", "Task", "Acknowledged", "X", "X", "Comp", "TaskID", "4"},
-	//		{"6/6/2022 3:04:05 AM", "1", "Desc", "Task", "Acknowledged", "X", "X", "Comp", "TaskID", "4"},
-	//	}
-	//	taskWindowRefresh()
-	//	return
-	//	AuthenticationTokens.GSM.access_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1bmlxdWVfbmFtZSI6InM0NTc5NzIiLCJjbGllbnRfaWQiOiI4MTRmOWE3NC1jODZhLTQ1MWUtYjZiYi1kZWVhNjVhY2Y3MmEiLCJpZGVudCI6IntcImFwcGxpY2F0aW9uX3R5cGVcIjpcIkJyb3dzZXJDbGllbnRcIixcImF1dGhlbnRpY2F0aW9uX3R5cGVcIjpcIlNBTUxcIixcInVzZXJfaWRcIjpcInM0NTc5NzJcIixcInNlY19ncnBcIjpcIjkzZDVhYTcwYzg4OTMwMTRhMmI3ZGM0NzMzOTUzYzYxODU3NzdlOTJiZlwiLFwicGVyc29uYVwiOlwiOTQxOGFiYTk3Y2JlMTk4ZWI0ZThiZTQ0NDVhNGUxMmJjMDcxM2UwZTZjXCIsXCJ0b2tlblwiOm51bGwsXCJkZWZfdHlwZV9pZFwiOlwiOTMzODIxNmIzYzU0OWI3NTYwN2NmNTQ2NjdhNGU2N2QxZjY0NGQ5ZmVkXCIsXCJidXNfb2JfaWRcIjpcIjk0MTg2OWVmOTZmNmM4NGJiMzYzZDI0ZTVmOTFjMmIxMWYyOWRhY2ZlYVwiLFwibW9kdWxlX2NvZGVcIjpcIlJFU1RBUElcIixcImxpY19wcm9kX2NvZGVcIjpcIkNTRFwiLFwibG9nZ2VkX2luX3Nlc3Npb25cIjpcIm8ySmZoeW52aWdWS3dxbnNxeEZqTSs4aTRXa3VLN2gwXCIsXCJ2aWV3X2lkXCI6XCJcIixcInNwZWNpZmljX2N1bHR1cmVcIjpcIlwiLFwiY3VycmVudF9jdWx0dXJlXCI6XCJlbi1BVVwiLFwiYWxsX2N1bHR1cmVzXCI6ZmFsc2V9IiwiaXNzIjoiaHR0cHM6Ly9jaGVyd2VsbC5jb20iLCJhdWQiOiI4MTRmOWE3NC1jODZhLTQ1MWUtYjZiYi1kZWVhNjVhY2Y3MmEiLCJleHAiOjE2NjAzMTAxNDgsIm5iZiI6MTY2MDI5NTc0OH0.vB1GWFC1RCu36kLOCRVpw0uiwKHonfixcaa-2vfgIqc"
-	//	AuthenticationTokens.GSM.expiration = time.Now().Add(200 * time.Hour)
-	//	AuthenticationTokens.GSM.cherwelluser = "941869ef96f6c84bb363d24e5f91c2b11f29dacfea"
 	if AuthenticationTokens.GSM.access_token == "" || AuthenticationTokens.GSM.expiration.Before(time.Now()) {
 		// Login if expired
 		go func() {
@@ -84,38 +74,90 @@ func GetGSM() {
 	} else {
 		var tasksResponse CherwellSearchResponse
 		// Get my Tasks
-		AppStatus.TasksFromGSM = [][]string{}
+		AppStatus.MyTasksFromGSM = [][]string{}
 		// Download Tasks
 		for page := 1; page < 200; page++ {
-			response, _ := GetTasksFromGSMForPage(page)
+			response, _ := GetMyTasksFromGSMForPage(page)
 			_ = json.Unmarshal(response, &tasksResponse)
 			if len(tasksResponse.BusinessObjects) > 0 {
-				row := []string{}
-				for _, y := range tasksResponse.BusinessObjects[0].Fields {
-					row = append(row, y.DisplayName)
-				}
-				AppStatus.TasksFromGSM = append(AppStatus.TasksFromGSM, row)
-
 				for _, x := range tasksResponse.BusinessObjects {
 					row := []string{}
 					for _, y := range x.Fields {
 						row = append(row, y.Value)
 					}
-					AppStatus.TasksFromGSM = append(AppStatus.TasksFromGSM, row)
+					AppStatus.MyTasksFromGSM = append(AppStatus.MyTasksFromGSM, row)
 				}
 			}
 			if len(tasksResponse.BusinessObjects) != 200 {
 				break
 			}
 		}
-		taskWindowRefresh()
 		// Download Incidents
+		AppStatus.MyIncidentsFromGSM = [][]string{}
+		for page := 1; page < 200; page++ {
+			response, _ := GetMyIncidentsFromGSMForPage(page)
+			_ = json.Unmarshal(response, &tasksResponse)
+			if len(tasksResponse.BusinessObjects) > 0 {
+				for _, x := range tasksResponse.BusinessObjects {
+					row := []string{}
+					for _, y := range x.Fields {
+						row = append(row, y.Value)
+					}
+					AppStatus.MyIncidentsFromGSM = append(AppStatus.MyIncidentsFromGSM, row)
+				}
+			}
+			if len(tasksResponse.BusinessObjects) != 200 {
+				break
+			}
+		}
+		// Download my requests
+		AppStatus.MyRequestsInGSM = [][]string{}
+		for page := 1; page < 200; page++ {
+			response, _ := GetMyRequestsInGSMForPage(page)
+			_ = json.Unmarshal(response, &tasksResponse)
+			if len(tasksResponse.BusinessObjects) > 0 {
+				for _, x := range tasksResponse.BusinessObjects {
+					row := []string{}
+					for _, y := range x.Fields {
+						row = append(row, y.Value)
+					}
+					AppStatus.MyRequestsInGSM = append(AppStatus.MyRequestsInGSM, row)
+				}
+			}
+			if len(tasksResponse.BusinessObjects) != 200 {
+				break
+			}
+		}
+		// Download Team
+		AppStatus.MyTeamIncidentsFromGSM = [][]string{}
+		for page := 1; page < 200; page++ {
+			response, _ := GetMyTeamIncidentsInGSMForPage(page)
+			_ = json.Unmarshal(response, &tasksResponse)
+			if len(tasksResponse.BusinessObjects) > 0 {
+				for _, x := range tasksResponse.BusinessObjects {
+					fmt.Printf("%s vs %s\n", x.Fields[6].Value, AuthenticationTokens.GSM.cherwelluser)
+					if x.Fields[6].Value == AuthenticationTokens.GSM.cherwelluser {
+						continue
+					}
+					row := []string{}
+					for _, y := range x.Fields {
+						row = append(row, y.Value)
+					}
+					AppStatus.MyTeamIncidentsFromGSM = append(AppStatus.MyTeamIncidentsFromGSM, row)
+				}
+			}
+			fmt.Printf("Found %d\n", len(AppStatus.MyTeamIncidentsFromGSM))
+			if len(tasksResponse.BusinessObjects) != 200 {
+				break
+			}
+		}
+		taskWindowRefresh()
 		// Add personal priorities
 		// Return
 	}
 }
 
-func GetTasksFromGSMForPage(page int) ([]byte, error) {
+func GetMyTasksFromGSMForPage(page int) ([]byte, error) {
 	return SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
 			{FieldId: "93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf", Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
@@ -135,13 +177,95 @@ func GetTasksFromGSMForPage(page int) ([]byte, error) {
 			"9368f0fb7b744108a666984c21afc932562eb7dc16", // Status
 			"9355d6d84625cc7c1a7a48435ea878328f1646c7af", // Parent Type ID
 			"9355d6d6f3d7531087eab4456482100476d46ac59b", // Parent RecID
-			"9355d5fabd7763ad02894d43eca25b5432e555e1c6", // Completion DEtails
+			"9355d5fabd7763ad02894d43eca25b5432e555e1c6", // Completion Details
 			"93d5409c4bcbf7a38ed75a47dd92671f374236fa32", // TaskID
 			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676", // Incident Priority
 		},
 		Sorting: []GSMSort{
 			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676", SortDirection: 1},
 			{FieldID: "9355d5ed416bbc9408615c4145978ff8538a3f6eb4", SortDirection: 1},
+		},
+	})
+}
+
+func GetMyIncidentsFromGSMForPage(page int) ([]byte, error) {
+	return SearchCherwellFor(GSMSearchQuery{
+		Filters: []GSMFilter{
+			{FieldId: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:9339fc404e39ae705648ab43969f29262e6d167606", Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
+			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Acknowledged"},
+			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "New"},
+			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "In Progress"},
+			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "On Hold"},
+		},
+		BusObjId:   "6dd53665c0c24cab86870a21cf6434ae",
+		PageNumber: page,
+		PageSize:   200,
+		Fields: []string{
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19",           // Created Date/Time
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3",           // Incident ID
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c", // Incident Short Desc
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:5eb3234ae1344c64a19819eda437f18d",           // Status
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c",           // Incident Priority
+		},
+		Sorting: []GSMSort{
+			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c", SortDirection: 1},
+			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19", SortDirection: 1},
+		},
+	})
+}
+
+func GetMyRequestsInGSMForPage(page int) ([]byte, error) {
+	return SearchCherwellFor(GSMSearchQuery{
+		Filters: []GSMFilter{
+			{FieldId: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:941aa0889094428a6f4c054dbea345b09b4d87c77e", Operator: "eq", Value: AuthenticationTokens.GSM.userid},
+			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Acknowledged"},
+			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "New"},
+			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "In Progress"},
+			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "On Hold"},
+		},
+		BusObjId:   "6dd53665c0c24cab86870a21cf6434ae",
+		PageNumber: page,
+		PageSize:   200,
+		Fields: []string{
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19",           // Created Date/Time
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3",           // Incident ID
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c", // Incident Short Desc
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:5eb3234ae1344c64a19819eda437f18d",           // Status
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c",           // Incident Priority
+		},
+		Sorting: []GSMSort{
+			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c", SortDirection: 1},
+			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19", SortDirection: 1},
+		},
+	})
+}
+func GetMyTeamIncidentsInGSMForPage(page int) ([]byte, error) {
+	baseFilter := []GSMFilter{
+		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Acknowledged"},
+		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "New"},
+		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "In Progress"},
+		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "On Hold"},
+	}
+	for _, x := range AuthenticationTokens.GSM.teams {
+		baseFilter = append(baseFilter, GSMFilter{FieldId: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:9339fc404e312b6d43436041fc8af1c07c6197f559", Operator: "eq", Value: x})
+	}
+	return SearchCherwellFor(GSMSearchQuery{
+		Filters:    baseFilter,
+		BusObjId:   "6dd53665c0c24cab86870a21cf6434ae",
+		PageNumber: page,
+		PageSize:   200,
+		Fields: []string{
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19",           // Created Date/Time
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3",           // Incident ID
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c", // Incident Short Desc
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:5eb3234ae1344c64a19819eda437f18d",           // Status
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c",           // Incident Priority
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:9339fc404e4c93350bf5be446fb13d693b0bb7f219", // Owner Name
+			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:9339fc404e39ae705648ab43969f29262e6d167606", // Owner to ID
+		},
+		Sorting: []GSMSort{
+			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c", SortDirection: 1},
+			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19", SortDirection: 1},
 		},
 	})
 }
@@ -238,6 +362,22 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				})
 				_ = json.Unmarshal(response, &decodedResponse)
 				AuthenticationTokens.GSM.cherwelluser = decodedResponse.BusinessObjects[0].BusObRecId
+				// Get my TeamIDs in Cherwell
+				var teamResponse struct {
+					Teams []struct {
+						TeamID   string `json:"teamId"`
+						TeamName string `json:"teamName"`
+					} `json:"teams"`
+				}
+				response, _ = getStuffFromCherwell(
+					"GET",
+					"api/V2/getusersteams/userrecordid/"+AuthenticationTokens.GSM.cherwelluser,
+					[]byte{})
+				_ = json.Unmarshal(response, &teamResponse)
+				AuthenticationTokens.GSM.teams = []string{}
+				for _, x := range teamResponse.Teams {
+					AuthenticationTokens.GSM.teams = append(AuthenticationTokens.GSM.teams, x.TeamID)
+				}
 				GetGSM()
 			}
 		}

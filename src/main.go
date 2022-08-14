@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"runtime"
 	"strings"
 	"time"
 
@@ -39,10 +38,13 @@ import (
 **/
 
 type AppStatusStruct struct {
-	CurrentZettleDBDate time.Time
-	CurrentZettleDKB    binding.String
-	TaskList            binding.StringList
-	TasksFromGSM        [][]string
+	CurrentZettleDBDate    time.Time
+	CurrentZettleDKB       binding.String
+	TaskList               binding.StringList
+	MyTasksFromGSM         [][]string
+	MyIncidentsFromGSM     [][]string
+	MyRequestsInGSM        [][]string
+	MyTeamIncidentsFromGSM [][]string
 }
 
 type AppPreferences struct {
@@ -58,7 +60,8 @@ var activeInternetTimeChan (chan time.Duration)
 var thisApp fyne.App
 var mainWindow fyne.Window
 var preferencesWindow fyne.Window
-var internetWindow fyne.Window
+
+// var internetWindow fyne.Window
 var taskWindow fyne.Window
 var markdownInput *widget.Entry
 var AppStatus AppStatusStruct
@@ -83,16 +86,16 @@ func setup() {
 func main() {
 	setup()
 	// Get initial statuses for things
-	activeInternetTimeChan = make(chan time.Duration, 10)
+	//	activeInternetTimeChan = make(chan time.Duration, 10)
 	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
-	go waitingForInternetCommand()
+	//	go waitingForInternetCommand()
 
 	thisApp = app.NewWithID("com.vonexplaino.helm.preferences")
 	thisApp.SetIcon(fyne.NewStaticResource("Systray", icon.Data))
 	preferencesWindow = thisApp.NewWindow("Preferences")
 	preferencesWindowSetup()
-	internetWindow = thisApp.NewWindow("Internet Control")
-	internetWindowSetup()
+	//	internetWindow = thisApp.NewWindow("Internet Control")
+	//	internetWindowSetup()
 	mainWindow = thisApp.NewWindow("Markdown Daily Knowledgebase")
 	markdownWindowSetup()
 	taskWindow = thisApp.NewWindow("Tasks")
@@ -108,11 +111,11 @@ func main() {
 				markdownInput.Text = getFileContentsAndCreateIfMissing(path.Join(appPreferences.ZettlekastenHome, x))
 				markdownInput.Refresh()
 			}),
-			fyne.NewMenuItem("Internet control", func() {
-				if runtime.GOOS == "windows" {
-					internetWindow.Show()
-				}
-			}),
+			//			fyne.NewMenuItem("Internet control", func() {
+			//				if runtime.GOOS == "windows" {
+			//					internetWindow.Show()
+			//				}
+			//			}),
 			fyne.NewMenuItem("Tasks", func() {
 				taskWindow.Show()
 			}),
@@ -132,6 +135,7 @@ func tellModemToAllowForPeriod(period time.Duration) {
 	activeInternetTimeChan <- period
 }
 
+/*
 func waitingForInternetCommand() {
 	var activeInternetChangeTime time.Time
 	var timerActive = false
@@ -153,6 +157,7 @@ func waitingForInternetCommand() {
 		}
 	}
 }
+*/
 
 func saveZettle(content string, filename string) error {
 	writeFileContents(path.Join(appPreferences.ZettlekastenHome, filename), content)
@@ -437,9 +442,9 @@ func markdownWindowSetup() {
 func preferencesWindowSetup() {
 	stringDateFormat := "20060102T15:04:05"
 	appPreferences = AppPreferences{}
-	appPreferences.ZettlekastenHome = thisApp.Preferences().StringWithFallback("ZettlekastenHome", "F:\\")
-	appPreferences.RouterUsername = thisApp.Preferences().StringWithFallback("RouterUsername", "")
-	appPreferences.RouterPassword = thisApp.Preferences().StringWithFallback("RouterPassword", "")
+	appPreferences.ZettlekastenHome = thisApp.Preferences().StringWithFallback("ZettlekastenHome", os.TempDir())
+	//	appPreferences.RouterUsername = thisApp.Preferences().StringWithFallback("RouterUsername", "")
+	//	appPreferences.RouterPassword = thisApp.Preferences().StringWithFallback("RouterPassword", "")
 	appPreferences.MSAccessToken = thisApp.Preferences().StringWithFallback("MSAccessToken", "")
 	appPreferences.MSRefreshToken = thisApp.Preferences().StringWithFallback("MSRefreshToken", "")
 	var e error
@@ -450,10 +455,10 @@ func preferencesWindowSetup() {
 
 	zettlePath := widget.NewEntry()
 	zettlePath.SetText(appPreferences.ZettlekastenHome)
-	routerUser := widget.NewEntry()
-	routerUser.SetText(appPreferences.RouterUsername)
-	routerPass := widget.NewPasswordEntry()
-	routerPass.SetText(appPreferences.RouterPassword)
+	//	routerUser := widget.NewEntry()
+	//	routerUser.SetText(appPreferences.RouterUsername)
+	//	routerPass := widget.NewPasswordEntry()
+	//	routerPass.SetText(appPreferences.RouterPassword)
 	accessToken := widget.NewEntry()
 	accessToken.SetText(appPreferences.MSAccessToken)
 	refreshToken := widget.NewEntry()
@@ -468,10 +473,10 @@ func preferencesWindowSetup() {
 		// SavePreferences
 		appPreferences.ZettlekastenHome = zettlePath.Text
 		thisApp.Preferences().SetString("ZettlekastenHome", appPreferences.ZettlekastenHome)
-		appPreferences.RouterUsername = routerUser.Text
-		thisApp.Preferences().SetString("RouterUsername", appPreferences.RouterUsername)
-		appPreferences.RouterPassword = routerPass.Text
-		thisApp.Preferences().SetString("RouterPassword", appPreferences.RouterPassword)
+		//		appPreferences.RouterUsername = routerUser.Text
+		//		thisApp.Preferences().SetString("RouterUsername", appPreferences.RouterUsername)
+		//		appPreferences.RouterPassword = routerPass.Text
+		//		thisApp.Preferences().SetString("RouterPassword", appPreferences.RouterPassword)
 		appPreferences.MSAccessToken = accessToken.Text
 		thisApp.Preferences().SetString("MSAccessToken", appPreferences.MSAccessToken)
 		appPreferences.MSRefreshToken = refreshToken.Text
@@ -486,10 +491,10 @@ func preferencesWindowSetup() {
 			layout.NewFormLayout(),
 			widget.NewLabel("Zettlekasten Path"),
 			zettlePath,
-			widget.NewLabel("Username"),
-			routerUser,
-			widget.NewLabel("Password"),
-			routerPass,
+			//			widget.NewLabel("Username"),
+			//			routerUser,
+			//			widget.NewLabel("Password"),
+			//			routerPass,
 			widget.NewLabel("MS Access Token"),
 			accessToken,
 			widget.NewLabel("MS Refresh Token"),
@@ -500,6 +505,7 @@ func preferencesWindowSetup() {
 	)
 }
 
+/*
 func internetWindowSetup() {
 	internetWindow.Resize(fyne.NewSize(430, 250))
 	internetWindow.Hide()
@@ -518,6 +524,7 @@ func internetWindowSetup() {
 		),
 	)
 }
+*/
 
 func getFileContentsAndCreateIfMissing(filename string) string {
 	content, err := ioutil.ReadFile(filename)
@@ -587,7 +594,9 @@ func (t *tappableLabel) TappedSecondary(_ *fyne.PointEvent) {
 
 func taskWindowRefresh() {
 	var list fyne.CanvasObject
-	if len(AppStatus.TasksFromGSM) == 0 {
+
+	// My TASKS
+	if len(AppStatus.MyTasksFromGSM) == 0 {
 		list = widget.NewLabel("No tasks")
 	} else {
 		col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`## `))
@@ -596,7 +605,7 @@ func taskWindowRefresh() {
 		col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
 		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
 		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
-		for _, x := range AppStatus.TasksFromGSM[1:] {
+		for _, x := range AppStatus.MyTasksFromGSM {
 			col0.Objects = append(
 				col0.Objects,
 				container.NewMax(
@@ -624,29 +633,213 @@ func taskWindowRefresh() {
 			),
 		)
 	}
-
-	taskWindow.SetContent(
-		container.NewBorder(
-			widget.NewToolbar(
-				widget.NewToolbarAction(
-					theme.ViewRefreshIcon(),
-					func() {},
-				),
-				widget.NewToolbarSeparator(),
-				widget.NewToolbarAction(
-					theme.HistoryIcon(),
-					func() {},
-				),
-				widget.NewToolbarAction(
-					theme.ErrorIcon(),
-					func() {},
-				),
+	myTasksTab := container.NewTabItem("My Tasks", container.NewBorder(
+		widget.NewToolbar(
+			widget.NewToolbarAction(
+				theme.ViewRefreshIcon(),
+				func() {},
 			),
-			nil,
-			nil,
-			nil,
-			list,
-		))
+			widget.NewToolbarSeparator(),
+			widget.NewToolbarAction(
+				theme.HistoryIcon(),
+				func() {},
+			),
+			widget.NewToolbarAction(
+				theme.ErrorIcon(),
+				func() {},
+			),
+		),
+		nil,
+		nil,
+		nil,
+		list,
+	))
+
+	// MY INCIDENTS
+	var list2 fyne.CanvasObject
+	if len(AppStatus.MyIncidentsFromGSM) == 0 {
+		list2 = widget.NewLabel("No incidents")
+	} else {
+		col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`## `))
+		col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Incident`))
+		col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
+		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
+		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
+		for _, x := range AppStatus.MyIncidentsFromGSM {
+			col0.Objects = append(
+				col0.Objects,
+				container.NewMax(
+					widget.NewLabel(""),
+					newTappableIcon(theme.DocumentIcon()),
+				))
+			col1.Objects = append(col1.Objects,
+				widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+			dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
+			col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+			col4.Objects = append(col4.Objects, container.NewMax(
+				canvas.NewRectangle(priorityColours[x[4]]),
+				widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
+			col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
+		}
+		list2 = container.NewVScroll(
+			container.NewHBox(
+				col0,
+				col1,
+				col3,
+				col4,
+				col5,
+			),
+		)
+	}
+	myIncidentsTab := container.NewTabItem("My Incidents", container.NewBorder(
+		widget.NewToolbar(
+			widget.NewToolbarAction(
+				theme.ViewRefreshIcon(),
+				func() {},
+			),
+			widget.NewToolbarSeparator(),
+			widget.NewToolbarAction(
+				theme.HistoryIcon(),
+				func() {},
+			),
+			widget.NewToolbarAction(
+				theme.ErrorIcon(),
+				func() {},
+			),
+		),
+		nil,
+		nil,
+		nil,
+		list2,
+	))
+
+	// MY TEAM INCIDENTS
+	var list3 fyne.CanvasObject
+	if len(AppStatus.MyTeamIncidentsFromGSM) == 0 {
+		list3 = widget.NewLabel("No incidents")
+	} else {
+		col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`## `))
+		col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Incident`))
+		col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Owner`))
+		col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
+		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
+		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
+		for _, x := range AppStatus.MyTeamIncidentsFromGSM {
+			col0.Objects = append(
+				col0.Objects,
+				container.NewMax(
+					widget.NewLabel(""),
+					newTappableIcon(theme.DocumentIcon()),
+				))
+			if len(x) > 5 {
+				col2.Objects = append(col2.Objects, widget.NewLabel(x[5]))
+			} else {
+				col2.Objects = append(col2.Objects, widget.NewLabel("none"))
+			}
+			col1.Objects = append(col1.Objects,
+				widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+			dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
+			col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+			col4.Objects = append(col4.Objects, container.NewMax(
+				canvas.NewRectangle(priorityColours[x[4]]),
+				widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
+			col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
+		}
+		list3 = container.NewVScroll(
+			container.NewHBox(
+				col0,
+				col1,
+				col2,
+				col3,
+				col4,
+				col5,
+			),
+		)
+	}
+	myTeamIncidentsTab := container.NewTabItem("My Team Incidents", container.NewBorder(
+		widget.NewToolbar(
+			widget.NewToolbarAction(
+				theme.ViewRefreshIcon(),
+				func() {},
+			),
+			widget.NewToolbarSeparator(),
+			widget.NewToolbarAction(
+				theme.HistoryIcon(),
+				func() {},
+			),
+			widget.NewToolbarAction(
+				theme.ErrorIcon(),
+				func() {},
+			),
+		),
+		nil,
+		nil,
+		nil,
+		list3,
+	))
+
+	// MY REQUESTS
+	var list4 fyne.CanvasObject
+	if len(AppStatus.MyRequestsInGSM) == 0 {
+		list4 = widget.NewLabel("No requests")
+	} else {
+		col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`## `))
+		col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Incident`))
+		col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
+		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
+		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
+		for _, x := range AppStatus.MyRequestsInGSM {
+			col0.Objects = append(
+				col0.Objects,
+				container.NewMax(
+					widget.NewLabel(""),
+					newTappableIcon(theme.DocumentIcon()),
+				))
+			col1.Objects = append(col1.Objects,
+				widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+			dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
+			col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+			col4.Objects = append(col4.Objects, container.NewMax(
+				canvas.NewRectangle(priorityColours[x[4]]),
+				widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
+			col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
+		}
+		list4 = container.NewVScroll(
+			container.NewHBox(
+				col0,
+				col1,
+				col3,
+				col4,
+				col5,
+			),
+		)
+	}
+	myRequestsTab := container.NewTabItem("My Requests", container.NewBorder(
+		widget.NewToolbar(
+			widget.NewToolbarAction(
+				theme.ViewRefreshIcon(),
+				func() {},
+			),
+			widget.NewToolbarSeparator(),
+			widget.NewToolbarAction(
+				theme.HistoryIcon(),
+				func() {},
+			),
+			widget.NewToolbarAction(
+				theme.ErrorIcon(),
+				func() {},
+			),
+		),
+		nil,
+		nil,
+		nil,
+		list4,
+	))
+
+	// Set up tabs
+	taskWindow.SetContent(
+		container.NewAppTabs(myTasksTab, myIncidentsTab, myRequestsTab, myTeamIncidentsTab),
+	)
 	taskWindow.Content().Refresh()
 }
 
