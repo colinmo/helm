@@ -118,3 +118,55 @@ func DisableParentalControls() {
 func EnableParentalControls() {
 	GetToParentalControlsAndClick("#enableParentalCtrlOn")
 }
+
+// var activeInternetTimeChan (chan time.Duration)
+
+/*
+func tellModemToAllowForPeriod(period time.Duration) {
+	DisableParentalControls()
+	activeInternetTimeChan <- period
+}
+
+func waitingForInternetCommand() {
+	var activeInternetChangeTime time.Time
+	var timerActive = false
+	for {
+		time.Sleep(time.Minute / 3)
+		if len(activeInternetTimeChan) > 0 {
+			// New message!
+			change := <-activeInternetTimeChan
+			if change < 0 {
+				activeInternetChangeTime.Add(change * -1)
+			} else {
+				activeInternetChangeTime = time.Now().Add(change)
+			}
+			timerActive = true
+		}
+		if timerActive && time.Now().After(activeInternetChangeTime) {
+			EnableParentalControls()
+			timerActive = false
+		}
+	}
+}
+*/
+
+/*
+func internetWindowSetup() {
+	internetWindow.Resize(fyne.NewSize(430, 250))
+	internetWindow.Hide()
+	internetWindow.SetCloseIntercept(func() {
+		internetWindow.Hide()
+	})
+	internetWindow.SetContent(
+		container.NewGridWrap(
+			fyne.NewSize(200, 50),
+			widget.NewButton("Allow 15 mins", func() { tellModemToAllowForPeriod(time.Minute * 15) }),
+			widget.NewButton("Allow 30 mins", func() { tellModemToAllowForPeriod(time.Minute * 35) }),
+			widget.NewButton("Allow 1 hr", func() { tellModemToAllowForPeriod(time.Minute * 60) }),
+			widget.NewButton("Allow +5 mins", func() { tellModemToAllowForPeriod(time.Minute * -5) }),
+			widget.NewButton("Allow +15 mins", func() { tellModemToAllowForPeriod(time.Minute * -15) }),
+			widget.NewButton("Allow +1 hr", func() { tellModemToAllowForPeriod(time.Minute * -60) }),
+		),
+	)
+}
+*/
