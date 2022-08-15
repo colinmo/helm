@@ -605,9 +605,7 @@ func taskWindowRefresh() {
 			widget.NewToolbarAction(
 				theme.ViewRefreshIcon(),
 				func() {
-					fmt.Printf("Refreshing")
 					DownloadTasks()
-					fmt.Printf("Refreshed")
 				},
 			),
 			widget.NewToolbarSeparator(),
