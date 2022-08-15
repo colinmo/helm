@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"io/ioutil"
 	"log"
+	"math"
 	"os"
 	"path"
 	"strings"
@@ -40,11 +41,12 @@ import (
 type AppStatusStruct struct {
 	CurrentZettleDBDate    time.Time
 	CurrentZettleDKB       binding.String
-	TaskList               binding.StringList
 	MyTasksFromGSM         [][]string
 	MyIncidentsFromGSM     [][]string
 	MyRequestsInGSM        [][]string
 	MyTeamIncidentsFromGSM [][]string
+	TaskTaskCount          int
+	TaskTaskStatus         binding.String
 }
 
 type AppPreferences struct {
@@ -56,7 +58,6 @@ type AppPreferences struct {
 	MSExpiresAt      time.Time
 }
 
-var activeInternetTimeChan (chan time.Duration)
 var thisApp fyne.App
 var mainWindow fyne.Window
 var preferencesWindow fyne.Window
@@ -80,15 +81,15 @@ func setup() {
 	AppStatus = AppStatusStruct{
 		CurrentZettleDBDate: time.Now().Local(),
 		CurrentZettleDKB:    binding.NewString(),
-		TaskList:            binding.NewStringList(),
+		TaskTaskStatus:      binding.NewString(),
+		TaskTaskCount:       0,
 	}
+	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
+	//	activeInternetTimeChan = make(chan time.Duration, 10)
+	//	go waitingForInternetCommand()
 }
 func main() {
 	setup()
-	// Get initial statuses for things
-	//	activeInternetTimeChan = make(chan time.Duration, 10)
-	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
-	//	go waitingForInternetCommand()
 
 	thisApp = app.NewWithID("com.vonexplaino.helm.preferences")
 	thisApp.SetIcon(fyne.NewStaticResource("Systray", icon.Data))
@@ -129,35 +130,6 @@ func main() {
 	// main window setup
 	thisApp.Run()
 }
-
-func tellModemToAllowForPeriod(period time.Duration) {
-	DisableParentalControls()
-	activeInternetTimeChan <- period
-}
-
-/*
-func waitingForInternetCommand() {
-	var activeInternetChangeTime time.Time
-	var timerActive = false
-	for {
-		time.Sleep(time.Minute / 3)
-		if len(activeInternetTimeChan) > 0 {
-			// New message!
-			change := <-activeInternetTimeChan
-			if change < 0 {
-				activeInternetChangeTime.Add(change * -1)
-			} else {
-				activeInternetChangeTime = time.Now().Add(change)
-			}
-			timerActive = true
-		}
-		if timerActive && time.Now().After(activeInternetChangeTime) {
-			EnableParentalControls()
-			timerActive = false
-		}
-	}
-}
-*/
 
 func saveZettle(content string, filename string) error {
 	writeFileContents(path.Join(appPreferences.ZettlekastenHome, filename), content)
@@ -505,27 +477,6 @@ func preferencesWindowSetup() {
 	)
 }
 
-/*
-func internetWindowSetup() {
-	internetWindow.Resize(fyne.NewSize(430, 250))
-	internetWindow.Hide()
-	internetWindow.SetCloseIntercept(func() {
-		internetWindow.Hide()
-	})
-	internetWindow.SetContent(
-		container.NewGridWrap(
-			fyne.NewSize(200, 50),
-			widget.NewButton("Allow 15 mins", func() { tellModemToAllowForPeriod(time.Minute * 15) }),
-			widget.NewButton("Allow 30 mins", func() { tellModemToAllowForPeriod(time.Minute * 35) }),
-			widget.NewButton("Allow 1 hr", func() { tellModemToAllowForPeriod(time.Minute * 60) }),
-			widget.NewButton("Allow +5 mins", func() { tellModemToAllowForPeriod(time.Minute * -5) }),
-			widget.NewButton("Allow +15 mins", func() { tellModemToAllowForPeriod(time.Minute * -15) }),
-			widget.NewButton("Allow +1 hr", func() { tellModemToAllowForPeriod(time.Minute * -60) }),
-		),
-	)
-}
-*/
-
 func getFileContentsAndCreateIfMissing(filename string) string {
 	content, err := ioutil.ReadFile(filename)
 	if errors.Is(err, os.ErrNotExist) {
@@ -557,17 +508,20 @@ func taskWindowSetup() {
 // TAPPABLE ICON
 type tappableIcon struct {
 	widget.Icon
+	OnTapGo func(_ *fyne.PointEvent)
+	MyId    int
 }
 
-func newTappableIcon(res fyne.Resource) *tappableIcon {
+func newTappableIcon(res fyne.Resource, tapped func(_ *fyne.PointEvent)) *tappableIcon {
 	icon := &tappableIcon{}
 	icon.ExtendBaseWidget(icon)
 	icon.SetResource(res)
+	icon.OnTapGo = tapped
 	return icon
 }
 
-func (t *tappableIcon) Tapped(_ *fyne.PointEvent) {
-	log.Println("I have been tapped")
+func (t *tappableIcon) Tapped(x *fyne.PointEvent) {
+	t.OnTapGo(x)
 }
 
 func (t *tappableIcon) TappedSecondary(_ *fyne.PointEvent) {
@@ -592,9 +546,19 @@ func (t *tappableLabel) Tapped(_ *fyne.PointEvent) {
 func (t *tappableLabel) TappedSecondary(_ *fyne.PointEvent) {
 }
 
+func activeTaskStatusUpdate(by int) {
+	AppStatus.TaskTaskCount = int(math.Max(float64(AppStatus.TaskTaskCount+by), 0))
+	if AppStatus.TaskTaskCount == 0 {
+		AppStatus.TaskTaskStatus.Set("Idle")
+	} else {
+		AppStatus.TaskTaskStatus.Set(fmt.Sprintf("%d tasks underway", AppStatus.TaskTaskCount))
+	}
+}
+
 func taskWindowRefresh() {
 	var list fyne.CanvasObject
 
+	taskStatusWidget := widget.NewLabelWithData(AppStatus.TaskTaskStatus)
 	// My TASKS
 	if len(AppStatus.MyTasksFromGSM) == 0 {
 		list = widget.NewLabel("No tasks")
@@ -606,11 +570,14 @@ func taskWindowRefresh() {
 		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
 		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
 		for _, x := range AppStatus.MyTasksFromGSM {
+			thisID := x[1]
 			col0.Objects = append(
 				col0.Objects,
 				container.NewMax(
 					widget.NewLabel(""),
-					newTappableIcon(theme.DocumentIcon()),
+					newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+						browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
+					}),
 				))
 			col1.Objects = append(col1.Objects,
 				widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
@@ -637,7 +604,11 @@ func taskWindowRefresh() {
 		widget.NewToolbar(
 			widget.NewToolbarAction(
 				theme.ViewRefreshIcon(),
-				func() {},
+				func() {
+					fmt.Printf("Refreshing")
+					DownloadTasks()
+					fmt.Printf("Refreshed")
+				},
 			),
 			widget.NewToolbarSeparator(),
 			widget.NewToolbarAction(
@@ -666,11 +637,14 @@ func taskWindowRefresh() {
 		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
 		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
 		for _, x := range AppStatus.MyIncidentsFromGSM {
+			thisID := x[1]
 			col0.Objects = append(
 				col0.Objects,
 				container.NewMax(
 					widget.NewLabel(""),
-					newTappableIcon(theme.DocumentIcon()),
+					newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+						browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
+					}),
 				))
 			col1.Objects = append(col1.Objects,
 				widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
@@ -695,7 +669,7 @@ func taskWindowRefresh() {
 		widget.NewToolbar(
 			widget.NewToolbarAction(
 				theme.ViewRefreshIcon(),
-				func() {},
+				func() { DownloadIncidents() },
 			),
 			widget.NewToolbarSeparator(),
 			widget.NewToolbarAction(
@@ -725,11 +699,14 @@ func taskWindowRefresh() {
 		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
 		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
 		for _, x := range AppStatus.MyTeamIncidentsFromGSM {
+			thisID := x[1]
 			col0.Objects = append(
 				col0.Objects,
 				container.NewMax(
 					widget.NewLabel(""),
-					newTappableIcon(theme.DocumentIcon()),
+					newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+						browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
+					}),
 				))
 			if len(x) > 5 {
 				col2.Objects = append(col2.Objects, widget.NewLabel(x[5]))
@@ -760,7 +737,7 @@ func taskWindowRefresh() {
 		widget.NewToolbar(
 			widget.NewToolbarAction(
 				theme.ViewRefreshIcon(),
-				func() {},
+				func() { DownloadTeam() },
 			),
 			widget.NewToolbarSeparator(),
 			widget.NewToolbarAction(
@@ -789,11 +766,14 @@ func taskWindowRefresh() {
 		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
 		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
 		for _, x := range AppStatus.MyRequestsInGSM {
+			thisID := x[1]
 			col0.Objects = append(
 				col0.Objects,
 				container.NewMax(
 					widget.NewLabel(""),
-					newTappableIcon(theme.DocumentIcon()),
+					newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+						browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
+					}),
 				))
 			col1.Objects = append(col1.Objects,
 				widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
@@ -818,7 +798,7 @@ func taskWindowRefresh() {
 		widget.NewToolbar(
 			widget.NewToolbarAction(
 				theme.ViewRefreshIcon(),
-				func() {},
+				func() { DownloadMyRequests() },
 			),
 			widget.NewToolbarSeparator(),
 			widget.NewToolbarAction(
@@ -838,7 +818,13 @@ func taskWindowRefresh() {
 
 	// Set up tabs
 	taskWindow.SetContent(
-		container.NewAppTabs(myTasksTab, myIncidentsTab, myRequestsTab, myTeamIncidentsTab),
+		container.NewBorder(
+			nil,
+			taskStatusWidget,
+			nil,
+			nil,
+			container.NewAppTabs(myTasksTab, myIncidentsTab, myRequestsTab, myTeamIncidentsTab),
+		),
 	)
 	taskWindow.Content().Refresh()
 }

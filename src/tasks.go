@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -72,93 +72,108 @@ func GetGSM() {
 		}()
 		browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
 	} else {
-		var tasksResponse CherwellSearchResponse
-		// Get my Tasks
-		AppStatus.MyTasksFromGSM = [][]string{}
-		// Download Tasks
-		for page := 1; page < 200; page++ {
-			response, _ := GetMyTasksFromGSMForPage(page)
-			_ = json.Unmarshal(response, &tasksResponse)
-			if len(tasksResponse.BusinessObjects) > 0 {
-				for _, x := range tasksResponse.BusinessObjects {
-					row := []string{}
-					for _, y := range x.Fields {
-						row = append(row, y.Value)
-					}
-					AppStatus.MyTasksFromGSM = append(AppStatus.MyTasksFromGSM, row)
-				}
-			}
-			if len(tasksResponse.BusinessObjects) != 200 {
-				break
-			}
-		}
-		// Download Incidents
-		AppStatus.MyIncidentsFromGSM = [][]string{}
-		for page := 1; page < 200; page++ {
-			response, _ := GetMyIncidentsFromGSMForPage(page)
-			_ = json.Unmarshal(response, &tasksResponse)
-			if len(tasksResponse.BusinessObjects) > 0 {
-				for _, x := range tasksResponse.BusinessObjects {
-					row := []string{}
-					for _, y := range x.Fields {
-						row = append(row, y.Value)
-					}
-					AppStatus.MyIncidentsFromGSM = append(AppStatus.MyIncidentsFromGSM, row)
-				}
-			}
-			if len(tasksResponse.BusinessObjects) != 200 {
-				break
-			}
-		}
-		// Download my requests
-		AppStatus.MyRequestsInGSM = [][]string{}
-		for page := 1; page < 200; page++ {
-			response, _ := GetMyRequestsInGSMForPage(page)
-			_ = json.Unmarshal(response, &tasksResponse)
-			if len(tasksResponse.BusinessObjects) > 0 {
-				for _, x := range tasksResponse.BusinessObjects {
-					row := []string{}
-					for _, y := range x.Fields {
-						row = append(row, y.Value)
-					}
-					AppStatus.MyRequestsInGSM = append(AppStatus.MyRequestsInGSM, row)
-				}
-			}
-			if len(tasksResponse.BusinessObjects) != 200 {
-				break
-			}
-		}
-		// Download Team
-		AppStatus.MyTeamIncidentsFromGSM = [][]string{}
-		for page := 1; page < 200; page++ {
-			response, _ := GetMyTeamIncidentsInGSMForPage(page)
-			_ = json.Unmarshal(response, &tasksResponse)
-			if len(tasksResponse.BusinessObjects) > 0 {
-				for _, x := range tasksResponse.BusinessObjects {
-					fmt.Printf("%s vs %s\n", x.Fields[6].Value, AuthenticationTokens.GSM.cherwelluser)
-					if x.Fields[6].Value == AuthenticationTokens.GSM.cherwelluser {
-						continue
-					}
-					row := []string{}
-					for _, y := range x.Fields {
-						row = append(row, y.Value)
-					}
-					AppStatus.MyTeamIncidentsFromGSM = append(AppStatus.MyTeamIncidentsFromGSM, row)
-				}
-			}
-			fmt.Printf("Found %d\n", len(AppStatus.MyTeamIncidentsFromGSM))
-			if len(tasksResponse.BusinessObjects) != 200 {
-				break
-			}
-		}
+		DownloadTasks()
+		DownloadIncidents()
+		DownloadMyRequests()
+		DownloadTeam()
 		taskWindowRefresh()
 		// Add personal priorities
 		// Return
 	}
 }
 
-func GetMyTasksFromGSMForPage(page int) ([]byte, error) {
-	return SearchCherwellFor(GSMSearchQuery{
+func DownloadTasks() {
+	activeTaskStatusUpdate(1)
+	defer activeTaskStatusUpdate(-1)
+	AppStatus.MyTasksFromGSM = [][]string{}
+	for page := 1; page < 200; page++ {
+		tasksResponse, _ := GetMyTasksFromGSMForPage(page)
+		if len(tasksResponse.BusinessObjects) > 0 {
+			for _, x := range tasksResponse.BusinessObjects {
+				row := []string{}
+				for _, y := range x.Fields {
+					row = append(row, y.Value)
+				}
+				AppStatus.MyTasksFromGSM = append(AppStatus.MyTasksFromGSM, row)
+			}
+		}
+		if len(tasksResponse.BusinessObjects) != 200 {
+			break
+		}
+	}
+}
+
+func DownloadIncidents() {
+	activeTaskStatusUpdate(1)
+	defer activeTaskStatusUpdate(-1)
+	AppStatus.MyIncidentsFromGSM = [][]string{}
+	for page := 1; page < 200; page++ {
+		tasksResponse, _ := GetMyIncidentsFromGSMForPage(page)
+		if len(tasksResponse.BusinessObjects) > 0 {
+			for _, x := range tasksResponse.BusinessObjects {
+				row := []string{}
+				for _, y := range x.Fields {
+					row = append(row, y.Value)
+				}
+				AppStatus.MyIncidentsFromGSM = append(AppStatus.MyIncidentsFromGSM, row)
+			}
+		}
+		if len(tasksResponse.BusinessObjects) != 200 {
+			break
+		}
+	}
+
+}
+
+func DownloadMyRequests() {
+	activeTaskStatusUpdate(1)
+	defer activeTaskStatusUpdate(-1)
+	AppStatus.MyRequestsInGSM = [][]string{}
+	for page := 1; page < 200; page++ {
+		tasksResponse, _ := GetMyRequestsInGSMForPage(page)
+		if len(tasksResponse.BusinessObjects) > 0 {
+			for _, x := range tasksResponse.BusinessObjects {
+				row := []string{}
+				for _, y := range x.Fields {
+					row = append(row, y.Value)
+				}
+				AppStatus.MyRequestsInGSM = append(AppStatus.MyRequestsInGSM, row)
+			}
+		}
+		if len(tasksResponse.BusinessObjects) != 200 {
+			break
+		}
+	}
+
+}
+
+func DownloadTeam() {
+	activeTaskStatusUpdate(1)
+	defer activeTaskStatusUpdate(-1)
+	AppStatus.MyTeamIncidentsFromGSM = [][]string{}
+	for page := 1; page < 200; page++ {
+		tasksResponse, _ := GetMyTeamIncidentsInGSMForPage(page)
+		if len(tasksResponse.BusinessObjects) > 0 {
+			for _, x := range tasksResponse.BusinessObjects {
+				if x.Fields[6].Value == AuthenticationTokens.GSM.cherwelluser {
+					continue
+				}
+				row := []string{}
+				for _, y := range x.Fields {
+					row = append(row, y.Value)
+				}
+				AppStatus.MyTeamIncidentsFromGSM = append(AppStatus.MyTeamIncidentsFromGSM, row)
+			}
+		}
+		if len(tasksResponse.BusinessObjects) != 200 {
+			break
+		}
+	}
+}
+
+func GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse, error) {
+	var tasksResponse CherwellSearchResponse
+	r, err := SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
 			{FieldId: "93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf", Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
 			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "Acknowledged"},
@@ -186,10 +201,16 @@ func GetMyTasksFromGSMForPage(page int) ([]byte, error) {
 			{FieldID: "9355d5ed416bbc9408615c4145978ff8538a3f6eb4", SortDirection: 1},
 		},
 	})
+	defer r.Close()
+	if err == nil {
+		_ = json.NewDecoder(r).Decode(&tasksResponse)
+	}
+	return tasksResponse, err
 }
 
-func GetMyIncidentsFromGSMForPage(page int) ([]byte, error) {
-	return SearchCherwellFor(GSMSearchQuery{
+func GetMyIncidentsFromGSMForPage(page int) (CherwellSearchResponse, error) {
+	var tasksResponse CherwellSearchResponse
+	r, err := SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
 			{FieldId: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:9339fc404e39ae705648ab43969f29262e6d167606", Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
 			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Acknowledged"},
@@ -212,10 +233,16 @@ func GetMyIncidentsFromGSMForPage(page int) ([]byte, error) {
 			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19", SortDirection: 1},
 		},
 	})
+	defer r.Close()
+	if err == nil {
+		_ = json.NewDecoder(r).Decode(&tasksResponse)
+	}
+	return tasksResponse, err
 }
 
-func GetMyRequestsInGSMForPage(page int) ([]byte, error) {
-	return SearchCherwellFor(GSMSearchQuery{
+func GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse, error) {
+	var tasksResponse CherwellSearchResponse
+	r, err := SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
 			{FieldId: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:941aa0889094428a6f4c054dbea345b09b4d87c77e", Operator: "eq", Value: AuthenticationTokens.GSM.userid},
 			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Acknowledged"},
@@ -238,8 +265,14 @@ func GetMyRequestsInGSMForPage(page int) ([]byte, error) {
 			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19", SortDirection: 1},
 		},
 	})
+	defer r.Close()
+	if err == nil {
+		_ = json.NewDecoder(r).Decode(&tasksResponse)
+	}
+	return tasksResponse, err
 }
-func GetMyTeamIncidentsInGSMForPage(page int) ([]byte, error) {
+func GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
+	var tasksResponse CherwellSearchResponse
 	baseFilter := []GSMFilter{
 		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Acknowledged"},
 		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "New"},
@@ -249,7 +282,7 @@ func GetMyTeamIncidentsInGSMForPage(page int) ([]byte, error) {
 	for _, x := range AuthenticationTokens.GSM.teams {
 		baseFilter = append(baseFilter, GSMFilter{FieldId: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:9339fc404e312b6d43436041fc8af1c07c6197f559", Operator: "eq", Value: x})
 	}
-	return SearchCherwellFor(GSMSearchQuery{
+	r, err := SearchCherwellFor(GSMSearchQuery{
 		Filters:    baseFilter,
 		BusObjId:   "6dd53665c0c24cab86870a21cf6434ae",
 		PageNumber: page,
@@ -268,9 +301,14 @@ func GetMyTeamIncidentsInGSMForPage(page int) ([]byte, error) {
 			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19", SortDirection: 1},
 		},
 	})
+	defer r.Close()
+	if err == nil {
+		_ = json.NewDecoder(r).Decode(&tasksResponse)
+	}
+	return tasksResponse, err
 }
 
-func SearchCherwellFor(toSend GSMSearchQuery) ([]byte, error) {
+func SearchCherwellFor(toSend GSMSearchQuery) (io.ReadCloser, error) {
 	var err error
 	sendThis, _ := json.Marshal(toSend)
 	result, err := getStuffFromCherwell(
@@ -348,19 +386,19 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				if CherwellToken.Expires == "" {
 					AuthenticationTokens.GSM.expiration = time.Now().Add(2000 * time.Hour)
 				} else {
-					AuthenticationTokens.GSM.expiration, _ = time.Parse("Mon, 02 Jan 2016 15:04:05 GMT", CherwellToken.Expires)
+					AuthenticationTokens.GSM.expiration, _ = time.Parse(time.RFC1123, CherwellToken.Expires)
 				}
-				var response []byte
 				var decodedResponse CherwellSearchResponse
 				// Get my UserID in Cherwell
-				response, _ = SearchCherwellFor(GSMSearchQuery{
+				r, _ := SearchCherwellFor(GSMSearchQuery{
 					Filters: []GSMFilter{
 						{FieldId: "941798910e24d4b1ae3c6a408cb3f8c5eba26e2b2b", Operator: "eq", Value: AuthenticationTokens.GSM.userid},
 					},
 					BusObjId: "9338216b3c549b75607cf54667a4e67d1f644d9fed",
 					Fields:   []string{"933a15d17f1f10297df7604b58a76734d6106ac428"},
 				})
-				_ = json.Unmarshal(response, &decodedResponse)
+				defer r.Close()
+				_ = json.NewDecoder(r).Decode(&decodedResponse)
 				AuthenticationTokens.GSM.cherwelluser = decodedResponse.BusinessObjects[0].BusObRecId
 				// Get my TeamIDs in Cherwell
 				var teamResponse struct {
@@ -369,11 +407,12 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 						TeamName string `json:"teamName"`
 					} `json:"teams"`
 				}
-				response, _ = getStuffFromCherwell(
+				r, _ = getStuffFromCherwell(
 					"GET",
 					"api/V2/getusersteams/userrecordid/"+AuthenticationTokens.GSM.cherwelluser,
 					[]byte{})
-				_ = json.Unmarshal(response, &teamResponse)
+				defer r.Close()
+				_ = json.NewDecoder(r).Decode(&teamResponse)
 				AuthenticationTokens.GSM.teams = []string{}
 				for _, x := range teamResponse.Teams {
 					AuthenticationTokens.GSM.teams = append(AuthenticationTokens.GSM.teams, x.TeamID)
@@ -387,8 +426,7 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getStuffFromCherwell(method string, path string, payload []byte) ([]byte, error) {
-	var result []byte
+func getStuffFromCherwell(method string, path string, payload []byte) (io.ReadCloser, error) {
 	client := &http.Client{
 		Timeout: time.Second * 10,
 	}
@@ -397,11 +435,7 @@ func getStuffFromCherwell(method string, path string, payload []byte) ([]byte, e
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", AuthenticationTokens.GSM.access_token))
 	req.Header.Set("Content-type", "application/json")
 	resp, err := client.Do(req)
-	if err == nil {
-		defer resp.Body.Close()
-		result, err = ioutil.ReadAll(resp.Body)
-	}
-	return result, err
+	return resp.Body, err
 }
 
 func GetJIRA() {
