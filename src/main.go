@@ -37,6 +37,13 @@ import (
 *   - Markdown Daily status
 *   - Internet Parent control
 **/
+/*
+	Refactor ideas
+	* [ ] In Setup, check what tokens have expired and refresh individually
+	* [x] In TaskWindow create, just create the layout based on the active integrations
+	* [x] Have a TaskWindowRefresh function that only refreshes
+		connections that are active
+*/
 
 type AppStatusStruct struct {
 	CurrentZettleDBDate    time.Time
@@ -47,15 +54,24 @@ type AppStatusStruct struct {
 	MyTeamIncidentsFromGSM [][]string
 	TaskTaskCount          int
 	TaskTaskStatus         binding.String
+	MyTasksFromPlanner     [][]string
 }
 
 type AppPreferences struct {
 	ZettlekastenHome string
 	RouterUsername   string
 	RouterPassword   string
-	MSAccessToken    string
-	MSRefreshToken   string
-	MSExpiresAt      time.Time
+	//
+	MSPlannerActive bool
+	MSAccessToken   string
+	MSRefreshToken  string
+	MSExpiresAt     time.Time
+	MSGroups        string
+	//
+	CWActive       bool
+	CWAccessToken  string
+	CWRefreshToken string
+	CWExpiresAt    time.Time
 }
 
 var thisApp fyne.App
@@ -66,18 +82,12 @@ var preferencesWindow fyne.Window
 var taskWindow fyne.Window
 var markdownInput *widget.Entry
 var AppStatus AppStatusStruct
+var TaskTabsIndexes map[string]int
+var TaskTabs *container.AppTabs
 var appPreferences AppPreferences
-var priorityColours map[string]color.Color
 
 func setup() {
 	os.Setenv("TZ", "Australia/Brisbane")
-	priorityColours = map[string]color.Color{
-		"1": color.NRGBA{R: 255, B: 0, G: 0, A: 255},
-		"2": color.NRGBA{R: 255, B: 125, G: 125, A: 255},
-		"3": color.NRGBA{R: 0, B: 255, G: 255, A: 255},
-		"4": color.NRGBA{R: 0, B: 125, G: 255, A: 255},
-		"5": color.NRGBA{R: 0, B: 0, G: 255, A: 255},
-	}
 	AppStatus = AppStatusStruct{
 		CurrentZettleDBDate: time.Now().Local(),
 		CurrentZettleDKB:    binding.NewString(),
@@ -85,6 +95,7 @@ func setup() {
 		TaskTaskCount:       0,
 	}
 	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
+	startLocalServers()
 	//	activeInternetTimeChan = make(chan time.Duration, 10)
 	//	go waitingForInternetCommand()
 }
@@ -417,13 +428,11 @@ func preferencesWindowSetup() {
 	appPreferences.ZettlekastenHome = thisApp.Preferences().StringWithFallback("ZettlekastenHome", os.TempDir())
 	//	appPreferences.RouterUsername = thisApp.Preferences().StringWithFallback("RouterUsername", "")
 	//	appPreferences.RouterPassword = thisApp.Preferences().StringWithFallback("RouterPassword", "")
+	appPreferences.MSPlannerActive = thisApp.Preferences().BoolWithFallback("MSPlannerActive", false)
 	appPreferences.MSAccessToken = thisApp.Preferences().StringWithFallback("MSAccessToken", "")
 	appPreferences.MSRefreshToken = thisApp.Preferences().StringWithFallback("MSRefreshToken", "")
-	var e error
-	appPreferences.MSExpiresAt, e = time.Parse(stringDateFormat, thisApp.Preferences().StringWithFallback("MSExpiresAt", "20060102T15:04:05"))
-	if e != nil {
-		log.Fatalf("Nope %s\n", e)
-	}
+	appPreferences.MSExpiresAt, _ = time.Parse(stringDateFormat, thisApp.Preferences().StringWithFallback("MSExpiresAt", "20060102T15:04:05"))
+	appPreferences.MSGroups = thisApp.Preferences().StringWithFallback("MSGroups", "")
 
 	zettlePath := widget.NewEntry()
 	zettlePath.SetText(appPreferences.ZettlekastenHome)
@@ -431,12 +440,16 @@ func preferencesWindowSetup() {
 	//	routerUser.SetText(appPreferences.RouterUsername)
 	//	routerPass := widget.NewPasswordEntry()
 	//	routerPass.SetText(appPreferences.RouterPassword)
+	plannerActive := widget.NewCheck("Active", func(res bool) {})
+	plannerActive.SetChecked(appPreferences.MSPlannerActive)
 	accessToken := widget.NewEntry()
 	accessToken.SetText(appPreferences.MSAccessToken)
 	refreshToken := widget.NewEntry()
 	refreshToken.SetText(appPreferences.MSRefreshToken)
 	expiresAt := widget.NewEntry()
 	expiresAt.SetText(appPreferences.MSExpiresAt.Local().Format(stringDateFormat))
+	groupsList := widget.NewEntry()
+	groupsList.SetText(appPreferences.MSGroups)
 
 	preferencesWindow.Resize(fyne.NewSize(400, 400))
 	preferencesWindow.Hide()
@@ -449,6 +462,8 @@ func preferencesWindowSetup() {
 		//		thisApp.Preferences().SetString("RouterUsername", appPreferences.RouterUsername)
 		//		appPreferences.RouterPassword = routerPass.Text
 		//		thisApp.Preferences().SetString("RouterPassword", appPreferences.RouterPassword)
+		appPreferences.MSPlannerActive = plannerActive.Checked
+		thisApp.Preferences().SetBool("MSPlannerActive", appPreferences.MSPlannerActive)
 		appPreferences.MSAccessToken = accessToken.Text
 		thisApp.Preferences().SetString("MSAccessToken", appPreferences.MSAccessToken)
 		appPreferences.MSRefreshToken = refreshToken.Text
@@ -457,6 +472,8 @@ func preferencesWindowSetup() {
 		fmt.Printf("New: %s\n", appPreferences.MSExpiresAt.Local())
 		thisApp.Preferences().SetString("MSExpiresAt", appPreferences.MSExpiresAt.Format(stringDateFormat))
 		fmt.Printf("New: %s\n", thisApp.Preferences().String("MSExpiresAt"))
+		appPreferences.MSGroups = groupsList.Text
+		thisApp.Preferences().SetString("MSGroups", appPreferences.MSGroups)
 	})
 	preferencesWindow.SetContent(
 		container.New(
@@ -467,6 +484,8 @@ func preferencesWindowSetup() {
 			//			routerUser,
 			//			widget.NewLabel("Password"),
 			//			routerPass,
+			widget.NewLabel("Planner active"),
+			plannerActive,
 			widget.NewLabel("MS Access Token"),
 			accessToken,
 			widget.NewLabel("MS Refresh Token"),
@@ -500,6 +519,34 @@ func zettleFileName(date time.Time) string {
 func taskWindowSetup() {
 	taskWindow.Resize(fyne.NewSize(430, 550))
 	taskWindow.Hide()
+	taskStatusWidget := widget.NewLabelWithData(AppStatus.TaskTaskStatus)
+	TaskTabs = container.NewAppTabs(
+		container.NewTabItem("My Tasks", container.NewMax()),
+		container.NewTabItem("My Incidents", container.NewMax()),
+		container.NewTabItem("My Requests", container.NewMax()),
+		container.NewTabItem("My Team Incidents", container.NewMax()),
+	)
+	TaskTabsIndexes = map[string]int{
+		"CWTasks":         0,
+		"CWIncidents":     1,
+		"CWRequests":      2,
+		"CWTeamIncidents": 3,
+	}
+	if appPreferences.MSPlannerActive {
+		TaskTabsIndexes["MSPlanner"] = len(TaskTabsIndexes)
+		TaskTabs.Append(
+			container.NewTabItem("My Planner", container.NewMax()),
+		)
+	}
+	taskWindow.SetContent(
+		container.NewBorder(
+			nil,
+			container.NewMax(taskStatusWidget),
+			nil,
+			nil,
+			TaskTabs,
+		),
+	)
 	taskWindow.SetCloseIntercept(func() {
 		taskWindow.Hide()
 	})
@@ -555,275 +602,350 @@ func activeTaskStatusUpdate(by int) {
 	}
 }
 
-func taskWindowRefresh() {
+func taskWindowRefresh(specific string) {
 	var list fyne.CanvasObject
 
-	taskStatusWidget := widget.NewLabelWithData(AppStatus.TaskTaskStatus)
-	// My TASKS
-	if len(AppStatus.MyTasksFromGSM) == 0 {
-		list = widget.NewLabel("No tasks")
-	} else {
-		col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`## `))
-		col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Incident`))
-		col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Task`))
-		col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
-		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
-		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
-		for _, x := range AppStatus.MyTasksFromGSM {
-			thisID := x[1]
-			col0.Objects = append(
-				col0.Objects,
-				container.NewMax(
-					widget.NewLabel(""),
-					newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-						browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
-					}),
-				))
-			col1.Objects = append(col1.Objects,
-				widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-			col2.Objects = append(col2.Objects, newTappableLabel(fmt.Sprintf("[%s] %s", x[8], x[3])))
-			dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
-			col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
-			col4.Objects = append(col4.Objects, container.NewMax(
-				canvas.NewRectangle(priorityColours[x[9]]),
-				widget.NewLabelWithStyle(x[9], fyne.TextAlignCenter, fyne.TextStyle{})))
-			col5.Objects = append(col5.Objects, widget.NewLabel(x[4]))
-		}
-		list = container.NewVScroll(
-			container.NewHBox(
-				col0,
-				col1,
-				col2,
-				col3,
-				col4,
-				col5,
-			),
-		)
-	}
-	myTasksTab := container.NewTabItem("My Tasks", container.NewBorder(
-		widget.NewToolbar(
-			widget.NewToolbarAction(
-				theme.ViewRefreshIcon(),
-				func() {
-					DownloadTasks()
-				},
-			),
-			widget.NewToolbarSeparator(),
-			widget.NewToolbarAction(
-				theme.HistoryIcon(),
-				func() {},
-			),
-			widget.NewToolbarAction(
-				theme.ErrorIcon(),
-				func() {},
-			),
-		),
-		nil,
-		nil,
-		nil,
-		list,
-	))
+	priorityIcons := setupPriorityIcons()
+	if specific == "" || specific == "CWTasks" {
+		if len(AppStatus.MyTasksFromGSM) == 0 {
+			list = widget.NewLabel("No tasks")
+		} else {
+			col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
+			col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Incident`))
+			col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Task`))
+			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
+			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
+			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 
-	// MY INCIDENTS
-	var list2 fyne.CanvasObject
-	if len(AppStatus.MyIncidentsFromGSM) == 0 {
-		list2 = widget.NewLabel("No incidents")
-	} else {
-		col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`## `))
-		col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Incident`))
-		col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
-		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
-		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
-		for _, x := range AppStatus.MyIncidentsFromGSM {
-			thisID := x[1]
-			col0.Objects = append(
-				col0.Objects,
-				container.NewMax(
-					widget.NewLabel(""),
-					newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-						browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
-					}),
-				))
-			col1.Objects = append(col1.Objects,
-				widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-			dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
-			col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
-			col4.Objects = append(col4.Objects, container.NewMax(
-				canvas.NewRectangle(priorityColours[x[4]]),
-				widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
-			col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
-		}
-		list2 = container.NewVScroll(
-			container.NewHBox(
-				col0,
-				col1,
-				col3,
-				col4,
-				col5,
-			),
-		)
-	}
-	myIncidentsTab := container.NewTabItem("My Incidents", container.NewBorder(
-		widget.NewToolbar(
-			widget.NewToolbarAction(
-				theme.ViewRefreshIcon(),
-				func() { DownloadIncidents() },
-			),
-			widget.NewToolbarSeparator(),
-			widget.NewToolbarAction(
-				theme.HistoryIcon(),
-				func() {},
-			),
-			widget.NewToolbarAction(
-				theme.ErrorIcon(),
-				func() {},
-			),
-		),
-		nil,
-		nil,
-		nil,
-		list2,
-	))
-
-	// MY TEAM INCIDENTS
-	var list3 fyne.CanvasObject
-	if len(AppStatus.MyTeamIncidentsFromGSM) == 0 {
-		list3 = widget.NewLabel("No incidents")
-	} else {
-		col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`## `))
-		col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Incident`))
-		col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Owner`))
-		col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
-		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
-		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
-		for _, x := range AppStatus.MyTeamIncidentsFromGSM {
-			thisID := x[1]
-			col0.Objects = append(
-				col0.Objects,
-				container.NewMax(
-					widget.NewLabel(""),
-					newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-						browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
-					}),
-				))
-			if len(x) > 5 {
-				col2.Objects = append(col2.Objects, widget.NewLabel(x[5]))
-			} else {
-				col2.Objects = append(col2.Objects, widget.NewLabel("none"))
+			for _, x := range AppStatus.MyTasksFromGSM {
+				thisID := x[1]
+				col0.Objects = append(
+					col0.Objects,
+					container.NewMax(
+						widget.NewLabel(""),
+						newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+							browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
+						}),
+					))
+				col1.Objects = append(col1.Objects,
+					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				col2.Objects = append(col2.Objects, newTappableLabel(fmt.Sprintf("[%s] %s", x[8], x[3])))
+				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+				col4.Objects = append(col4.Objects, container.NewMax(
+					priorityIcons[x[9]],
+					widget.NewLabelWithStyle(x[9], fyne.TextAlignCenter, fyne.TextStyle{})))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x[4]))
 			}
-			col1.Objects = append(col1.Objects,
-				widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-			dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
-			col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
-			col4.Objects = append(col4.Objects, container.NewMax(
-				canvas.NewRectangle(priorityColours[x[4]]),
-				widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
-			col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
+			list = container.NewVScroll(
+				container.NewHBox(
+					col0,
+					col1,
+					col2,
+					col3,
+					col4,
+					col5,
+				),
+			)
 		}
-		list3 = container.NewVScroll(
-			container.NewHBox(
-				col0,
-				col1,
-				col2,
-				col3,
-				col4,
-				col5,
+		TaskTabs.Items[TaskTabsIndexes["CWTasks"]].Content = container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {
+						DownloadTasks()
+						taskWindowRefresh("CWTasks")
+					},
+				),
+				widget.NewToolbarSeparator(),
+				widget.NewToolbarAction(
+					theme.HistoryIcon(),
+					func() {},
+				),
+				widget.NewToolbarAction(
+					theme.ErrorIcon(),
+					func() {},
+				),
 			),
+			nil,
+			nil,
+			nil,
+			list,
 		)
 	}
-	myTeamIncidentsTab := container.NewTabItem("My Team Incidents", container.NewBorder(
-		widget.NewToolbar(
-			widget.NewToolbarAction(
-				theme.ViewRefreshIcon(),
-				func() { DownloadTeam() },
-			),
-			widget.NewToolbarSeparator(),
-			widget.NewToolbarAction(
-				theme.HistoryIcon(),
-				func() {},
-			),
-			widget.NewToolbarAction(
-				theme.ErrorIcon(),
-				func() {},
-			),
-		),
-		nil,
-		nil,
-		nil,
-		list3,
-	))
-
-	// MY REQUESTS
-	var list4 fyne.CanvasObject
-	if len(AppStatus.MyRequestsInGSM) == 0 {
-		list4 = widget.NewLabel("No requests")
-	} else {
-		col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`## `))
-		col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Incident`))
-		col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Age`))
-		col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Priority`))
-		col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`## Status`))
-		for _, x := range AppStatus.MyRequestsInGSM {
-			thisID := x[1]
-			col0.Objects = append(
-				col0.Objects,
-				container.NewMax(
-					widget.NewLabel(""),
-					newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-						browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
-					}),
-				))
-			col1.Objects = append(col1.Objects,
-				widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-			dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
-			col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
-			col4.Objects = append(col4.Objects, container.NewMax(
-				canvas.NewRectangle(priorityColours[x[4]]),
-				widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
-			col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
+	if specific == "" || specific == "CWIncidents" {
+		var list2 fyne.CanvasObject
+		if len(AppStatus.MyIncidentsFromGSM) == 0 {
+			list2 = widget.NewLabel("No incidents")
+		} else {
+			col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
+			col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Incident`))
+			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
+			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
+			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
+			for _, x := range AppStatus.MyIncidentsFromGSM {
+				thisID := x[1]
+				col0.Objects = append(
+					col0.Objects,
+					container.NewMax(
+						widget.NewLabel(""),
+						newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+							browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
+						}),
+					))
+				col1.Objects = append(col1.Objects,
+					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+				col4.Objects = append(col4.Objects, container.NewMax(
+					priorityIcons[x[4]], // canvas.NewCircle(priorityColours[x[4]]),
+					widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
+			}
+			list2 = container.NewVScroll(
+				container.NewHBox(
+					col0,
+					col1,
+					col3,
+					col4,
+					col5,
+				),
+			)
 		}
-		list4 = container.NewVScroll(
-			container.NewHBox(
-				col0,
-				col1,
-				col3,
-				col4,
-				col5,
+		TaskTabs.Items[TaskTabsIndexes["CWIncidents"]].Content = container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {
+						DownloadIncidents()
+						taskWindowRefresh("CWIncidents")
+					},
+				),
+				widget.NewToolbarSeparator(),
+				widget.NewToolbarAction(
+					theme.HistoryIcon(),
+					func() {},
+				),
+				widget.NewToolbarAction(
+					theme.ErrorIcon(),
+					func() {},
+				),
 			),
+			nil,
+			nil,
+			nil,
+			list2,
 		)
 	}
-	myRequestsTab := container.NewTabItem("My Requests", container.NewBorder(
-		widget.NewToolbar(
-			widget.NewToolbarAction(
-				theme.ViewRefreshIcon(),
-				func() { DownloadMyRequests() },
-			),
-			widget.NewToolbarSeparator(),
-			widget.NewToolbarAction(
-				theme.HistoryIcon(),
-				func() {},
-			),
-			widget.NewToolbarAction(
-				theme.ErrorIcon(),
-				func() {},
-			),
-		),
-		nil,
-		nil,
-		nil,
-		list4,
-	))
+	if specific == "" || specific == "CWTeamIncidents" {
+		var list3 fyne.CanvasObject
+		if len(AppStatus.MyTeamIncidentsFromGSM) == 0 {
+			list3 = widget.NewLabel("No incidents")
+		} else {
+			col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
+			col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Incident`))
+			col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Owner`))
+			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
+			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
+			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
+			for _, x := range AppStatus.MyTeamIncidentsFromGSM {
+				thisID := x[1]
+				col0.Objects = append(
+					col0.Objects,
+					container.NewMax(
+						widget.NewLabel(""),
+						newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+							browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
+						}),
+					))
+				if len(x) > 5 {
+					col2.Objects = append(col2.Objects, widget.NewLabel(x[5]))
+				} else {
+					col2.Objects = append(col2.Objects, widget.NewLabel("none"))
+				}
+				col1.Objects = append(col1.Objects,
+					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+				col4.Objects = append(col4.Objects, container.NewMax(
+					priorityIcons[x[4]],
+					widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
+			}
+			list3 = container.NewVScroll(
+				container.NewHBox(
+					col0,
+					col1,
+					col2,
+					col3,
+					col4,
+					col5,
+				),
+			)
+		}
 
-	// Set up tabs
-	taskWindow.SetContent(
-		container.NewBorder(
+		TaskTabs.Items[TaskTabsIndexes["CWTeamIncidents"]].Content = container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {
+						DownloadTeam()
+						taskWindowRefresh("CWTeamIncidents")
+					},
+				),
+				widget.NewToolbarSeparator(),
+				widget.NewToolbarAction(
+					theme.HistoryIcon(),
+					func() {},
+				),
+				widget.NewToolbarAction(
+					theme.ErrorIcon(),
+					func() {},
+				),
+			),
 			nil,
-			taskStatusWidget,
 			nil,
 			nil,
-			container.NewAppTabs(myTasksTab, myIncidentsTab, myRequestsTab, myTeamIncidentsTab),
-		),
-	)
+			list3,
+		)
+	}
+	if specific == "" || specific == "CWRequests" {
+		var list4 fyne.CanvasObject
+		if len(AppStatus.MyRequestsInGSM) == 0 {
+			list4 = widget.NewLabel("No requests")
+		} else {
+			col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
+			col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Incident`))
+			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
+			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
+			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
+			for _, x := range AppStatus.MyRequestsInGSM {
+				thisID := x[1]
+				col0.Objects = append(
+					col0.Objects,
+					container.NewMax(
+						widget.NewLabel(""),
+						newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+							browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
+						}),
+					))
+				col1.Objects = append(col1.Objects,
+					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+				col4.Objects = append(col4.Objects, container.NewMax(
+					priorityIcons[x[4]],
+					widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
+			}
+			list4 = container.NewVScroll(
+				container.NewHBox(
+					col0,
+					col1,
+					col3,
+					col4,
+					col5,
+				),
+			)
+		}
+
+		TaskTabs.Items[TaskTabsIndexes["CWRequests"]].Content = container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {
+						DownloadMyRequests()
+						taskWindowRefresh("CWRequests")
+					},
+				),
+				widget.NewToolbarSeparator(),
+				widget.NewToolbarAction(
+					theme.HistoryIcon(),
+					func() {},
+				),
+				widget.NewToolbarAction(
+					theme.ErrorIcon(),
+					func() {},
+				),
+			),
+			nil,
+			nil,
+			nil,
+			list4,
+		)
+	}
+	if appPreferences.MSPlannerActive && (specific == "" || specific == "MSPlanner") {
+		// MY PLANNER
+		var list5 fyne.CanvasObject
+		if len(AppStatus.MyTasksFromPlanner) == 0 {
+			list5 = widget.NewLabel("No requests")
+		} else {
+			col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
+			col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Title`))
+			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
+			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
+			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### %`))
+			for _, x := range AppStatus.MyTasksFromPlanner {
+				thisID := x[0]
+				col0.Objects = append(
+					col0.Objects,
+					container.NewMax(
+						widget.NewLabel(""),
+						newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+							browser.OpenURL(
+								fmt.Sprintf(
+									"https://tasks.office.com/%s/Home/Task/%s",
+									msApplicationTenant,
+									thisID,
+								),
+							)
+						}),
+					))
+				col1.Objects = append(col1.Objects,
+					widget.NewLabelWithStyle(fmt.Sprintf("%s", x[3]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				dt, _ := time.Parse("2006-01-02T15:04:05.999999999Z", x[5])
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+				col4.Objects = append(col4.Objects, container.NewMax(
+					priorityIcons[x[6]],
+					widget.NewLabelWithStyle(x[6], fyne.TextAlignCenter, fyne.TextStyle{})))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x[8]))
+			}
+			list5 = container.NewVScroll(
+				container.NewHBox(
+					col0,
+					col1,
+					col3,
+					col4,
+					col5,
+				),
+			)
+		}
+
+		TaskTabs.Items[TaskTabsIndexes["MSPlanner"]].Content = container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {
+						DownloadPlanners()
+						taskWindowRefresh("MSPlanner")
+					},
+				),
+				widget.NewToolbarSeparator(),
+				widget.NewToolbarAction(
+					theme.HistoryIcon(),
+					func() {},
+				),
+				widget.NewToolbarAction(
+					theme.ErrorIcon(),
+					func() {},
+				),
+			),
+			nil,
+			nil,
+			nil,
+			list5,
+		)
+	}
 	taskWindow.Content().Refresh()
 }
 
@@ -858,3 +980,92 @@ func dateSinceNowInString(oldDate time.Time) string {
 	}
 	return fmt.Sprintf("%d %s", int(mep), metric)
 }
+
+func setupPriorityIcons() map[string]*widget.Icon {
+	priorityIcons := map[string]*widget.Icon{}
+	priorityIcons["1"] = widget.NewIcon(
+		fyne.NewStaticResource("priority1.svg", []byte(`<?xml version="1.0"?>
+		<svg version="1.1" width="30" height="30"
+			xmlns="http://www.w3.org/2000/svg">
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+			<path stroke-width="3" stroke="red" fill="red" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
+			<path stroke-width="3" stroke="red" fill="red" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
+			<path stroke-width="3" stroke="red" fill="red" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
+			<path stroke-width="3" stroke="red" fill="red" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
+			<path stroke-width="3" stroke="red" fill="red" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+		</svg>`)))
+	priorityIcons["2"] = widget.NewIcon(
+		fyne.NewStaticResource("priority2.svg", []byte(`<?xml version="1.0"?>
+		<svg version="1.1" width="30" height="30"
+			xmlns="http://www.w3.org/2000/svg">
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+			<path stroke-width="3" stroke="orange" fill="orange" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
+			<path stroke-width="3" stroke="orange" fill="orange" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
+			<path stroke-width="3" stroke="orange" fill="orange" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
+			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
+			<path stroke-width="3" stroke="orange" fill="orange" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+		</svg>`)))
+	priorityIcons["3"] = widget.NewIcon(
+		fyne.NewStaticResource("priority3.svg", []byte(`<?xml version="1.0"?>
+		<svg version="1.1" width="30" height="30"
+			xmlns="http://www.w3.org/2000/svg">
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+			<path stroke-width="3" stroke="yellow" fill="yellow" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
+			<path stroke-width="3" stroke="yellow" fill="yellow" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
+			<path stroke-width="3" stroke="yellow" fill="yellow" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
+			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
+			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+		</svg>`)))
+	priorityIcons["4"] = widget.NewIcon(
+		fyne.NewStaticResource("priority4.svg", []byte(`<?xml version="1.0"?>
+		<svg version="1.1" width="30" height="30"
+			xmlns="http://www.w3.org/2000/svg">
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+			<path stroke-width="3" stroke="green" fill="green" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
+			<path stroke-width="3" stroke="green" fill="green" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
+			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
+			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
+			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+		</svg>`)))
+	priorityIcons["5"] = widget.NewIcon(
+		fyne.NewStaticResource("priority5.svg", []byte(`<?xml version="1.0"?>
+		<svg version="1.1" width="30" height="30"
+			xmlns="http://www.w3.org/2000/svg">
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+			<path stroke-width="3" stroke="cyan" fill="cyan" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
+			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
+			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
+			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
+			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+		</svg>`)))
+	return priorityIcons
+}
+
+//var priorityColours map[string]color.Color
+//	priorityColours = map[string]color.Color{
+//		"1": color.NRGBA{R: 255, B: 0, G: 0, A: 255},
+//		"2": color.NRGBA{R: 255, B: 125, G: 125, A: 255},
+//		"3": color.NRGBA{R: 0, B: 255, G: 255, A: 255},
+//		"4": color.NRGBA{R: 0, B: 125, G: 255, A: 255},
+//		"5": color.NRGBA{R: 0, B: 0, G: 255, A: 255},
+//	}

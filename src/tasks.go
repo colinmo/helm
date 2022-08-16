@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"time"
 
 	"github.com/pkg/browser"
@@ -56,27 +57,37 @@ type GSMSearchQuery struct {
 
 func GetAllTasks() {
 	GetGSM()
+	if appPreferences.MSPlannerActive {
+		GetPlanner()
+	}
 }
 
-var GSMAuthWebServer *http.Server
+var AuthWebServer *http.Server
+
+func startLocalServers() {
+	http.HandleFunc("/cherwell", authenticateToCherwell)
+	http.HandleFunc("/ms", authenticateToMS)
+	go func() {
+		AuthWebServer = &http.Server{Addr: ":84", Handler: nil}
+		if err := AuthWebServer.ListenAndServe(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+}
 
 func GetGSM() {
 	if AuthenticationTokens.GSM.access_token == "" || AuthenticationTokens.GSM.expiration.Before(time.Now()) {
 		// Login if expired
-		go func() {
-			GSMAuthWebServer := &http.Server{Addr: ":84", Handler: nil}
-			http.HandleFunc("/cherwell", authenticateToCherwell)
-			if err := GSMAuthWebServer.ListenAndServe(); err != nil {
-				log.Fatal(err)
-			}
-		}()
 		browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
 	} else {
 		DownloadTasks()
+		taskWindowRefresh("CWTasks")
 		DownloadIncidents()
+		taskWindowRefresh("CWIncidents")
 		DownloadMyRequests()
+		taskWindowRefresh("CWRequests")
 		DownloadTeam()
-		taskWindowRefresh()
+		taskWindowRefresh("CWTeamIncidents")
 		// Add personal priorities
 		// Return
 	}
@@ -427,7 +438,7 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		// Redirect to MS Auth
+		// Redirect to Cherwell AUTH
 		browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
 	}
 }
@@ -448,8 +459,179 @@ func GetJIRA() {
 
 }
 
-func GetPlanner() {
+var MSAuthWebServer *http.Server
 
+type MSAuthResponse struct {
+	TokenType    string `json:"token_type"`
+	Scope        string `json:"scope"`
+	ExpiresIn    int    `json:"expires_in"`
+	ExpiresDate  time.Time
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+func GetPlanner() {
+	if AuthenticationTokens.MS.access_token == "" || AuthenticationTokens.MS.expiration.Before(time.Now()) {
+		// Login if expired
+		browser.OpenURL(
+			fmt.Sprintf(`https://login.microsoftonline.com/%s/oauth2/v2.0/authorize?finalUri=?code=xy&client_id=%s&response_type=code&redirect_uri=http://localhost:84/ms&response_mode=query&scope=%s`,
+				msApplicationTenant,
+				msApplicationClientId,
+				msScopes),
+		)
+	} else {
+		DownloadPlanners()
+		// Add personal priorities
+		// Return
+	}
+}
+
+func authenticateToMS(w http.ResponseWriter, r *http.Request) {
+	var MSToken MSAuthResponse
+	query := r.URL.Query()
+	if query.Get("code") != "" {
+		payload := url.Values{
+			"client_id":     {msApplicationClientId},
+			"scope":         {msScopes},
+			"code":          {query.Get("code")},
+			"redirect_uri":  {"http://localhost:84/ms"},
+			"grant_type":    {"authorization_code"},
+			"client_secret": {msApplicationSecret},
+		}
+		resp, err := http.PostForm(
+			fmt.Sprintf(`https://login.microsoftonline.com/%s/oauth2/v2.0/token`,
+				msApplicationTenant,
+			),
+			payload,
+		)
+		if err != nil {
+			log.Fatalf("Login failed %s\n", err)
+		} else {
+			err := json.NewDecoder(resp.Body).Decode(&MSToken)
+			if err != nil {
+				log.Fatalf("Failed MS %s\n", err)
+			}
+			AuthenticationTokens.MS.access_token = MSToken.AccessToken
+			AuthenticationTokens.MS.refresh_token = MSToken.RefreshToken
+			seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", MSToken.ExpiresIn))
+			AuthenticationTokens.MS.expiration = time.Now().Add(seconds)
+			GetPlanner()
+		}
+	} else {
+		// Redirect to Cherwell AUTH
+		browser.OpenURL(
+			fmt.Sprintf(`https://login.microsoftonline.com/%s/oauth2/v2.0/authorize?finalUri=?code=xy&client_id=%s&response_type=code&redirect_uri=http://localhost:84/ms&response_mode=query&scope=%s`,
+				msApplicationTenant,
+				msApplicationClientId,
+				msScopes),
+		)
+	}
+}
+
+type myTasksGraphResponse struct {
+	NextPage string `json:"@odata.nextLink"`
+	Value    []struct {
+		TaskID          string `json:"id"`
+		PlanID          string `json:"planId"`
+		BucketID        string `json:"bucketId"`
+		Title           string `json:"title"`
+		OrderHint       string `json:"orderHint"`
+		PercentComplete int    `json:"percentComplete"`
+		CreatedDateTime string `json:"createdDateTime"`
+		Priority        int    `json:"priority"`
+		Details         struct {
+			Description string `json:"description"`
+		} `json:"details"`
+	} `json:"value"`
+}
+
+func DownloadPlanners() {
+	activeTaskStatusUpdate(1)
+	defer activeTaskStatusUpdate(-1)
+
+	// * @todo Add Sort
+	AppStatus.MyTasksFromPlanner = [][]string{}
+	var teamResponse myTasksGraphResponse
+	urlToCall := "/me/planner/tasks"
+	for page := 1; page < 200; page++ {
+		r, err := callGraphURI("GET", urlToCall, []byte{}, "$expand=details")
+		if err == nil {
+			defer r.Close()
+			_ = json.NewDecoder(r).Decode(&teamResponse)
+
+			for _, y := range teamResponse.Value {
+				if y.PercentComplete < 100 {
+					AppStatus.MyTasksFromPlanner = append(
+						AppStatus.MyTasksFromPlanner,
+						[]string{
+							y.TaskID,
+							y.PlanID,
+							y.BucketID,
+							y.Title,
+							y.OrderHint,
+							y.CreatedDateTime,
+							teamPriorityToGSMPriority(y.Priority),
+							y.Details.Description,
+							fmt.Sprintf("%d", y.PercentComplete),
+						},
+					)
+				}
+			}
+			if len(teamResponse.NextPage) == 0 {
+				break
+			} else {
+				x, e := url.Parse(teamResponse.NextPage)
+				if e == nil {
+					urlToCall = x.Path
+				} else {
+					break
+				}
+			}
+			// sort
+			sort.SliceStable(AppStatus.MyTasksFromPlanner, func(i, j int) bool {
+				if AppStatus.MyTasksFromPlanner[i][7] == AppStatus.MyTasksFromPlanner[j][7] {
+					return AppStatus.MyTasksFromPlanner[i][5] < AppStatus.MyTasksFromPlanner[j][5]
+				}
+				return AppStatus.MyTasksFromPlanner[i][7] < AppStatus.MyTasksFromPlanner[j][7]
+			})
+		} else {
+			fmt.Printf("Failed to get Graph Tasks %s\n", err)
+		}
+	}
+	taskWindowRefresh("MSPlanner")
+}
+
+func teamPriorityToGSMPriority(priority int) string {
+	switch priority {
+	case 0, 1:
+		return "1"
+	case 2, 3, 4:
+		return "2"
+	case 5, 6, 7:
+		return "3"
+	case 8:
+		return "4"
+	case 9:
+		return "5"
+	default:
+		return "5"
+	}
+}
+
+func callGraphURI(method string, path string, payload []byte, query string) (io.ReadCloser, error) {
+	client := &http.Client{
+		Timeout: time.Second * 10,
+	}
+	newpath, _ := url.JoinPath("https://graph.microsoft.com/v1.0/", path)
+	if len(query) > 0 {
+		newpath = newpath + "?" + query
+	}
+	req, _ := http.NewRequest(method, newpath, bytes.NewReader(payload))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", AuthenticationTokens.MS.access_token))
+	req.Header.Set("Content-type", "application/json")
+
+	resp, err := client.Do(req)
+	return resp.Body, err
 }
 
 func LoginToMS() {
