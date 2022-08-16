@@ -5,7 +5,7 @@ This is meant to be a main controller for my day-to-day work and other tasks. Cu
 1. Markdown editor for a daily-status
 2. Deactivate parental controls on my internet for a set period of time
 
-## Todo
+### Todo
 
 * [ ] Add in a `@tag` search capability
   * [ ] Does basic search count?
