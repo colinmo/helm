@@ -498,7 +498,7 @@ func zettleFileName(date time.Time) string {
 }
 
 func taskWindowSetup() {
-	taskWindow.Resize(fyne.NewSize(430, 250))
+	taskWindow.Resize(fyne.NewSize(430, 550))
 	taskWindow.Hide()
 	taskWindow.SetCloseIntercept(func() {
 		taskWindow.Hide()
