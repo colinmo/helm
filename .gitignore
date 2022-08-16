@@ -6,3 +6,4 @@ selenium-server-4.3.0.jar
 helm.exe
 vendor
 Helm.app
+src/msplannersecret.go
