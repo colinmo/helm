@@ -180,6 +180,7 @@ func GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "New"},
 			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "In Progress"},
 			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "On Hold"},
+			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "Pending"},
 		},
 		BusObjId:   "9355d5ed41e384ff345b014b6cb1c6e748594aea5b",
 		PageNumber: page,
@@ -201,8 +202,8 @@ func GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldID: "9355d5ed416bbc9408615c4145978ff8538a3f6eb4", SortDirection: 1},
 		},
 	})
-	defer r.Close()
 	if err == nil {
+		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
 	}
 	return tasksResponse, err
@@ -217,6 +218,7 @@ func GetMyIncidentsFromGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "New"},
 			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "In Progress"},
 			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "On Hold"},
+			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Pending"},
 		},
 		BusObjId:   "6dd53665c0c24cab86870a21cf6434ae",
 		PageNumber: page,
@@ -233,8 +235,8 @@ func GetMyIncidentsFromGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19", SortDirection: 1},
 		},
 	})
-	defer r.Close()
 	if err == nil {
+		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
 	}
 	return tasksResponse, err
@@ -249,6 +251,7 @@ func GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "New"},
 			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "In Progress"},
 			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "On Hold"},
+			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Pending"},
 		},
 		BusObjId:   "6dd53665c0c24cab86870a21cf6434ae",
 		PageNumber: page,
@@ -265,8 +268,8 @@ func GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19", SortDirection: 1},
 		},
 	})
-	defer r.Close()
 	if err == nil {
+		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
 	}
 	return tasksResponse, err
@@ -278,6 +281,7 @@ func GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
 		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "New"},
 		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "In Progress"},
 		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "On Hold"},
+		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Pending"},
 	}
 	for _, x := range AuthenticationTokens.GSM.teams {
 		baseFilter = append(baseFilter, GSMFilter{FieldId: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:9339fc404e312b6d43436041fc8af1c07c6197f559", Operator: "eq", Value: x})
@@ -301,8 +305,8 @@ func GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19", SortDirection: 1},
 		},
 	})
-	defer r.Close()
 	if err == nil {
+		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
 	}
 	return tasksResponse, err
@@ -395,7 +399,7 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 						{FieldId: "941798910e24d4b1ae3c6a408cb3f8c5eba26e2b2b", Operator: "eq", Value: AuthenticationTokens.GSM.userid},
 					},
 					BusObjId: "9338216b3c549b75607cf54667a4e67d1f644d9fed",
-					Fields:   []string{"933a15d17f1f10297df7604b58a76734d6106ac428"},
+					Fields:   []string{"933a15d131ff727ca7ed3f4e1c8f528d719b99b82d", "933a15d17f1f10297df7604b58a76734d6106ac428"},
 				})
 				defer r.Close()
 				_ = json.NewDecoder(r).Decode(&decodedResponse)
@@ -413,7 +417,9 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 					[]byte{})
 				defer r.Close()
 				_ = json.NewDecoder(r).Decode(&teamResponse)
-				AuthenticationTokens.GSM.teams = []string{}
+				AuthenticationTokens.GSM.teams = []string{
+					decodedResponse.BusinessObjects[0].Fields[1].Value,
+				}
 				for _, x := range teamResponse.Teams {
 					AuthenticationTokens.GSM.teams = append(AuthenticationTokens.GSM.teams, x.TeamID)
 				}
