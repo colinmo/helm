@@ -9,3 +9,6 @@ build-windows:
 
 build-osx:
 	cd src ; fyne package -os darwin ; defaults write Helm.app/Contents/Info LSUIElement 1
+
+build-oldosx:
+	cd src ; GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CGO_CFLAGS="-mmacosx-version-min=10.12" CGO_LDFLAGS="-mmacosx-version-min=10.12" go build -mod=readonly
