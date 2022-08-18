@@ -45,6 +45,5 @@ func searchFiles(directory string, lookfor string) ([]string, error) {
 	for i, x := range output {
 		output[i] = strings.Trim(x, "./")
 	}
-	fmt.Printf("%v\n", output)
 	return output, nil
 }

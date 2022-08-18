@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"image/color"
 	"io/ioutil"
-	"log"
 	"math"
 	"os"
+	"os/user"
 	"path"
 	"strings"
 	"time"
@@ -39,7 +39,7 @@ import (
 **/
 /*
 	Refactor ideas
-	* [ ] In Setup, check what tokens have expired and refresh individually
+	* [ ] When refreshing tasks, check what tokens have expired and refresh individually
 	* [x] In TaskWindow create, just create the layout based on the active integrations
 	* [x] Have a TaskWindowRefresh function that only refreshes
 		connections that are active
@@ -72,6 +72,8 @@ type AppPreferences struct {
 	CWAccessToken  string
 	CWRefreshToken string
 	CWExpiresAt    time.Time
+	//
+	PriorityOverride string
 }
 
 var thisApp fyne.App
@@ -95,15 +97,45 @@ func setup() {
 		TaskTaskCount:       0,
 	}
 	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
+	CWFields.Task.OwnerID = "93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf"
+	CWFields.Task.CreatedDateTime = "9355d5ed416bbc9408615c4145978ff8538a3f6eb4"
+	CWFields.Task.TaskTitle = "93ad98a2d68a61778eda3d4d9cbb30acbfd458aea4"
+	CWFields.Task.TaskStatus = "9368f0fb7b744108a666984c21afc932562eb7dc16"
+	CWFields.Task.TaskID = "93d5409c4bcbf7a38ed75a47dd92671f374236fa32"
+	CWFields.Task.IncidentID = "BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676"
+	CWFields.Task.IncidentShortDesc = "BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676"
+	CWFields.Task.IncidentPriority = "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676"
+	CWFields.Incident.OwnerID = "9339fc404e39ae705648ab43969f29262e6d167606"
+	CWFields.Incident.Status = "5eb3234ae1344c64a19819eda437f18d"
+	CWFields.Incident.CreatedDateTime = "c1e86f31eb2c4c5f8e8615a5189e9b19"
+	CWFields.Incident.IncidentID = "6ae282c55e8e4266ae66ffc070c17fa3"
+	CWFields.Incident.ShortDesc = "93e8ea93ff67fd95118255419690a50ef2d56f910c"
+	CWFields.Incident.Priority = "83c36313e97b4e6b9028aff3b401b71c"
+	CWFields.Incident.RequestorSNumber = "941aa0889094428a6f4c054dbea345b09b4d87c77e"
+	CWFields.Incident.TeamID = "9339fc404e312b6d43436041fc8af1c07c6197f559"
+	CWFields.Incident.OwnerName = "9339fc404e4c93350bf5be446fb13d693b0bb7f219"
+}
+func overrides() {
+	// Priority Overrides
+	myself, error := user.Current()
+	pribase := ""
+	if error == nil {
+		pribase = myself.HomeDir + "/.helm"
+	} else {
+		pribase = os.TempDir() + "/.helm"
+	}
+	appPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", pribase)
+	thisApp.Preferences().SetString("PriorityOverride", appPreferences.PriorityOverride)
+	loadPriorityOverride()
 	startLocalServers()
 	//	activeInternetTimeChan = make(chan time.Duration, 10)
 	//	go waitingForInternetCommand()
 }
 func main() {
 	setup()
-
 	thisApp = app.NewWithID("com.vonexplaino.helm.preferences")
 	thisApp.SetIcon(fyne.NewStaticResource("Systray", icon.Data))
+	overrides()
 	preferencesWindow = thisApp.NewWindow("Preferences")
 	preferencesWindowSetup()
 	//	internetWindow = thisApp.NewWindow("Internet Control")
@@ -236,7 +268,6 @@ func createDatePicker(dateToShow time.Time, owningDialog *dialog.Dialog) fyne.Ca
 	})
 	forwardMonth = widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() {
 		dateToShow = dateToShow.AddDate(0, 1, 0)
-		fmt.Printf("Date to show %s\n", dateToShow)
 		monthSelect = widget.NewLabel(dateToShow.Format("January 2006"))
 		monthDisplay = buildMonthSelect(dateToShow, owningDialog)
 		calendarWidget.RemoveAll()
@@ -352,7 +383,6 @@ func markdownWindowSetup() {
 							mainWindow,
 						)
 					}
-					fmt.Printf("Finds: %s\nError: %s\n", finds, err)
 				},
 			),
 			searchEntry,
@@ -394,7 +424,9 @@ func markdownWindowSetup() {
 					}
 					tmpFile, _ := ioutil.TempFile(os.TempDir(), "markdownpreview-*.html")
 					defer os.Remove(tmpFile.Name())
+					tmpFile.Write([]byte(markdownHTMLHeader))
 					tmpFile.Write(buf.Bytes())
+					tmpFile.Write([]byte(markdownHTMLFooter))
 					tmpFile.Close()
 					browser.OpenFile(tmpFile.Name())
 					time.Sleep(time.Second * 2)
@@ -433,6 +465,7 @@ func preferencesWindowSetup() {
 	appPreferences.MSRefreshToken = thisApp.Preferences().StringWithFallback("MSRefreshToken", "")
 	appPreferences.MSExpiresAt, _ = time.Parse(stringDateFormat, thisApp.Preferences().StringWithFallback("MSExpiresAt", "20060102T15:04:05"))
 	appPreferences.MSGroups = thisApp.Preferences().StringWithFallback("MSGroups", "")
+	appPreferences.PriorityOverride = thisApp.Preferences().String("PriorityOverride")
 
 	zettlePath := widget.NewEntry()
 	zettlePath.SetText(appPreferences.ZettlekastenHome)
@@ -450,6 +483,8 @@ func preferencesWindowSetup() {
 	expiresAt.SetText(appPreferences.MSExpiresAt.Local().Format(stringDateFormat))
 	groupsList := widget.NewEntry()
 	groupsList.SetText(appPreferences.MSGroups)
+	priorityOverride := widget.NewEntry()
+	priorityOverride.SetText(appPreferences.PriorityOverride)
 
 	preferencesWindow.Resize(fyne.NewSize(400, 400))
 	preferencesWindow.Hide()
@@ -469,11 +504,11 @@ func preferencesWindowSetup() {
 		appPreferences.MSRefreshToken = refreshToken.Text
 		thisApp.Preferences().SetString("MSRefreshToken", appPreferences.MSRefreshToken)
 		appPreferences.MSExpiresAt, _ = time.Parse("20060102T15:04:05", expiresAt.Text)
-		fmt.Printf("New: %s\n", appPreferences.MSExpiresAt.Local())
 		thisApp.Preferences().SetString("MSExpiresAt", appPreferences.MSExpiresAt.Format(stringDateFormat))
-		fmt.Printf("New: %s\n", thisApp.Preferences().String("MSExpiresAt"))
 		appPreferences.MSGroups = groupsList.Text
 		thisApp.Preferences().SetString("MSGroups", appPreferences.MSGroups)
+		appPreferences.PriorityOverride = priorityOverride.Text
+		thisApp.Preferences().SetString("PriorityOverride", appPreferences.PriorityOverride)
 	})
 	preferencesWindow.SetContent(
 		container.New(
@@ -492,6 +527,8 @@ func preferencesWindowSetup() {
 			refreshToken,
 			widget.NewLabel("MS Expires At"),
 			expiresAt,
+			widget.NewLabel("Store priorities"),
+			priorityOverride,
 		),
 	)
 }
@@ -577,6 +614,7 @@ func (t *tappableIcon) TappedSecondary(_ *fyne.PointEvent) {
 // TAPPABLE LABEL
 type tappableLabel struct {
 	widget.Label
+	OnTapGo func(_ *fyne.PointEvent)
 }
 
 func newTappableLabel(textLabel string) *tappableLabel {
@@ -585,9 +623,22 @@ func newTappableLabel(textLabel string) *tappableLabel {
 	label.SetText(textLabel)
 	return label
 }
+func newTappableLabelWithStyle(
+	textLabel string,
+	align fyne.TextAlign,
+	style fyne.TextStyle,
+	tapped func(_ *fyne.PointEvent)) *tappableLabel {
+	label := &tappableLabel{}
+	label.ExtendBaseWidget(label)
+	label.SetText(textLabel)
+	label.Alignment = align
+	label.TextStyle = style
+	label.OnTapGo = tapped
+	return label
+}
 
-func (t *tappableLabel) Tapped(_ *fyne.PointEvent) {
-	log.Println("I have been tapped (label)")
+func (t *tappableLabel) Tapped(x *fyne.PointEvent) {
+	t.OnTapGo(x)
 }
 
 func (t *tappableLabel) TappedSecondary(_ *fyne.PointEvent) {
@@ -619,6 +670,11 @@ func taskWindowRefresh(specific string) {
 
 			for _, x := range AppStatus.MyTasksFromGSM {
 				thisID := x[1]
+				myPriority := x[6]
+				if len(x) >= 8 && x[6] != x[7] {
+					myPriority = x[6] + "(" + x[7] + ")"
+				}
+				tempVar := ""
 				col0.Objects = append(
 					col0.Objects,
 					container.NewMax(
@@ -629,12 +685,42 @@ func taskWindowRefresh(specific string) {
 					))
 				col1.Objects = append(col1.Objects,
 					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-				col2.Objects = append(col2.Objects, newTappableLabel(fmt.Sprintf("[%s] %s", x[8], x[3])))
+				col2.Objects = append(col2.Objects, newTappableLabel(fmt.Sprintf("[%s] %s", x[5], x[3])))
 				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
 				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+				tempFunc := func(_ *fyne.PointEvent) {
+					dialog.ShowForm(
+						"Priority override "+thisID,
+						"Override",
+						"Cancel",
+						[]*widget.FormItem{
+							widget.NewFormItem(
+								"Priority",
+								widget.NewSelect(
+									[]string{"1", "2", "3", "4", "5"},
+									func(changed string) {
+										tempVar = changed
+									},
+								)),
+						},
+						func(isit bool) {
+							if tempVar == x[6] {
+								delete(priorityOverrides.CWIncidents, thisID)
+							} else {
+								priorityOverrides.CWIncidents[thisID] = tempVar
+							}
+							savePriorityOverride()
+						},
+						taskWindow,
+					)
+				}
 				col4.Objects = append(col4.Objects, container.NewMax(
-					priorityIcons[x[9]],
-					widget.NewLabelWithStyle(x[9], fyne.TextAlignCenter, fyne.TextStyle{})))
+					priorityIcons[x[6]],
+					newTappableLabelWithStyle(
+						myPriority,
+						fyne.TextAlignCenter,
+						fyne.TextStyle{},
+						tempFunc)))
 				col5.Objects = append(col5.Objects, widget.NewLabel(x[4]))
 			}
 			list = container.NewVScroll(

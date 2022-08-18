@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"time"
 
@@ -105,13 +107,32 @@ func DownloadTasks() {
 				for _, y := range x.Fields {
 					row = append(row, y.Value)
 				}
+				if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
+					orig := len(row) - 1
+					row = append(row, row[orig])
+					row[orig] = val
+				}
 				AppStatus.MyTasksFromGSM = append(AppStatus.MyTasksFromGSM, row)
 			}
+		} else {
+			fmt.Printf("Nothing found")
 		}
 		if len(tasksResponse.BusinessObjects) != 200 {
 			break
 		}
 	}
+	sort.SliceStable(
+		AppStatus.MyTasksFromGSM,
+		func(i, j int) bool {
+			var toReturn bool
+			if AppStatus.MyTasksFromGSM[i][6] == AppStatus.MyTasksFromGSM[j][6] {
+				toReturn = AppStatus.MyTasksFromGSM[i][0] < AppStatus.MyTasksFromGSM[j][0]
+			} else {
+				toReturn = AppStatus.MyTasksFromGSM[i][6] < AppStatus.MyTasksFromGSM[j][6]
+			}
+			return toReturn
+		},
+	)
 }
 
 func DownloadIncidents() {
@@ -125,6 +146,11 @@ func DownloadIncidents() {
 				row := []string{}
 				for _, y := range x.Fields {
 					row = append(row, y.Value)
+				}
+				lastIndex := len(row) - 1
+				row = append(row, row[lastIndex])
+				if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
+					row[lastIndex] = val
 				}
 				AppStatus.MyIncidentsFromGSM = append(AppStatus.MyIncidentsFromGSM, row)
 			}
@@ -147,6 +173,11 @@ func DownloadMyRequests() {
 				row := []string{}
 				for _, y := range x.Fields {
 					row = append(row, y.Value)
+				}
+				lastIndex := len(row) - 1
+				row = append(row, row[lastIndex])
+				if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
+					row[lastIndex] = val
 				}
 				AppStatus.MyRequestsInGSM = append(AppStatus.MyRequestsInGSM, row)
 			}
@@ -173,6 +204,11 @@ func DownloadTeam() {
 				for _, y := range x.Fields {
 					row = append(row, y.Value)
 				}
+				lastIndex := len(row) - 1
+				row = append(row, row[lastIndex])
+				if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
+					row[lastIndex] = val
+				}
 				AppStatus.MyTeamIncidentsFromGSM = append(AppStatus.MyTeamIncidentsFromGSM, row)
 			}
 		}
@@ -182,35 +218,56 @@ func DownloadTeam() {
 	}
 }
 
+var CWFields struct {
+	Task struct {
+		OwnerID           string
+		CreatedDateTime   string
+		TaskTitle         string
+		TaskStatus        string
+		TaskID            string
+		IncidentID        string
+		IncidentShortDesc string
+		IncidentPriority  string
+	}
+	Incident struct {
+		OwnerID          string
+		Status           string
+		CreatedDateTime  string
+		IncidentID       string
+		ShortDesc        string
+		Priority         string
+		RequestorSNumber string
+		TeamID           string
+		OwnerName        string
+	}
+}
+
 func GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse, error) {
 	var tasksResponse CherwellSearchResponse
 	r, err := SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
-			{FieldId: "93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf", Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
-			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "Acknowledged"},
-			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "New"},
-			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "In Progress"},
-			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "On Hold"},
-			{FieldId: "9368f0fb7b744108a666984c21afc932562eb7dc16", Operator: "eq", Value: "Pending"},
+			{FieldId: CWFields.Task.OwnerID, Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
+			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "Acknowledged"},
+			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "New"},
+			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "In Progress"},
+			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "On Hold"},
+			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "Pending"},
 		},
 		BusObjId:   "9355d5ed41e384ff345b014b6cb1c6e748594aea5b",
 		PageNumber: page,
 		PageSize:   200,
 		Fields: []string{
-			"BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:9355d5ed416bbc9408615c4145978ff8538a3f6eb4",                                     // Created Date/Time
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",           // Incident ID
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676", // Incident Short Desc
-			"93ad98a2d68a61778eda3d4d9cbb30acbfd458aea4", // Task Title
-			"9368f0fb7b744108a666984c21afc932562eb7dc16", // Status
-			"9355d6d84625cc7c1a7a48435ea878328f1646c7af", // Parent Type ID
-			"9355d6d6f3d7531087eab4456482100476d46ac59b", // Parent RecID
-			"9355d5fabd7763ad02894d43eca25b5432e555e1c6", // Completion Details
-			"93d5409c4bcbf7a38ed75a47dd92671f374236fa32", // TaskID
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676", // Incident Priority
+			CWFields.Task.CreatedDateTime,
+			CWFields.Task.IncidentID,
+			CWFields.Task.IncidentShortDesc,
+			CWFields.Task.TaskTitle,
+			CWFields.Task.TaskStatus,
+			CWFields.Task.TaskID,
+			CWFields.Task.IncidentPriority,
 		},
 		Sorting: []GSMSort{
-			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676", SortDirection: 1},
-			{FieldID: "9355d5ed416bbc9408615c4145978ff8538a3f6eb4", SortDirection: 1},
+			{FieldID: CWFields.Task.IncidentPriority, SortDirection: 1},
+			{FieldID: CWFields.Task.CreatedDateTime, SortDirection: 1},
 		},
 	})
 	if err == nil {
@@ -224,26 +281,26 @@ func GetMyIncidentsFromGSMForPage(page int) (CherwellSearchResponse, error) {
 	var tasksResponse CherwellSearchResponse
 	r, err := SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
-			{FieldId: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:9339fc404e39ae705648ab43969f29262e6d167606", Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
-			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Acknowledged"},
-			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "New"},
-			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "In Progress"},
-			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "On Hold"},
-			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Pending"},
+			{FieldId: CWFields.Incident.OwnerID, Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
+			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Acknowledged"},
+			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "New"},
+			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "In Progress"},
+			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "On Hold"},
+			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Pending"},
 		},
 		BusObjId:   "6dd53665c0c24cab86870a21cf6434ae",
 		PageNumber: page,
 		PageSize:   200,
 		Fields: []string{
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19",           // Created Date/Time
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3",           // Incident ID
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c", // Incident Short Desc
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:5eb3234ae1344c64a19819eda437f18d",           // Status
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c",           // Incident Priority
+			CWFields.Incident.CreatedDateTime,
+			CWFields.Incident.IncidentID,
+			CWFields.Incident.ShortDesc,
+			CWFields.Incident.Status,
+			CWFields.Incident.Priority,
 		},
 		Sorting: []GSMSort{
-			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c", SortDirection: 1},
-			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19", SortDirection: 1},
+			{FieldID: CWFields.Incident.Priority, SortDirection: 1},
+			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
 	})
 	if err == nil {
@@ -257,26 +314,26 @@ func GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse, error) {
 	var tasksResponse CherwellSearchResponse
 	r, err := SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
-			{FieldId: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:941aa0889094428a6f4c054dbea345b09b4d87c77e", Operator: "eq", Value: AuthenticationTokens.GSM.userid},
-			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Acknowledged"},
-			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "New"},
-			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "In Progress"},
-			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "On Hold"},
-			{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Pending"},
+			{FieldId: CWFields.Incident.RequestorSNumber, Operator: "eq", Value: AuthenticationTokens.GSM.userid},
+			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Acknowledged"},
+			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "New"},
+			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "In Progress"},
+			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "On Hold"},
+			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Pending"},
 		},
 		BusObjId:   "6dd53665c0c24cab86870a21cf6434ae",
 		PageNumber: page,
 		PageSize:   200,
 		Fields: []string{
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19",           // Created Date/Time
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3",           // Incident ID
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c", // Incident Short Desc
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:5eb3234ae1344c64a19819eda437f18d",           // Status
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c",           // Incident Priority
+			CWFields.Incident.CreatedDateTime,
+			CWFields.Incident.IncidentID,
+			CWFields.Incident.ShortDesc,
+			CWFields.Incident.Status,
+			CWFields.Incident.Priority,
 		},
 		Sorting: []GSMSort{
-			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c", SortDirection: 1},
-			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19", SortDirection: 1},
+			{FieldID: CWFields.Incident.Priority, SortDirection: 1},
+			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
 	})
 	if err == nil {
@@ -288,14 +345,14 @@ func GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse, error) {
 func GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
 	var tasksResponse CherwellSearchResponse
 	baseFilter := []GSMFilter{
-		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Acknowledged"},
-		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "New"},
-		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "In Progress"},
-		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "On Hold"},
-		{FieldId: "5eb3234ae1344c64a19819eda437f18d", Operator: "eq", Value: "Pending"},
+		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Acknowledged"},
+		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "New"},
+		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "In Progress"},
+		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "On Hold"},
+		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Pending"},
 	}
 	for _, x := range AuthenticationTokens.GSM.teams {
-		baseFilter = append(baseFilter, GSMFilter{FieldId: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:9339fc404e312b6d43436041fc8af1c07c6197f559", Operator: "eq", Value: x})
+		baseFilter = append(baseFilter, GSMFilter{FieldId: CWFields.Incident.TeamID, Operator: "eq", Value: x})
 	}
 	r, err := SearchCherwellFor(GSMSearchQuery{
 		Filters:    baseFilter,
@@ -303,17 +360,17 @@ func GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
 		PageNumber: page,
 		PageSize:   200,
 		Fields: []string{
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19",           // Created Date/Time
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3",           // Incident ID
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c", // Incident Short Desc
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:5eb3234ae1344c64a19819eda437f18d",           // Status
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c",           // Incident Priority
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:9339fc404e4c93350bf5be446fb13d693b0bb7f219", // Owner Name
-			"BO:6dd53665c0c24cab86870a21cf6434ae,FI:9339fc404e39ae705648ab43969f29262e6d167606", // Owner to ID
+			CWFields.Incident.CreatedDateTime,
+			CWFields.Incident.IncidentID,
+			CWFields.Incident.ShortDesc,
+			CWFields.Incident.Status,
+			CWFields.Incident.Priority,
+			CWFields.Incident.OwnerName,
+			CWFields.Incident.OwnerID,
 		},
 		Sorting: []GSMSort{
-			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c", SortDirection: 1},
-			{FieldID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:c1e86f31eb2c4c5f8e8615a5189e9b19", SortDirection: 1},
+			{FieldID: CWFields.Incident.Priority, SortDirection: 1},
+			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
 	})
 	if err == nil {
@@ -636,4 +693,48 @@ func callGraphURI(method string, path string, payload []byte, query string) (io.
 
 func LoginToMS() {
 
+}
+
+type PriorityOverrides struct {
+	CWTasks     map[string]string `json:"cwtasks"`
+	CWIncidents map[string]string `json:"cwincidents"`
+	MSPlanner   map[string]string `json:"msplanner"`
+}
+
+var priorityOverrides PriorityOverrides
+
+func loadPriorityOverride() {
+	r, e := os.Open(appPreferences.PriorityOverride)
+	if errors.Is(e, os.ErrNotExist) {
+		priorityOverrides = PriorityOverrides{
+			CWTasks: map[string]string{
+				"x": "y",
+			},
+			CWIncidents: map[string]string{
+				"x": "y",
+			},
+			MSPlanner: map[string]string{
+				"x": "y",
+			},
+		}
+		savePriorityOverride()
+		r, e = os.Open(appPreferences.PriorityOverride)
+	}
+	if e == nil {
+		defer r.Close()
+		_ = json.NewDecoder(r).Decode(&priorityOverrides)
+	}
+}
+
+// @todo - add a cleanup somewhere so that if the priorty matches the actual value, don't save it
+// OR add an element to the dropdown saying "Default" that removes an override
+func savePriorityOverride() {
+	f, err := os.OpenFile(appPreferences.PriorityOverride, os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModeExclusive)
+	if err == nil {
+		defer f.Close()
+		x, err := json.Marshal(priorityOverrides)
+		if err == nil {
+			fmt.Fprintln(f, string(x))
+		}
+	}
 }
