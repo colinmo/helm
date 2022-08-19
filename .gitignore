@@ -7,3 +7,4 @@ helm.exe
 vendor
 Helm.app
 src/msplannersecret.go
+src/jirasecret.go

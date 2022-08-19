@@ -55,6 +55,7 @@ type AppStatusStruct struct {
 	TaskTaskCount          int
 	TaskTaskStatus         binding.String
 	MyTasksFromPlanner     [][]string
+	MyTasksFromJira        [][]string
 }
 
 type AppPreferences struct {
@@ -74,6 +75,10 @@ type AppPreferences struct {
 	CWExpiresAt    time.Time
 	//
 	PriorityOverride string
+	//
+	JiraActive   bool
+	JiraUsername string
+	JiraKey      string
 }
 
 var thisApp fyne.App
@@ -466,6 +471,9 @@ func preferencesWindowSetup() {
 	appPreferences.MSExpiresAt, _ = time.Parse(stringDateFormat, thisApp.Preferences().StringWithFallback("MSExpiresAt", "20060102T15:04:05"))
 	appPreferences.MSGroups = thisApp.Preferences().StringWithFallback("MSGroups", "")
 	appPreferences.PriorityOverride = thisApp.Preferences().String("PriorityOverride")
+	appPreferences.JiraActive = thisApp.Preferences().BoolWithFallback("JiraActive", false)
+	appPreferences.JiraKey = thisApp.Preferences().StringWithFallback("JiraKey", "")
+	appPreferences.JiraUsername = thisApp.Preferences().StringWithFallback("JiraUsername", "")
 
 	zettlePath := widget.NewEntry()
 	zettlePath.SetText(appPreferences.ZettlekastenHome)
@@ -485,6 +493,12 @@ func preferencesWindowSetup() {
 	groupsList.SetText(appPreferences.MSGroups)
 	priorityOverride := widget.NewEntry()
 	priorityOverride.SetText(appPreferences.PriorityOverride)
+	jiraActive := widget.NewCheck("Active", func(res bool) {})
+	jiraActive.SetChecked(appPreferences.JiraActive)
+	jiraKey := widget.NewPasswordEntry()
+	jiraKey.SetText(appPreferences.JiraKey)
+	jiraUsername := widget.NewEntry()
+	jiraUsername.SetText(appPreferences.JiraUsername)
 
 	preferencesWindow.Resize(fyne.NewSize(400, 400))
 	preferencesWindow.Hide()
@@ -509,6 +523,12 @@ func preferencesWindowSetup() {
 		thisApp.Preferences().SetString("MSGroups", appPreferences.MSGroups)
 		appPreferences.PriorityOverride = priorityOverride.Text
 		thisApp.Preferences().SetString("PriorityOverride", appPreferences.PriorityOverride)
+		appPreferences.JiraActive = jiraActive.Checked
+		thisApp.Preferences().SetBool("JiraActive", appPreferences.JiraActive)
+		appPreferences.JiraKey = jiraKey.Text
+		thisApp.Preferences().SetString("JiraKey", appPreferences.JiraKey)
+		appPreferences.JiraUsername = jiraUsername.Text
+		thisApp.Preferences().SetString("JiraUsername", appPreferences.JiraUsername)
 	})
 	preferencesWindow.SetContent(
 		container.New(
@@ -529,6 +549,12 @@ func preferencesWindowSetup() {
 			expiresAt,
 			widget.NewLabel("Store priorities"),
 			priorityOverride,
+			widget.NewLabel("Jira active"),
+			jiraActive,
+			widget.NewLabel("Jira Key"),
+			jiraKey,
+			widget.NewLabel("Jira Username"),
+			jiraUsername,
 		),
 	)
 }
@@ -573,6 +599,12 @@ func taskWindowSetup() {
 		TaskTabsIndexes["MSPlanner"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
 			container.NewTabItem("My Planner", container.NewMax()),
+		)
+	}
+	if appPreferences.JiraActive {
+		TaskTabsIndexes["Jira"] = len(TaskTabsIndexes)
+		TaskTabs.Append(
+			container.NewTabItem("My Jira", container.NewMax()),
 		)
 	}
 	taskWindow.SetContent(
@@ -988,7 +1020,7 @@ func taskWindowRefresh(specific string) {
 						}),
 					))
 				col1.Objects = append(col1.Objects,
-					widget.NewLabelWithStyle(fmt.Sprintf("%s", x[3]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+					widget.NewLabelWithStyle(x[3], fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 				dt, _ := time.Parse("2006-01-02T15:04:05.999999999Z", x[5])
 				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
 				col4.Objects = append(col4.Objects, container.NewMax(
@@ -1030,6 +1062,74 @@ func taskWindowRefresh(specific string) {
 			nil,
 			nil,
 			list5,
+		)
+	}
+	if appPreferences.JiraActive && (specific == "" || specific == "Jira") {
+		var list fyne.CanvasObject
+		if len(AppStatus.MyTasksFromJira) == 0 {
+			list = widget.NewLabel("No requests")
+		} else {
+			col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
+			col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Title`))
+			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
+			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
+			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
+			for _, x := range AppStatus.MyTasksFromJira {
+				thisID := x[0]
+				col0.Objects = append(
+					col0.Objects,
+					container.NewMax(
+						widget.NewLabel(""),
+						newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+							browser.OpenURL(
+								fmt.Sprintf(
+									"https://griffith.atlassian.net/browse/%s",
+									thisID,
+								),
+							)
+						}),
+					))
+				col1.Objects = append(col1.Objects,
+					widget.NewLabelWithStyle(x[1], fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				dt, _ := time.Parse("2006-01-02T15:04:05.999-0700", x[2])
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+				col4.Objects = append(col4.Objects, container.NewMax(
+					priorityIcons[x[3]],
+					widget.NewLabelWithStyle(x[3], fyne.TextAlignCenter, fyne.TextStyle{})))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x[4]))
+			}
+			list = container.NewVScroll(
+				container.NewHBox(
+					col0,
+					col1,
+					col3,
+					col4,
+					col5,
+				),
+			)
+		}
+		TaskTabs.Items[TaskTabsIndexes["Jira"]].Content = container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {
+						GetJira()
+					},
+				),
+				widget.NewToolbarSeparator(),
+				widget.NewToolbarAction(
+					theme.HistoryIcon(),
+					func() {},
+				),
+				widget.NewToolbarAction(
+					theme.ErrorIcon(),
+					func() {},
+				),
+			),
+			nil,
+			nil,
+			nil,
+			list,
 		)
 	}
 	taskWindow.Content().Refresh()
