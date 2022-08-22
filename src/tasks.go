@@ -83,13 +83,13 @@ func startLocalServers() {
 
 func isConnectedToGSM() bool {
 	if AuthenticationTokens.GSM.refresh_token != "" && AuthenticationTokens.GSM.expiration.Before(time.Now()) {
+		fmt.Printf("Refresh token with %s\n", AuthenticationTokens.GSM.refresh_token)
 		refreshGSM()
 		activeTaskStatusUpdate(1)
-		return false
+		return true
 	}
 	if AuthenticationTokens.GSM.access_token == "" || AuthenticationTokens.GSM.expiration.Before(time.Now()) {
 		browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
-		activeTaskStatusUpdate(1)
 		return false
 	}
 	return true

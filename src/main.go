@@ -736,7 +736,7 @@ func taskWindowRefresh(specific string) {
 								)),
 						},
 						func(isit bool) {
-							if tempVar == x[6] {
+							if tempVar == x[6] || tempVar == "" {
 								delete(priorityOverrides.CWIncidents, thisID)
 							} else {
 								priorityOverrides.CWIncidents[thisID] = tempVar
@@ -746,6 +746,7 @@ func taskWindowRefresh(specific string) {
 						taskWindow,
 					)
 				}
+				fmt.Printf("Priority %s, %v\n", x[6], priorityIcons)
 				col4.Objects = append(col4.Objects, container.NewMax(
 					priorityIcons[x[6]],
 					newTappableLabelWithStyle(
@@ -1173,85 +1174,62 @@ func setupPriorityIcons() map[string]*widget.Icon {
 		fyne.NewStaticResource("priority1.svg", []byte(`<?xml version="1.0"?>
 		<svg version="1.1" width="30" height="30"
 			xmlns="http://www.w3.org/2000/svg">
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
-			<path stroke-width="3" stroke="red" fill="red" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
-			<path stroke-width="3" stroke="red" fill="red" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
-			<path stroke-width="3" stroke="red" fill="red" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
-			<path stroke-width="3" stroke="red" fill="red" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
-			<path stroke-width="3" stroke="red" fill="red" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+			<circle cx="15" cy="15" r="14" fill="black" stroke="black" />
+			<circle cx="15" cy="15" r="13.5" fill="red" stroke="red" />
+			<circle cx="15" cy="15" r="10.5" fill="black" stroke="black" />
+			<circle cx="15" cy="15" r="10" fill="white" stroke="white" />
 		</svg>`)))
 	priorityIcons["2"] = widget.NewIcon(
 		fyne.NewStaticResource("priority2.svg", []byte(`<?xml version="1.0"?>
 		<svg version="1.1" width="30" height="30"
 			xmlns="http://www.w3.org/2000/svg">
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
-			<path stroke-width="3" stroke="orange" fill="orange" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
-			<path stroke-width="3" stroke="orange" fill="orange" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
-			<path stroke-width="3" stroke="orange" fill="orange" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
-			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
-			<path stroke-width="3" stroke="orange" fill="orange" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+			<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 11,3.2 A 15,13 1 0 0 11,27" />
+			<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 19,3 A 15,13 0 0 1 18.5,27" />
+			<path stroke-width="3" stroke="orange" fill="none" stroke-linecap="round" d="M 11,3.2 A 15,13 1 0 0 11,27" />
+			<path stroke-width="3" stroke="orange" fill="none" stroke-linecap="round" d="M 19,3 A 15,13 0 0 1 18.5,27" />
 		</svg>`)))
 	priorityIcons["3"] = widget.NewIcon(
 		fyne.NewStaticResource("priority3.svg", []byte(`<?xml version="1.0"?>
 		<svg version="1.1" width="30" height="30"
 			xmlns="http://www.w3.org/2000/svg">
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
-			<path stroke-width="3" stroke="yellow" fill="yellow" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
-			<path stroke-width="3" stroke="yellow" fill="yellow" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
-			<path stroke-width="3" stroke="yellow" fill="yellow" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
-			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
-			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+			<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 6,6.2 A 13.5,15 0 0 1 24,6.2" />
+			<path stroke-width="3" stroke="yellow" fill="none" stroke-linecap="round" d="M 6,6.2 A 13.5,15 0 0 1 24,6.2" />
+			<g transform="rotate(120, 15, 15)">
+				<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 6,6.2 A 13.5,15 0 0 1 24,6.2" />
+				<path stroke-width="3" stroke="yellow" fill="none" stroke-linecap="round" d="M 6,6.2 A 13.5,15 0 0 1 24,6.2" />
+			</g>
+			<g transform="rotate(-120, 15, 15)">
+				<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 6,6.2 A 13.5,15 0 0 1 24,6.2" />
+				<path stroke-width="3" stroke="yellow" fill="none" stroke-linecap="round" d="M 6,6.2 A 13.5,15 0 0 1 24,6.2" />
+			</g>
 		</svg>`)))
 	priorityIcons["4"] = widget.NewIcon(
 		fyne.NewStaticResource("priority4.svg", []byte(`<?xml version="1.0"?>
 		<svg version="1.1" width="30" height="30"
 			xmlns="http://www.w3.org/2000/svg">
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
-			<path stroke-width="3" stroke="green" fill="green" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
-			<path stroke-width="3" stroke="green" fill="green" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
-			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
-			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
-			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+			<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 11,3.2 A 15,13 1 0 0 2.5,11.5" />
+			<path stroke-width="3" stroke="green" fill="none" stroke-linecap="round" d="M 11,3.2 A 15,13 1 0 0 2.5,11.5" />
+			<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 2.5,18 A 15,13 1 0 0 11,26.8" />
+			<path stroke-width="3" stroke="green" fill="none" stroke-linecap="round" d="M 2.5,18 A 15,13 1 0 0 11,26.8" />
+			<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 19,3.2 A 15,13 0 0 1 27.5,11.5" />
+			<path stroke-width="3" stroke="green" fill="none" stroke-linecap="round" d="M 19,3.2 A 15,13 0 0 1 27.5,11.5" />
+			<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 27.5,18.5 A 15,13 0 0 1 18.5,26.8" />
+			<path stroke-width="3" stroke="green" fill="none" stroke-linecap="round" d="M 27.5,18.5 A 15,13 0 0 1 18.5,26.8" />
 		</svg>`)))
 	priorityIcons["5"] = widget.NewIcon(
 		fyne.NewStaticResource("priority5.svg", []byte(`<?xml version="1.0"?>
 		<svg version="1.1" width="30" height="30"
 			xmlns="http://www.w3.org/2000/svg">
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
-			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
-			<path stroke-width="3" stroke="cyan" fill="cyan" stroke-linecap="round" d="M 3,7 A 15,15 0 0 1 11,2" />
-			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 17,2 A 15,15 0 0 1 25,7" />
-			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 27,13 A 15,15 0 0 1 24,22" />
-			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 20,26 A 15,15 0 0 1 8,26" />
-			<path stroke-width="3" stroke="white" fill="white" stroke-linecap="round" d="M 4,22 A 15,15 0 0 1 2,13" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 4.5,8 A 15,15 0 0 1 11,3" />
+			<path stroke-width="3" stroke="cyan" fill="cyan" stroke-linecap="round" d="M 4.5,8 A 15,15 0 0 1 11,3" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 19,3.2 A 15,15 0 0 1 25.5,8" />
+			<path stroke-width="3" stroke="cyan" fill="cyan" stroke-linecap="round" d="M 19,3.2 A 15,15 0 0 1 25.5,8" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 27.3,13 A 15,15 0 0 1 25.5,22" />
+			<path stroke-width="3" stroke="cyan" fill="cyan" stroke-linecap="round" d="M 27.3,13 A 15,15 0 0 1 25.5,22" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 21,26 A 14,15 0 0 1 9,26" />
+			<path stroke-width="3" stroke="cyan" fill="cyan" stroke-linecap="round" d="M 21,26 A 14,15 0 0 1 9,26" />
+			<path stroke-width="4" stroke="black" fill="black" stroke-linecap="round" d="M 4.5,22 A 15,15 0 0 1 2.7,13" />
+			<path stroke-width="3" stroke="cyan" fill="cyan" stroke-linecap="round" d="M 4.5,22 A 15,15 0 0 1 2.7,13" />
 		</svg>`)))
 	return priorityIcons
 }
-
-//var priorityColours map[string]color.Color
-//	priorityColours = map[string]color.Color{
-//		"1": color.NRGBA{R: 255, B: 0, G: 0, A: 255},
-//		"2": color.NRGBA{R: 255, B: 125, G: 125, A: 255},
-//		"3": color.NRGBA{R: 0, B: 255, G: 255, A: 255},
-//		"4": color.NRGBA{R: 0, B: 125, G: 255, A: 255},
-//		"5": color.NRGBA{R: 0, B: 0, G: 255, A: 255},
-//	}
