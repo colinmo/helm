@@ -81,11 +81,23 @@ func startLocalServers() {
 	}()
 }
 
-func GetGSM() {
+func isConnectedToGSM() bool {
+	if AuthenticationTokens.GSM.refresh_token != "" && AuthenticationTokens.GSM.expiration.Before(time.Now()) {
+		refreshGSM()
+		activeTaskStatusUpdate(1)
+		return false
+	}
 	if AuthenticationTokens.GSM.access_token == "" || AuthenticationTokens.GSM.expiration.Before(time.Now()) {
-		// Login if expired
 		browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
-	} else {
+		activeTaskStatusUpdate(1)
+		return false
+	}
+	return true
+
+}
+
+func GetGSM() {
+	if isConnectedToGSM() {
 		DownloadTasks()
 		taskWindowRefresh("CWTasks")
 		DownloadIncidents()
@@ -94,130 +106,134 @@ func GetGSM() {
 		taskWindowRefresh("CWRequests")
 		DownloadTeam()
 		taskWindowRefresh("CWTeamIncidents")
-		// Add personal priorities
-		// Return
 	}
 }
 
 func DownloadTasks() {
-	activeTaskStatusUpdate(1)
-	defer activeTaskStatusUpdate(-1)
-	AppStatus.MyTasksFromGSM = [][]string{}
-	for page := 1; page < 200; page++ {
-		tasksResponse, _ := GetMyTasksFromGSMForPage(page)
-		if len(tasksResponse.BusinessObjects) > 0 {
-			for _, x := range tasksResponse.BusinessObjects {
-				row := []string{}
-				for _, y := range x.Fields {
-					row = append(row, y.Value)
+	if isConnectedToGSM() {
+		activeTaskStatusUpdate(1)
+		defer activeTaskStatusUpdate(-1)
+		AppStatus.MyTasksFromGSM = [][]string{}
+		for page := 1; page < 200; page++ {
+			tasksResponse, _ := GetMyTasksFromGSMForPage(page)
+			if len(tasksResponse.BusinessObjects) > 0 {
+				for _, x := range tasksResponse.BusinessObjects {
+					row := []string{}
+					for _, y := range x.Fields {
+						row = append(row, y.Value)
+					}
+					if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
+						orig := len(row) - 1
+						row = append(row, row[orig])
+						row[orig] = val
+					}
+					AppStatus.MyTasksFromGSM = append(AppStatus.MyTasksFromGSM, row)
 				}
-				if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
-					orig := len(row) - 1
-					row = append(row, row[orig])
-					row[orig] = val
-				}
-				AppStatus.MyTasksFromGSM = append(AppStatus.MyTasksFromGSM, row)
-			}
-		} else {
-			fmt.Printf("Nothing found")
-		}
-		if len(tasksResponse.BusinessObjects) != 200 {
-			break
-		}
-	}
-	sort.SliceStable(
-		AppStatus.MyTasksFromGSM,
-		func(i, j int) bool {
-			var toReturn bool
-			if AppStatus.MyTasksFromGSM[i][6] == AppStatus.MyTasksFromGSM[j][6] {
-				toReturn = AppStatus.MyTasksFromGSM[i][0] < AppStatus.MyTasksFromGSM[j][0]
 			} else {
-				toReturn = AppStatus.MyTasksFromGSM[i][6] < AppStatus.MyTasksFromGSM[j][6]
+				fmt.Printf("Nothing found")
 			}
-			return toReturn
-		},
-	)
+			if len(tasksResponse.BusinessObjects) != 200 {
+				break
+			}
+		}
+		sort.SliceStable(
+			AppStatus.MyTasksFromGSM,
+			func(i, j int) bool {
+				var toReturn bool
+				if AppStatus.MyTasksFromGSM[i][6] == AppStatus.MyTasksFromGSM[j][6] {
+					toReturn = AppStatus.MyTasksFromGSM[i][0] < AppStatus.MyTasksFromGSM[j][0]
+				} else {
+					toReturn = AppStatus.MyTasksFromGSM[i][6] < AppStatus.MyTasksFromGSM[j][6]
+				}
+				return toReturn
+			},
+		)
+	}
 }
 
 func DownloadIncidents() {
-	activeTaskStatusUpdate(1)
-	defer activeTaskStatusUpdate(-1)
-	AppStatus.MyIncidentsFromGSM = [][]string{}
-	for page := 1; page < 200; page++ {
-		tasksResponse, _ := GetMyIncidentsFromGSMForPage(page)
-		if len(tasksResponse.BusinessObjects) > 0 {
-			for _, x := range tasksResponse.BusinessObjects {
-				row := []string{}
-				for _, y := range x.Fields {
-					row = append(row, y.Value)
+	if isConnectedToGSM() {
+		activeTaskStatusUpdate(1)
+		defer activeTaskStatusUpdate(-1)
+		AppStatus.MyIncidentsFromGSM = [][]string{}
+		for page := 1; page < 200; page++ {
+			tasksResponse, _ := GetMyIncidentsFromGSMForPage(page)
+			if len(tasksResponse.BusinessObjects) > 0 {
+				for _, x := range tasksResponse.BusinessObjects {
+					row := []string{}
+					for _, y := range x.Fields {
+						row = append(row, y.Value)
+					}
+					lastIndex := len(row) - 1
+					row = append(row, row[lastIndex])
+					if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
+						row[lastIndex] = val
+					}
+					AppStatus.MyIncidentsFromGSM = append(AppStatus.MyIncidentsFromGSM, row)
 				}
-				lastIndex := len(row) - 1
-				row = append(row, row[lastIndex])
-				if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
-					row[lastIndex] = val
-				}
-				AppStatus.MyIncidentsFromGSM = append(AppStatus.MyIncidentsFromGSM, row)
+			}
+			if len(tasksResponse.BusinessObjects) != 200 {
+				break
 			}
 		}
-		if len(tasksResponse.BusinessObjects) != 200 {
-			break
-		}
 	}
-
 }
 
 func DownloadMyRequests() {
-	activeTaskStatusUpdate(1)
-	defer activeTaskStatusUpdate(-1)
-	AppStatus.MyRequestsInGSM = [][]string{}
-	for page := 1; page < 200; page++ {
-		tasksResponse, _ := GetMyRequestsInGSMForPage(page)
-		if len(tasksResponse.BusinessObjects) > 0 {
-			for _, x := range tasksResponse.BusinessObjects {
-				row := []string{}
-				for _, y := range x.Fields {
-					row = append(row, y.Value)
+	if isConnectedToGSM() {
+		activeTaskStatusUpdate(1)
+		defer activeTaskStatusUpdate(-1)
+		AppStatus.MyRequestsInGSM = [][]string{}
+		for page := 1; page < 200; page++ {
+			tasksResponse, _ := GetMyRequestsInGSMForPage(page)
+			if len(tasksResponse.BusinessObjects) > 0 {
+				for _, x := range tasksResponse.BusinessObjects {
+					row := []string{}
+					for _, y := range x.Fields {
+						row = append(row, y.Value)
+					}
+					lastIndex := len(row) - 1
+					row = append(row, row[lastIndex])
+					if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
+						row[lastIndex] = val
+					}
+					AppStatus.MyRequestsInGSM = append(AppStatus.MyRequestsInGSM, row)
 				}
-				lastIndex := len(row) - 1
-				row = append(row, row[lastIndex])
-				if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
-					row[lastIndex] = val
-				}
-				AppStatus.MyRequestsInGSM = append(AppStatus.MyRequestsInGSM, row)
+			}
+			if len(tasksResponse.BusinessObjects) != 200 {
+				break
 			}
 		}
-		if len(tasksResponse.BusinessObjects) != 200 {
-			break
-		}
 	}
-
 }
 
 func DownloadTeam() {
-	activeTaskStatusUpdate(1)
-	defer activeTaskStatusUpdate(-1)
-	AppStatus.MyTeamIncidentsFromGSM = [][]string{}
-	for page := 1; page < 200; page++ {
-		tasksResponse, _ := GetMyTeamIncidentsInGSMForPage(page)
-		if len(tasksResponse.BusinessObjects) > 0 {
-			for _, x := range tasksResponse.BusinessObjects {
-				if x.Fields[6].Value == AuthenticationTokens.GSM.cherwelluser {
-					continue
+	if isConnectedToGSM() {
+		activeTaskStatusUpdate(1)
+		defer activeTaskStatusUpdate(-1)
+		AppStatus.MyTeamIncidentsFromGSM = [][]string{}
+		for page := 1; page < 200; page++ {
+			tasksResponse, _ := GetMyTeamIncidentsInGSMForPage(page)
+			if len(tasksResponse.BusinessObjects) > 0 {
+				for _, x := range tasksResponse.BusinessObjects {
+					if x.Fields[6].Value == AuthenticationTokens.GSM.cherwelluser {
+						continue
+					}
+					row := []string{}
+					for _, y := range x.Fields {
+						row = append(row, y.Value)
+					}
+					lastIndex := len(row) - 1
+					row = append(row, row[lastIndex])
+					if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
+						row[lastIndex] = val
+					}
+					AppStatus.MyTeamIncidentsFromGSM = append(AppStatus.MyTeamIncidentsFromGSM, row)
 				}
-				row := []string{}
-				for _, y := range x.Fields {
-					row = append(row, y.Value)
-				}
-				lastIndex := len(row) - 1
-				row = append(row, row[lastIndex])
-				if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
-					row[lastIndex] = val
-				}
-				AppStatus.MyTeamIncidentsFromGSM = append(AppStatus.MyTeamIncidentsFromGSM, row)
 			}
-		}
-		if len(tasksResponse.BusinessObjects) != 200 {
-			break
+			if len(tasksResponse.BusinessObjects) != 200 {
+				break
+			}
 		}
 	}
 }
@@ -495,13 +511,47 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				for _, x := range teamResponse.Teams {
 					AuthenticationTokens.GSM.teams = append(AuthenticationTokens.GSM.teams, x.TeamID)
 				}
+				activeTaskStatusUpdate(-1)
 				GetGSM()
 			}
 		}
 	} else {
 		// Redirect to Cherwell AUTH
 		browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
+		activeTaskStatusUpdate(1)
 	}
+}
+
+func refreshGSM() {
+	var CherwellToken CherwellAuthResponse
+	payload := url.Values{
+		"grant_type":    {"refresh_token"},
+		"client_id":     {"814f9a74-c86a-451e-b6bb-deea65acf72a"},
+		"username":      {AuthenticationTokens.GSM.userid},
+		"password":      {""},
+		"refresh_token": {AuthenticationTokens.GSM.refresh_token},
+		"site_name":     {""},
+	}
+	resp, err := http.PostForm(
+		"https://griffith.cherwellondemand.com/CherwellAPI/token?auth_mode=SAML",
+		payload,
+	)
+	if err != nil {
+		log.Fatalf("Login failed %s\n", err)
+	}
+	json.NewDecoder(resp.Body).Decode(&CherwellToken)
+	if len(CherwellToken.Error) > 0 {
+		log.Fatalf("Failed %s\n", CherwellToken.ErrorDescription)
+	}
+	AuthenticationTokens.GSM.access_token = CherwellToken.AccessToken
+	AuthenticationTokens.GSM.refresh_token = CherwellToken.RefreshToken
+	if CherwellToken.Expires == "" {
+		AuthenticationTokens.GSM.expiration = time.Now().Add(2000 * time.Hour)
+	} else {
+		AuthenticationTokens.GSM.expiration, _ = time.Parse(time.RFC1123, CherwellToken.Expires)
+	}
+	activeTaskStatusUpdate(-1)
+	GetGSM()
 }
 
 func getStuffFromCherwell(method string, path string, payload []byte) (io.ReadCloser, error) {
