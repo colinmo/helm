@@ -132,8 +132,12 @@ func overrides() {
 	startLocalServers()
 	browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
 	go singleThreadReturnOrGetGSMAccessToken()
-	//	activeInternetTimeChan = make(chan time.Duration, 10)
-	//	go waitingForInternetCommand()
+	go func() {
+		for {
+			time.Sleep(5 * time.Minute)
+			GetAllTasks()
+		}
+	}()
 }
 func main() {
 	setup()
@@ -142,13 +146,11 @@ func main() {
 	overrides()
 	preferencesWindow = thisApp.NewWindow("Preferences")
 	preferencesWindowSetup()
-	//	internetWindow = thisApp.NewWindow("Internet Control")
-	//	internetWindowSetup()
 	mainWindow = thisApp.NewWindow("Markdown Daily Knowledgebase")
 	markdownWindowSetup()
 	taskWindow = thisApp.NewWindow("Tasks")
 	taskWindowSetup()
-	// TASKS
+
 	GetAllTasks()
 	if desk, ok := thisApp.(desktop.App); ok {
 		m := fyne.NewMenu("MyApp",
@@ -159,11 +161,6 @@ func main() {
 				markdownInput.Text = getFileContentsAndCreateIfMissing(path.Join(appPreferences.ZettlekastenHome, x))
 				markdownInput.Refresh()
 			}),
-			//			fyne.NewMenuItem("Internet control", func() {
-			//				if runtime.GOOS == "windows" {
-			//					internetWindow.Show()
-			//				}
-			//			}),
 			fyne.NewMenuItem("Tasks", func() {
 				taskWindow.Show()
 			}),
@@ -174,7 +171,7 @@ func main() {
 		)
 		desk.SetSystemTrayMenu(m)
 	}
-	// main window setup
+
 	thisApp.Run()
 }
 

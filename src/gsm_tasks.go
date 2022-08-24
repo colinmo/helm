@@ -34,11 +34,13 @@ type GSMSearchQuery struct {
 
 var GSMAccessTokenRequestsChan chan string
 var GSMAccessTokenChan chan string
+var GSMBaseUrl = `https://griffith.cherwellondemand.com/CherwellAPI/`
+var GSMAuthURL = `https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`
 
 func singleThreadReturnOrGetGSMAccessToken() {
 	for {
 		_, ok := <-GSMAccessTokenRequestsChan
-		if ok == false {
+		if !ok {
 			break
 		}
 		fmt.Printf("Return Or Get\n")
@@ -420,8 +422,9 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				"refresh_token": {""},
 				"site_name":     {""},
 			}
+			targetURL, _ := url.JoinPath(GSMBaseUrl, "token?auth_mode=SAML")
 			resp, err := http.PostForm(
-				"https://griffith.cherwellondemand.com/CherwellAPI/token?auth_mode=SAML",
+				targetURL,
 				payload,
 			)
 			if err != nil {
@@ -477,7 +480,7 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// Redirect to Cherwell AUTH
-		browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
+		browser.OpenURL(GSMAuthURL)
 		activeTaskStatusUpdate(1)
 	}
 }
@@ -493,8 +496,9 @@ func refreshGSM() {
 		"refresh_token": {AuthenticationTokens.GSM.refresh_token},
 		"site_name":     {""},
 	}
+	targetURL, _ := url.JoinPath(GSMBaseUrl, "token?auth_mode=SAML")
 	resp, err := http.PostForm(
-		"https://griffith.cherwellondemand.com/CherwellAPI/token?auth_mode=SAML",
+		targetURL,
 		payload,
 	)
 	if err != nil {
@@ -517,7 +521,7 @@ func getStuffFromCherwell(method string, path string, payload []byte) (io.ReadCl
 	client := &http.Client{
 		Timeout: time.Second * 10,
 	}
-	newpath, _ := url.JoinPath("https://griffith.cherwellondemand.com/CherwellAPI/", path)
+	newpath, _ := url.JoinPath(GSMBaseUrl, path)
 	req, _ := http.NewRequest(method, newpath, bytes.NewReader(payload))
 	returnOrGetGSMAccessToken()
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", AuthenticationTokens.GSM.access_token))
