@@ -37,13 +37,6 @@ import (
 *   - Markdown Daily status
 *   - Internet Parent control
 **/
-/*
-	Refactor ideas
-	* [ ] When refreshing tasks, check what tokens have expired and refresh individually
-	* [x] In TaskWindow create, just create the layout based on the active integrations
-	* [x] Have a TaskWindowRefresh function that only refreshes
-		connections that are active
-*/
 
 type AppStatusStruct struct {
 	CurrentZettleDBDate    time.Time
@@ -138,6 +131,7 @@ func overrides() {
 	loadPriorityOverride()
 	startLocalServers()
 	browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
+	go singleThreadReturnOrGetGSMAccessToken()
 	//	activeInternetTimeChan = make(chan time.Duration, 10)
 	//	go waitingForInternetCommand()
 }

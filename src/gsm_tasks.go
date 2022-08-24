@@ -32,25 +32,37 @@ type GSMSearchQuery struct {
 	Sorting    []GSMSort   `json:"sorting"`
 }
 
+var GSMAccessTokenRequestsChan chan string
 var GSMAccessTokenChan chan string
 
-func returnOrGetGSMAccessToken() {
-	fmt.Printf("Return Or Get\n")
+func singleThreadReturnOrGetGSMAccessToken() {
 	for {
-		fmt.Printf("wait")
-		if AuthenticationTokens.GSM.access_token != "" {
+		_, ok := <-GSMAccessTokenRequestsChan
+		if ok == false {
 			break
 		}
-		time.Sleep(1 * time.Second)
+		fmt.Printf("Return Or Get\n")
+		for {
+			fmt.Printf("wait")
+			if AuthenticationTokens.GSM.access_token != "" {
+				break
+			}
+			time.Sleep(1 * time.Second)
+		}
+		fmt.Printf("\n")
+		fmt.Printf("AT: %s\nRT: %s\nXP: %s\n", AuthenticationTokens.GSM.access_token, AuthenticationTokens.GSM.refresh_token, AuthenticationTokens.GSM.expiration)
+		if !AuthenticationTokens.GSM.expiration.After(time.Now()) {
+			fmt.Printf("Refresh\n")
+			refreshGSM()
+		}
+		fmt.Printf("OK to go\n")
+		GSMAccessTokenChan <- AuthenticationTokens.GSM.access_token
 	}
-	fmt.Printf("\n")
-	fmt.Printf("AT: %s\nRT: %s\nXP: %s\n", AuthenticationTokens.GSM.access_token, AuthenticationTokens.GSM.refresh_token, AuthenticationTokens.GSM.expiration)
-	if !AuthenticationTokens.GSM.expiration.After(time.Now()) {
-		fmt.Printf("Refresh\n")
-		refreshGSM()
-	}
-	fmt.Printf("OK to go\n")
-	GSMAccessTokenChan <- AuthenticationTokens.GSM.access_token
+}
+
+func returnOrGetGSMAccessToken() string {
+	GSMAccessTokenRequestsChan <- "hey"
+	return <-GSMAccessTokenChan
 }
 
 func GetGSM() {
@@ -507,8 +519,7 @@ func getStuffFromCherwell(method string, path string, payload []byte) (io.ReadCl
 	}
 	newpath, _ := url.JoinPath("https://griffith.cherwellondemand.com/CherwellAPI/", path)
 	req, _ := http.NewRequest(method, newpath, bytes.NewReader(payload))
-	go returnOrGetGSMAccessToken()
-	<-GSMAccessTokenChan
+	returnOrGetGSMAccessToken()
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", AuthenticationTokens.GSM.access_token))
 	req.Header.Set("Content-type", "application/json")
 	resp, err := client.Do(req)
