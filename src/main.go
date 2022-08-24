@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
-	"io/ioutil"
 	"math"
 	"os"
 	"os/user"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -48,6 +48,8 @@ import (
 type AppStatusStruct struct {
 	CurrentZettleDBDate    time.Time
 	CurrentZettleDKB       binding.String
+	GSMGettingToken        bool
+	MSGettingToken         bool
 	MyTasksFromGSM         [][]string
 	MyIncidentsFromGSM     [][]string
 	MyRequestsInGSM        [][]string
@@ -100,6 +102,8 @@ func setup() {
 		CurrentZettleDKB:    binding.NewString(),
 		TaskTaskStatus:      binding.NewString(),
 		TaskTaskCount:       0,
+		GSMGettingToken:     false,
+		MSGettingToken:      false,
 	}
 	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
 	CWFields.Task.OwnerID = "93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf"
@@ -125,14 +129,15 @@ func overrides() {
 	myself, error := user.Current()
 	pribase := ""
 	if error == nil {
-		pribase = myself.HomeDir + "/.helm"
+		pribase = filepath.Join(myself.HomeDir, "/.helm")
 	} else {
-		pribase = os.TempDir() + "/.helm"
+		pribase = filepath.Join(os.TempDir(), "/.helm")
 	}
 	appPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", pribase)
 	thisApp.Preferences().SetString("PriorityOverride", appPreferences.PriorityOverride)
 	loadPriorityOverride()
 	startLocalServers()
+	browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
 	//	activeInternetTimeChan = make(chan time.Duration, 10)
 	//	go waitingForInternetCommand()
 }
@@ -427,7 +432,7 @@ func markdownWindowSetup() {
 					if err := md.Convert([]byte(mep), &buf); err != nil {
 						panic(err)
 					}
-					tmpFile, _ := ioutil.TempFile(os.TempDir(), "markdownpreview-*.html")
+					tmpFile, _ := os.CreateTemp(os.TempDir(), "markdownpreview-*.html")
 					defer os.Remove(tmpFile.Name())
 					tmpFile.Write([]byte(markdownHTMLHeader))
 					tmpFile.Write(buf.Bytes())
@@ -560,7 +565,7 @@ func preferencesWindowSetup() {
 }
 
 func getFileContentsAndCreateIfMissing(filename string) string {
-	content, err := ioutil.ReadFile(filename)
+	content, err := os.ReadFile(filename)
 	if errors.Is(err, os.ErrNotExist) {
 		content = []byte(fmt.Sprintf("---\nDate: %s\n...\n", AppStatus.CurrentZettleDBDate.Local().Format("2006-01-02")))
 		os.WriteFile(filename, content, 0666)
@@ -584,10 +589,102 @@ func taskWindowSetup() {
 	taskWindow.Hide()
 	taskStatusWidget := widget.NewLabelWithData(AppStatus.TaskTaskStatus)
 	TaskTabs = container.NewAppTabs(
-		container.NewTabItem("My Tasks", container.NewMax()),
-		container.NewTabItem("My Incidents", container.NewMax()),
-		container.NewTabItem("My Requests", container.NewMax()),
-		container.NewTabItem("My Team Incidents", container.NewMax()),
+		container.NewTabItem("My Tasks", container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {
+						DownloadTasks()
+						taskWindowRefresh("CWTasks")
+					},
+				),
+				widget.NewToolbarSeparator(),
+				widget.NewToolbarAction(
+					theme.HistoryIcon(),
+					func() {},
+				),
+				widget.NewToolbarAction(
+					theme.ErrorIcon(),
+					func() {},
+				),
+			),
+			nil,
+			nil,
+			nil,
+			container.NewWithoutLayout(),
+		)),
+		container.NewTabItem("My Incidents", container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {
+						DownloadIncidents()
+						taskWindowRefresh("CWIncidents")
+					},
+				),
+				widget.NewToolbarSeparator(),
+				widget.NewToolbarAction(
+					theme.HistoryIcon(),
+					func() {},
+				),
+				widget.NewToolbarAction(
+					theme.ErrorIcon(),
+					func() {},
+				),
+			),
+			nil,
+			nil,
+			nil,
+			container.NewWithoutLayout(),
+		)),
+		container.NewTabItem("My Requests", container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {
+						DownloadTeam()
+						taskWindowRefresh("CWTeamIncidents")
+					},
+				),
+				widget.NewToolbarSeparator(),
+				widget.NewToolbarAction(
+					theme.HistoryIcon(),
+					func() {},
+				),
+				widget.NewToolbarAction(
+					theme.ErrorIcon(),
+					func() {},
+				),
+			),
+			nil,
+			nil,
+			nil,
+			container.NewWithoutLayout(),
+		)),
+		container.NewTabItem("My Team Incidents", container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {
+						DownloadMyRequests()
+						taskWindowRefresh("CWRequests")
+					},
+				),
+				widget.NewToolbarSeparator(),
+				widget.NewToolbarAction(
+					theme.HistoryIcon(),
+					func() {},
+				),
+				widget.NewToolbarAction(
+					theme.ErrorIcon(),
+					func() {},
+				),
+			),
+			nil,
+			nil,
+			nil,
+			container.NewWithoutLayout(),
+		)),
 	)
 	TaskTabsIndexes = map[string]int{
 		"CWTasks":         0,
@@ -598,13 +695,58 @@ func taskWindowSetup() {
 	if appPreferences.MSPlannerActive {
 		TaskTabsIndexes["MSPlanner"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
-			container.NewTabItem("My Planner", container.NewMax()),
+			container.NewTabItem("My Planner", container.NewBorder(
+				widget.NewToolbar(
+					widget.NewToolbarAction(
+						theme.ViewRefreshIcon(),
+						func() {
+							DownloadPlanners()
+							taskWindowRefresh("MSPlanner")
+						},
+					),
+					widget.NewToolbarSeparator(),
+					widget.NewToolbarAction(
+						theme.HistoryIcon(),
+						func() {},
+					),
+					widget.NewToolbarAction(
+						theme.ErrorIcon(),
+						func() {},
+					),
+				),
+				nil,
+				nil,
+				nil,
+				container.NewWithoutLayout(),
+			)),
 		)
 	}
 	if appPreferences.JiraActive {
 		TaskTabsIndexes["Jira"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
-			container.NewTabItem("My Jira", container.NewMax()),
+			container.NewTabItem("My Jira", container.NewBorder(
+				widget.NewToolbar(
+					widget.NewToolbarAction(
+						theme.ViewRefreshIcon(),
+						func() {
+							GetJira()
+						},
+					),
+					widget.NewToolbarSeparator(),
+					widget.NewToolbarAction(
+						theme.HistoryIcon(),
+						func() {},
+					),
+					widget.NewToolbarAction(
+						theme.ErrorIcon(),
+						func() {},
+					),
+				),
+				nil,
+				nil,
+				nil,
+				container.NewWithoutLayout(),
+			)),
 		)
 	}
 	taskWindow.SetContent(
@@ -619,6 +761,7 @@ func taskWindowSetup() {
 	taskWindow.SetCloseIntercept(func() {
 		taskWindow.Hide()
 	})
+	taskWindow.Content().Refresh()
 }
 
 // TAPPABLE ICON
@@ -688,6 +831,7 @@ func activeTaskStatusUpdate(by int) {
 func taskWindowRefresh(specific string) {
 	var list fyne.CanvasObject
 
+	fmt.Printf("Refreshing\n")
 	priorityIcons := setupPriorityIcons()
 	if specific == "" || specific == "CWTasks" {
 		if len(AppStatus.MyTasksFromGSM) == 0 {
@@ -746,7 +890,6 @@ func taskWindowRefresh(specific string) {
 						taskWindow,
 					)
 				}
-				fmt.Printf("Priority %s, %v\n", x[6], priorityIcons)
 				col4.Objects = append(col4.Objects, container.NewMax(
 					priorityIcons[x[6]],
 					newTappableLabelWithStyle(
@@ -1208,13 +1351,13 @@ func setupPriorityIcons() map[string]*widget.Icon {
 		<svg version="1.1" width="30" height="30"
 			xmlns="http://www.w3.org/2000/svg">
 			<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 11,3.2 A 15,13 1 0 0 2.5,11.5" />
-			<path stroke-width="3" stroke="green" fill="none" stroke-linecap="round" d="M 11,3.2 A 15,13 1 0 0 2.5,11.5" />
+			<path stroke-width="3" stroke="lime" fill="none" stroke-linecap="round" d="M 11,3.2 A 15,13 1 0 0 2.5,11.5" />
 			<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 2.5,18 A 15,13 1 0 0 11,26.8" />
-			<path stroke-width="3" stroke="green" fill="none" stroke-linecap="round" d="M 2.5,18 A 15,13 1 0 0 11,26.8" />
+			<path stroke-width="3" stroke="lime" fill="none" stroke-linecap="round" d="M 2.5,18 A 15,13 1 0 0 11,26.8" />
 			<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 19,3.2 A 15,13 0 0 1 27.5,11.5" />
-			<path stroke-width="3" stroke="green" fill="none" stroke-linecap="round" d="M 19,3.2 A 15,13 0 0 1 27.5,11.5" />
+			<path stroke-width="3" stroke="lime" fill="none" stroke-linecap="round" d="M 19,3.2 A 15,13 0 0 1 27.5,11.5" />
 			<path stroke-width="4" stroke="black" fill="none" stroke-linecap="round" d="M 27.5,18.5 A 15,13 0 0 1 18.5,26.8" />
-			<path stroke-width="3" stroke="green" fill="none" stroke-linecap="round" d="M 27.5,18.5 A 15,13 0 0 1 18.5,26.8" />
+			<path stroke-width="3" stroke="lime" fill="none" stroke-linecap="round" d="M 27.5,18.5 A 15,13 0 0 1 18.5,26.8" />
 		</svg>`)))
 	priorityIcons["5"] = widget.NewIcon(
 		fyne.NewStaticResource("priority5.svg", []byte(`<?xml version="1.0"?>
