@@ -812,7 +812,6 @@ func activeTaskStatusUpdate(by int) {
 func taskWindowRefresh(specific string) {
 	var list fyne.CanvasObject
 
-	fmt.Printf("Refreshing %s\n", specific)
 	priorityIcons := setupPriorityIcons()
 	if specific == "" || specific == "CWTasks" {
 		if len(AppStatus.MyTasksFromGSM) == 0 {
@@ -826,7 +825,6 @@ func taskWindowRefresh(specific string) {
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 
 			for _, x := range AppStatus.MyTasksFromGSM {
-				fmt.Printf("Task: %v\n", x)
 				thisID := x[1]
 				myPriority := x[6]
 				if len(x) >= 8 && x[6] != x[7] {
@@ -872,7 +870,6 @@ func taskWindowRefresh(specific string) {
 						taskWindow,
 					)
 				}
-				fmt.Printf("%s|%v\n", myPriority, priorityIcons)
 				col4.Objects = append(col4.Objects, container.NewMax(
 					priorityIcons[x[6]],
 					newTappableLabelWithStyle(

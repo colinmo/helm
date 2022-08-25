@@ -51,7 +51,13 @@ func singleThreadReturnOrGetGSMAccessToken() {
 		}
 		if AuthenticationTokens.GSM.expiration.Before(time.Now()) {
 			AuthenticationTokens.GSM.access_token = ""
-			refreshGSM()
+			browser.OpenURL(GSMAuthURL)
+			for {
+				if AuthenticationTokens.GSM.access_token != "" && !AppStatus.GSMGettingToken {
+					break
+				}
+				time.Sleep(1 * time.Second)
+			}
 		}
 		GSMAccessTokenChan <- AuthenticationTokens.GSM.access_token
 	}
@@ -518,35 +524,40 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// @Todo - GSM doesn't support refresh on SAML tokens
+// so just do a standard browser access token thing
 func refreshGSM() {
-	var CherwellToken CherwellAuthResponse
-	payload := url.Values{
-		"grant_type":    {"refresh_token"},
-		"client_id":     {"814f9a74-c86a-451e-b6bb-deea65acf72a"},
-		"username":      {AuthenticationTokens.GSM.userid},
-		"refresh_token": {AuthenticationTokens.GSM.refresh_token},
-		"site_name":     {""},
-	}
-	targetURL, _ := url.JoinPath(GSMBaseUrl, "token")
-	targetURL += "?auth_mode=SAML"
-	resp, err := http.PostForm(
-		targetURL,
-		payload,
-	)
-	if err != nil {
-		log.Fatalf("Login failed %s\n", err)
-	}
-	json.NewDecoder(resp.Body).Decode(&CherwellToken)
-	if len(CherwellToken.Error) > 0 {
-		log.Fatalf("Failed 2 %s\n", CherwellToken.ErrorDescription)
-	}
-	AuthenticationTokens.GSM.access_token = CherwellToken.AccessToken
-	AuthenticationTokens.GSM.refresh_token = CherwellToken.RefreshToken
-	if CherwellToken.Expires == "" {
-		AuthenticationTokens.GSM.expiration = time.Now().Add(2000 * time.Hour)
-	} else {
-		AuthenticationTokens.GSM.expiration, _ = time.Parse(time.RFC1123, CherwellToken.Expires)
-	}
+	browser.OpenURL(GSMAuthURL)
+	/*
+		var CherwellToken CherwellAuthResponse
+		payload := url.Values{
+			"grant_type":    {"refresh_token"},
+			"client_id":     {"814f9a74-c86a-451e-b6bb-deea65acf72a"},
+			"username":      {AuthenticationTokens.GSM.userid},
+			"refresh_token": {AuthenticationTokens.GSM.refresh_token},
+			"site_name":     {""},
+		}
+		targetURL, _ := url.JoinPath(GSMBaseUrl, "token")
+		targetURL += "?auth_mode=SAML"
+		resp, err := http.PostForm(
+			targetURL,
+			payload,
+		)
+		if err != nil {
+			log.Fatalf("Login failed %s\n", err)
+		}
+		json.NewDecoder(resp.Body).Decode(&CherwellToken)
+		if len(CherwellToken.Error) > 0 {
+			log.Fatalf("Failed 2 %s\n", CherwellToken.ErrorDescription)
+		}
+		AuthenticationTokens.GSM.access_token = CherwellToken.AccessToken
+		AuthenticationTokens.GSM.refresh_token = CherwellToken.RefreshToken
+		if CherwellToken.Expires == "" {
+			AuthenticationTokens.GSM.expiration = time.Now().Add(2000 * time.Hour)
+		} else {
+			AuthenticationTokens.GSM.expiration, _ = time.Parse(time.RFC1123, CherwellToken.Expires)
+		}
+	*/
 }
 
 func getStuffFromCherwell(method string, path string, payload []byte, refreshToken bool) (io.ReadCloser, error) {
