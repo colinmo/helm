@@ -50,7 +50,8 @@ func startFakeMS(authReturnLocation string, authReturnCode int, apiResponses []s
 			AuthenticationTokens.GSM.userid = "OKUser"
 			AuthenticationTokens.GSM.expiration = time.Now().Add(2000 * time.Hour)
 			AuthenticationTokens.GSM.cherwelluser = "Mike"
-			AuthenticationTokens.GSM.teams = []string{}
+			AuthenticationTokens.GSM.allteams = []string{}
+			AuthenticationTokens.GSM.myteam = ""
 			AppStatus.GSMGettingToken = false
 			w.Header().Add("Content-type", "text/html")
 			fmt.Fprintf(w, "<html><head></head><body><script>window.close()</script></body></html>")

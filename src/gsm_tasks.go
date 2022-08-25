@@ -37,6 +37,7 @@ var GSMAccessTokenChan = make(chan string)
 var GSMBaseUrl = `https://griffith.cherwellondemand.com/CherwellAPI/`
 var GSMAuthURL = `https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`
 
+// @todo: cannot silently refresh, so should put a status of "Disconnected:GSM" in the status and prompt a reconnect.
 func singleThreadReturnOrGetGSMAccessToken() {
 	for {
 		_, ok := <-GSMAccessTokenRequestsChan
@@ -44,20 +45,12 @@ func singleThreadReturnOrGetGSMAccessToken() {
 			break
 		}
 		for {
-			if AuthenticationTokens.GSM.access_token != "" && !AppStatus.GSMGettingToken {
+			if AuthenticationTokens.GSM.access_token != "" &&
+				AuthenticationTokens.GSM.cherwelluser != "" &&
+				!AppStatus.GSMGettingToken {
 				break
 			}
 			time.Sleep(1 * time.Second)
-		}
-		if AuthenticationTokens.GSM.expiration.Before(time.Now()) {
-			AuthenticationTokens.GSM.access_token = ""
-			browser.OpenURL(GSMAuthURL)
-			for {
-				if AuthenticationTokens.GSM.access_token != "" && !AppStatus.GSMGettingToken {
-					break
-				}
-				time.Sleep(1 * time.Second)
-			}
 		}
 		GSMAccessTokenChan <- AuthenticationTokens.GSM.access_token
 	}
@@ -69,7 +62,9 @@ func returnOrGetGSMAccessToken() string {
 }
 
 func GetGSM() {
-	browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
+	if AuthenticationTokens.GSM.access_token == "" {
+		browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
+	}
 	go func() {
 		DownloadTasks()
 		taskWindowRefresh("CWTasks")
@@ -296,6 +291,7 @@ func GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse, error) {
 
 func GetMyIncidentsFromGSMForPage(page int) (CherwellSearchResponse, error) {
 	var tasksResponse CherwellSearchResponse
+	returnOrGetGSMAccessToken()
 	r, err := SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
 			{FieldId: CWFields.Incident.OwnerID, Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
@@ -329,6 +325,7 @@ func GetMyIncidentsFromGSMForPage(page int) (CherwellSearchResponse, error) {
 
 func GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse, error) {
 	var tasksResponse CherwellSearchResponse
+	returnOrGetGSMAccessToken()
 	r, err := SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
 			{FieldId: CWFields.Incident.RequestorSNumber, Operator: "eq", Value: AuthenticationTokens.GSM.userid},
@@ -368,10 +365,36 @@ func GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
 		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "On Hold"},
 		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Pending"},
 	}
-	for _, x := range AuthenticationTokens.GSM.teams {
+	// Refresh my teams, just in case.
+	// Get my TeamIDs in Cherwell
+	returnOrGetGSMAccessToken()
+	var teamResponse struct {
+		Teams []struct {
+			TeamID   string `json:"teamId"`
+			TeamName string `json:"teamName"`
+		} `json:"teams"`
+	}
+	r, err := getStuffFromCherwell(
+		"GET",
+		"api/V2/getusersteams/userrecordid/"+AuthenticationTokens.GSM.cherwelluser,
+		[]byte{},
+		false)
+	if err == nil {
+		defer r.Close()
+		_ = json.NewDecoder(r).Decode(&teamResponse)
+		AuthenticationTokens.GSM.allteams = []string{}
+		for _, x := range teamResponse.Teams {
+			AuthenticationTokens.GSM.allteams = append(AuthenticationTokens.GSM.allteams, x.TeamID)
+		}
+	}
+	//
+	for _, x := range AuthenticationTokens.GSM.allteams {
 		baseFilter = append(baseFilter, GSMFilter{FieldId: CWFields.Incident.TeamID, Operator: "eq", Value: x})
 	}
-	r, err := SearchCherwellFor(GSMSearchQuery{
+	if len(AuthenticationTokens.GSM.myteam) > 0 {
+		baseFilter = append(baseFilter, GSMFilter{FieldId: CWFields.Incident.TeamID, Operator: "eq", Value: AuthenticationTokens.GSM.myteam})
+	}
+	r, err = SearchCherwellFor(GSMSearchQuery{
 		Filters:    baseFilter,
 		BusObjId:   "6dd53665c0c24cab86870a21cf6434ae",
 		PageNumber: page,
@@ -494,32 +517,11 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				defer r.Close()
 				_ = json.NewDecoder(r).Decode(&decodedResponse)
 				AuthenticationTokens.GSM.cherwelluser = decodedResponse.BusinessObjects[0].BusObRecId
-				// Get my TeamIDs in Cherwell
-				var teamResponse struct {
-					Teams []struct {
-						TeamID   string `json:"teamId"`
-						TeamName string `json:"teamName"`
-					} `json:"teams"`
-				}
-				r, err = getStuffFromCherwell(
-					"GET",
-					"api/V2/getusersteams/userrecordid/"+AuthenticationTokens.GSM.cherwelluser,
-					[]byte{},
-					false)
-				if err == nil {
-					defer r.Close()
-					_ = json.NewDecoder(r).Decode(&teamResponse)
-					AuthenticationTokens.GSM.teams = []string{
-						decodedResponse.BusinessObjects[0].Fields[1].Value,
-					}
-					for _, x := range teamResponse.Teams {
-						AuthenticationTokens.GSM.teams = append(AuthenticationTokens.GSM.teams, x.TeamID)
-					}
-					fmt.Printf("Token got\n")
-					w.Header().Add("Content-type", "text/html")
-					fmt.Fprintf(w, "<html><head></head><body><script>window.close()</script></body></html>")
-					fmt.Printf("Authenticated, time to refresh\n")
-				}
+				AuthenticationTokens.GSM.myteam = decodedResponse.BusinessObjects[0].Fields[1].Value
+				fmt.Printf("Token got\n")
+				w.Header().Add("Content-type", "text/html")
+				fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.</body></html>")
+				fmt.Printf("Authenticated, time to refresh\n")
 				activeTaskStatusUpdate(-1)
 				AppStatus.GSMGettingToken = false
 
@@ -532,42 +534,6 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// @Todo - GSM doesn't support refresh on SAML tokens
-// so just do a standard browser access token thing
-/*
-func refreshGSM() {
-	browser.OpenURL(GSMAuthURL)
-		var CherwellToken CherwellAuthResponse
-		payload := url.Values{
-			"grant_type":    {"refresh_token"},
-			"client_id":     {"814f9a74-c86a-451e-b6bb-deea65acf72a"},
-			"username":      {AuthenticationTokens.GSM.userid},
-			"refresh_token": {AuthenticationTokens.GSM.refresh_token},
-			"site_name":     {""},
-		}
-		targetURL, _ := url.JoinPath(GSMBaseUrl, "token")
-		targetURL += "?auth_mode=SAML"
-		resp, err := http.PostForm(
-			targetURL,
-			payload,
-		)
-		if err != nil {
-			log.Fatalf("Login failed %s\n", err)
-		}
-		json.NewDecoder(resp.Body).Decode(&CherwellToken)
-		if len(CherwellToken.Error) > 0 {
-			log.Fatalf("Failed 2 %s\n", CherwellToken.ErrorDescription)
-		}
-		AuthenticationTokens.GSM.access_token = CherwellToken.AccessToken
-		AuthenticationTokens.GSM.refresh_token = CherwellToken.RefreshToken
-		if CherwellToken.Expires == "" {
-			AuthenticationTokens.GSM.expiration = time.Now().Add(2000 * time.Hour)
-		} else {
-			AuthenticationTokens.GSM.expiration, _ = time.Parse(time.RFC1123, CherwellToken.Expires)
-		}
-}
-
-*/
 func getStuffFromCherwell(method string, path string, payload []byte, refreshToken bool) (io.ReadCloser, error) {
 	client := &http.Client{
 		Timeout: time.Second * 10,

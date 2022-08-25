@@ -125,7 +125,7 @@ func main() {
 	markdownWindowSetup()
 	taskWindow = thisApp.NewWindow("Tasks")
 	taskWindowSetup()
-	fmt.Printf("Getting tasks")
+	fmt.Printf("Getting tasks\n")
 	GetAllTasks()
 	if desk, ok := thisApp.(desktop.App); ok {
 		m := fyne.NewMenu("MyApp",
@@ -467,7 +467,6 @@ func preferencesWindowSetup() {
 	jiraUsername := widget.NewEntry()
 	jiraUsername.SetText(appPreferences.JiraUsername)
 	// GSM/ Cherwell
-	fmt.Printf("GAT: %s\n", AuthenticationTokens.GSM.access_token)
 	cwAccessToken := widget.NewEntry()
 	cwAccessToken.SetText(AuthenticationTokens.GSM.access_token)
 	cwRefreshToken := widget.NewEntry()

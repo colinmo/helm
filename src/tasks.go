@@ -20,23 +20,41 @@ import (
 //        OR have a message based process for handling requests for information from the remote client that handles all the authentication etc. by itself
 //        So requests for refresh are sent to this parallel process via a message queue, and it processes them individually and in order.
 
+type GSMTokens struct {
+	access_token  string
+	refresh_token string
+	userid        string
+	expiration    time.Time
+	cherwelluser  string
+	allteams      []string
+	myteam        string
+}
+type MSTokens struct {
+	access_token  string
+	refresh_token string
+	expiration    time.Time
+}
 type Tokens struct {
-	GSM struct {
-		access_token  string
-		refresh_token string
-		userid        string
-		expiration    time.Time
-		cherwelluser  string
-		teams         []string
-	}
-	MS struct {
-		access_token  string
-		refresh_token string
-		expiration    time.Time
-	}
+	GSM GSMTokens
+	MS  MSTokens
 }
 
-var AuthenticationTokens Tokens
+var AuthenticationTokens = Tokens{
+	GSM: GSMTokens{
+		access_token:  "",
+		refresh_token: "",
+		userid:        "",
+		expiration:    time.Now(),
+		cherwelluser:  "",
+		allteams:      []string{},
+		myteam:        "",
+	},
+	MS: MSTokens{
+		access_token:  "",
+		refresh_token: "",
+		expiration:    time.Now(),
+	},
+}
 
 func GetAllTasks() {
 	GetGSM()
