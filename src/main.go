@@ -130,10 +130,12 @@ func main() {
 	if desk, ok := thisApp.(desktop.App); ok {
 		m := fyne.NewMenu("MyApp",
 			fyne.NewMenuItem("Todays Notes", func() {
-				// @TODO: Save first if anything in there
 				mainWindow.Show()
-				// Reload from file
 				x, _ := AppStatus.CurrentZettleDKB.Get()
+				if len(markdownInput.Text) > 0 {
+					saveZettle(markdownInput.Text, x)
+				}
+				// Reload from file
 				markdownInput.Text = getFileContentsAndCreateIfMissing(path.Join(appPreferences.ZettlekastenHome, x))
 				markdownInput.Refresh()
 			}),
@@ -1257,8 +1259,11 @@ func taskWindowRefresh(specific string) {
 }
 
 func dateSinceNowInString(oldDate time.Time) string {
-	bob := time.Since(oldDate)
+	bob := time.Since(oldDate.Local())
 	mep := bob.Seconds()
+	if mep < 0 {
+		mep = mep + 60*60*10
+	}
 	metric := ""
 	switch {
 	case mep >= 31540000:
@@ -1282,7 +1287,7 @@ func dateSinceNowInString(oldDate time.Time) string {
 	default:
 		metric = "second"
 	}
-	if mep > 1 {
+	if mep >= 2 {
 		metric = metric + "s"
 	}
 	return fmt.Sprintf("%d %s", int(mep), metric)
