@@ -106,7 +106,6 @@ func overrides() {
 	loadPriorityOverride()
 	startLocalServers()
 	AppStatus.GSMGettingToken = true
-	browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
 	go singleThreadReturnOrGetGSMAccessToken()
 	go func() {
 		for {
@@ -151,7 +150,6 @@ func main() {
 	} else {
 		fmt.Printf("Nerts")
 	}
-	fmt.Printf("Running?")
 	thisApp.Run()
 }
 
@@ -871,7 +869,7 @@ func taskWindowRefresh(specific string) {
 					)
 				}
 				col4.Objects = append(col4.Objects, container.NewMax(
-					priorityIcons[x[6]],
+					getPriorityIconFor(x[6], priorityIcons),
 					newTappableLabelWithStyle(
 						myPriority,
 						fyne.TextAlignCenter,
@@ -940,7 +938,7 @@ func taskWindowRefresh(specific string) {
 				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
 				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
 				col4.Objects = append(col4.Objects, container.NewMax(
-					priorityIcons[x[4]], // canvas.NewCircle(priorityColours[x[4]]),
+					getPriorityIconFor(x[4], priorityIcons),
 					widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
 				col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
 			}
@@ -1010,7 +1008,7 @@ func taskWindowRefresh(specific string) {
 				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
 				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
 				col4.Objects = append(col4.Objects, container.NewMax(
-					priorityIcons[x[4]],
+					getPriorityIconFor(x[4], priorityIcons),
 					widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
 				col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
 			}
@@ -1076,7 +1074,7 @@ func taskWindowRefresh(specific string) {
 				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
 				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
 				col4.Objects = append(col4.Objects, container.NewMax(
-					priorityIcons[x[4]],
+					getPriorityIconFor(x[4], priorityIcons),
 					widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
 				col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
 			}
@@ -1148,7 +1146,7 @@ func taskWindowRefresh(specific string) {
 				dt, _ := time.Parse("2006-01-02T15:04:05.999999999Z", x[5])
 				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
 				col4.Objects = append(col4.Objects, container.NewMax(
-					priorityIcons[x[6]],
+					getPriorityIconFor(x[6], priorityIcons),
 					widget.NewLabelWithStyle(x[6], fyne.TextAlignCenter, fyne.TextStyle{})))
 				col5.Objects = append(col5.Objects, widget.NewLabel(x[8]))
 			}
@@ -1218,7 +1216,7 @@ func taskWindowRefresh(specific string) {
 				dt, _ := time.Parse("2006-01-02T15:04:05.999-0700", x[2])
 				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
 				col4.Objects = append(col4.Objects, container.NewMax(
-					priorityIcons[x[3]],
+					getPriorityIconFor(x[3], priorityIcons),
 					widget.NewLabelWithStyle(x[3], fyne.TextAlignCenter, fyne.TextStyle{})))
 				col5.Objects = append(col5.Objects, widget.NewLabel(x[4]))
 			}
@@ -1355,4 +1353,11 @@ func setupPriorityIcons() map[string]*widget.Icon {
 			<path stroke-width="3" stroke="cyan" fill="cyan" stroke-linecap="round" d="M 4.5,22 A 15,15 0 0 1 2.7,13" />
 		</svg>`)))
 	return priorityIcons
+}
+
+func getPriorityIconFor(index string, priorityIcons map[string]*widget.Icon) *widget.Icon {
+	if icon, ok := priorityIcons[index]; ok {
+		return icon
+	}
+	return widget.NewIcon(theme.CancelIcon())
 }

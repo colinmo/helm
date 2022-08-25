@@ -69,15 +69,23 @@ func returnOrGetGSMAccessToken() string {
 }
 
 func GetGSM() {
-	fmt.Printf("Getting all GSM\n")
-	DownloadTasks()
-	taskWindowRefresh("CWTasks")
-	DownloadIncidents()
-	taskWindowRefresh("CWIncidents")
-	DownloadMyRequests()
-	taskWindowRefresh("CWRequests")
-	DownloadTeam()
-	taskWindowRefresh("CWTeamIncidents")
+	browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
+	go func() {
+		DownloadTasks()
+		taskWindowRefresh("CWTasks")
+	}()
+	go func() {
+		DownloadIncidents()
+		taskWindowRefresh("CWIncidents")
+	}()
+	go func() {
+		DownloadMyRequests()
+		taskWindowRefresh("CWRequests")
+	}()
+	go func() {
+		DownloadTeam()
+		taskWindowRefresh("CWTeamIncidents")
+	}()
 }
 
 func DownloadTasks() {
@@ -526,9 +534,9 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 
 // @Todo - GSM doesn't support refresh on SAML tokens
 // so just do a standard browser access token thing
+/*
 func refreshGSM() {
 	browser.OpenURL(GSMAuthURL)
-	/*
 		var CherwellToken CherwellAuthResponse
 		payload := url.Values{
 			"grant_type":    {"refresh_token"},
@@ -557,9 +565,9 @@ func refreshGSM() {
 		} else {
 			AuthenticationTokens.GSM.expiration, _ = time.Parse(time.RFC1123, CherwellToken.Expires)
 		}
-	*/
 }
 
+*/
 func getStuffFromCherwell(method string, path string, payload []byte, refreshToken bool) (io.ReadCloser, error) {
 	client := &http.Client{
 		Timeout: time.Second * 10,
