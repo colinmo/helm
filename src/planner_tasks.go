@@ -143,6 +143,10 @@ type myTasksGraphResponse struct {
 	} `json:"value"`
 }
 
+type PlanGraphResponse struct {
+	Title string `json:"title"`
+}
+
 func DownloadPlanners() {
 	if GetPlanner() {
 		activeTaskStatusUpdate(1)
@@ -150,6 +154,7 @@ func DownloadPlanners() {
 
 		// * @todo Add Sort
 		AppStatus.MyTasksFromPlanner = [][]string{}
+		uniquePlans := map[string][]int{}
 		var teamResponse myTasksGraphResponse
 		urlToCall := "/me/planner/tasks"
 		for page := 1; page < 200; page++ {
@@ -174,6 +179,7 @@ func DownloadPlanners() {
 								fmt.Sprintf("%d", y.PercentComplete),
 							},
 						)
+						uniquePlans[y.PlanID] = append(uniquePlans[y.PlanID], len(AppStatus.MyTasksFromPlanner)-1)
 					}
 				}
 				if len(teamResponse.NextPage) == 0 {
@@ -190,6 +196,19 @@ func DownloadPlanners() {
 				fmt.Printf("Failed to get Graph Tasks %s\n", err)
 			}
 		}
+		// Get the Plan names
+		for id, members := range uniquePlans {
+			r, err := callGraphURI("GET", "planner/plans/"+id, []byte{}, "")
+			if err == nil {
+				defer r.Close()
+				var planResponse PlanGraphResponse
+				_ = json.NewDecoder(r).Decode(&planResponse)
+				for _, index := range members {
+					AppStatus.MyTasksFromPlanner[index][3] = fmt.Sprintf("[%s]: %s", planResponse.Title, AppStatus.MyTasksFromPlanner[index][3])
+				}
+			}
+		}
+
 		// sort
 		sort.SliceStable(AppStatus.MyTasksFromPlanner, func(i, j int) bool {
 			if AppStatus.MyTasksFromPlanner[i][7] == AppStatus.MyTasksFromPlanner[j][7] {
