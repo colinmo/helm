@@ -32,8 +32,8 @@ type GSMSearchQuery struct {
 	Sorting    []GSMSort   `json:"sorting"`
 }
 
-var GSMAccessTokenRequestsChan chan string
-var GSMAccessTokenChan chan string
+var GSMAccessTokenRequestsChan = make(chan string)
+var GSMAccessTokenChan = make(chan string)
 var GSMBaseUrl = `https://griffith.cherwellondemand.com/CherwellAPI/`
 var GSMAuthURL = `https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`
 
@@ -43,31 +43,27 @@ func singleThreadReturnOrGetGSMAccessToken() {
 		if !ok {
 			break
 		}
-		fmt.Printf("Return Or Get\n")
 		for {
-			fmt.Printf("wait")
-			if AuthenticationTokens.GSM.access_token != "" {
+			if AuthenticationTokens.GSM.access_token != "" && !AppStatus.GSMGettingToken {
 				break
 			}
 			time.Sleep(1 * time.Second)
 		}
-		fmt.Printf("\n")
-		fmt.Printf("AT: %s\nRT: %s\nXP: %s\n", AuthenticationTokens.GSM.access_token, AuthenticationTokens.GSM.refresh_token, AuthenticationTokens.GSM.expiration)
-		if !AuthenticationTokens.GSM.expiration.After(time.Now()) {
-			fmt.Printf("Refresh\n")
+		if AuthenticationTokens.GSM.expiration.Before(time.Now()) {
+			AuthenticationTokens.GSM.access_token = ""
 			refreshGSM()
 		}
-		fmt.Printf("OK to go\n")
 		GSMAccessTokenChan <- AuthenticationTokens.GSM.access_token
 	}
 }
 
 func returnOrGetGSMAccessToken() string {
-	GSMAccessTokenRequestsChan <- "hey"
+	GSMAccessTokenRequestsChan <- time.Now().String()
 	return <-GSMAccessTokenChan
 }
 
 func GetGSM() {
+	fmt.Printf("Getting all GSM\n")
 	DownloadTasks()
 	taskWindowRefresh("CWTasks")
 	DownloadIncidents()
@@ -199,32 +195,58 @@ func DownloadTeam() {
 	}
 }
 
-var CWFields struct {
-	Task struct {
-		OwnerID           string
-		CreatedDateTime   string
-		TaskTitle         string
-		TaskStatus        string
-		TaskID            string
-		IncidentID        string
-		IncidentShortDesc string
-		IncidentPriority  string
-	}
-	Incident struct {
-		OwnerID          string
-		Status           string
-		CreatedDateTime  string
-		IncidentID       string
-		ShortDesc        string
-		Priority         string
-		RequestorSNumber string
-		TeamID           string
-		OwnerName        string
-	}
+type CWFieldIDSTask struct {
+	OwnerID           string
+	CreatedDateTime   string
+	TaskTitle         string
+	TaskStatus        string
+	TaskID            string
+	IncidentID        string
+	IncidentShortDesc string
+	IncidentPriority  string
 }
+type CWFieldIDSIncident struct {
+	OwnerID          string
+	Status           string
+	CreatedDateTime  string
+	IncidentID       string
+	ShortDesc        string
+	Priority         string
+	RequestorSNumber string
+	TeamID           string
+	OwnerName        string
+}
+type CWFieldIDs struct {
+	Task     CWFieldIDSTask
+	Incident CWFieldIDSIncident
+}
+
+var CWFields = CWFieldIDs{
+	Task: CWFieldIDSTask{
+		OwnerID:           "93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf",
+		CreatedDateTime:   "9355d5ed416bbc9408615c4145978ff8538a3f6eb4",
+		TaskTitle:         "93ad98a2d68a61778eda3d4d9cbb30acbfd458aea4",
+		TaskStatus:        "9368f0fb7b744108a666984c21afc932562eb7dc16",
+		TaskID:            "93d5409c4bcbf7a38ed75a47dd92671f374236fa32",
+		IncidentID:        "BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
+		IncidentShortDesc: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
+		IncidentPriority:  "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
+	},
+	Incident: CWFieldIDSIncident{
+		OwnerID:          "9339fc404e39ae705648ab43969f29262e6d167606",
+		Status:           "5eb3234ae1344c64a19819eda437f18d",
+		CreatedDateTime:  "c1e86f31eb2c4c5f8e8615a5189e9b19",
+		IncidentID:       "6ae282c55e8e4266ae66ffc070c17fa3",
+		ShortDesc:        "93e8ea93ff67fd95118255419690a50ef2d56f910c",
+		Priority:         "83c36313e97b4e6b9028aff3b401b71c",
+		RequestorSNumber: "941aa0889094428a6f4c054dbea345b09b4d87c77e",
+		TeamID:           "9339fc404e312b6d43436041fc8af1c07c6197f559",
+		OwnerName:        "9339fc404e4c93350bf5be446fb13d693b0bb7f219",
+	}}
 
 func GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse, error) {
 	var tasksResponse CherwellSearchResponse
+	returnOrGetGSMAccessToken() // Wait for CherwellUser to be a value
 	r, err := SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
 			{FieldId: CWFields.Task.OwnerID, Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
@@ -250,7 +272,7 @@ func GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldID: CWFields.Task.IncidentPriority, SortDirection: 1},
 			{FieldID: CWFields.Task.CreatedDateTime, SortDirection: 1},
 		},
-	})
+	}, true)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -283,7 +305,7 @@ func GetMyIncidentsFromGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldID: CWFields.Incident.Priority, SortDirection: 1},
 			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
-	})
+	}, true)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -316,7 +338,7 @@ func GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldID: CWFields.Incident.Priority, SortDirection: 1},
 			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
-	})
+	}, true)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -353,7 +375,7 @@ func GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldID: CWFields.Incident.Priority, SortDirection: 1},
 			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
-	})
+	}, true)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -361,13 +383,14 @@ func GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
 	return tasksResponse, err
 }
 
-func SearchCherwellFor(toSend GSMSearchQuery) (io.ReadCloser, error) {
+func SearchCherwellFor(toSend GSMSearchQuery, refreshToken bool) (io.ReadCloser, error) {
 	var err error
 	sendThis, _ := json.Marshal(toSend)
 	result, err := getStuffFromCherwell(
 		"POST",
 		"api/V1/getsearchresults",
-		sendThis)
+		sendThis,
+		refreshToken)
 	return result, err
 }
 
@@ -422,7 +445,8 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				"refresh_token": {""},
 				"site_name":     {""},
 			}
-			targetURL, _ := url.JoinPath(GSMBaseUrl, "token?auth_mode=SAML")
+			targetURL, _ := url.JoinPath(GSMBaseUrl, "token")
+			targetURL += "?auth_mode=SAML"
 			resp, err := http.PostForm(
 				targetURL,
 				payload,
@@ -434,6 +458,8 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				if len(CherwellToken.Error) > 0 {
 					log.Fatalf("Failed 1 %s\n", CherwellToken.ErrorDescription)
 				}
+				fmt.Printf("Getting token\n")
+				AppStatus.GSMGettingToken = true
 				AuthenticationTokens.GSM.access_token = CherwellToken.AccessToken
 				AuthenticationTokens.GSM.refresh_token = CherwellToken.RefreshToken
 				AuthenticationTokens.GSM.userid = CherwellToken.Username
@@ -450,7 +476,7 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 					},
 					BusObjId: "9338216b3c549b75607cf54667a4e67d1f644d9fed",
 					Fields:   []string{"933a15d131ff727ca7ed3f4e1c8f528d719b99b82d", "933a15d17f1f10297df7604b58a76734d6106ac428"},
-				})
+				}, false)
 				defer r.Close()
 				_ = json.NewDecoder(r).Decode(&decodedResponse)
 				AuthenticationTokens.GSM.cherwelluser = decodedResponse.BusinessObjects[0].BusObRecId
@@ -461,21 +487,28 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 						TeamName string `json:"teamName"`
 					} `json:"teams"`
 				}
-				r, _ = getStuffFromCherwell(
+				r, err = getStuffFromCherwell(
 					"GET",
 					"api/V2/getusersteams/userrecordid/"+AuthenticationTokens.GSM.cherwelluser,
-					[]byte{})
-				defer r.Close()
-				_ = json.NewDecoder(r).Decode(&teamResponse)
-				AuthenticationTokens.GSM.teams = []string{
-					decodedResponse.BusinessObjects[0].Fields[1].Value,
-				}
-				for _, x := range teamResponse.Teams {
-					AuthenticationTokens.GSM.teams = append(AuthenticationTokens.GSM.teams, x.TeamID)
+					[]byte{},
+					false)
+				if err == nil {
+					defer r.Close()
+					_ = json.NewDecoder(r).Decode(&teamResponse)
+					AuthenticationTokens.GSM.teams = []string{
+						decodedResponse.BusinessObjects[0].Fields[1].Value,
+					}
+					for _, x := range teamResponse.Teams {
+						AuthenticationTokens.GSM.teams = append(AuthenticationTokens.GSM.teams, x.TeamID)
+					}
+					fmt.Printf("Token got\n")
+					w.Header().Add("Content-type", "text/html")
+					fmt.Fprintf(w, "<html><head></head><body><script>window.close()</script></body></html>")
+					fmt.Printf("Authenticated, time to refresh\n")
 				}
 				activeTaskStatusUpdate(-1)
 				AppStatus.GSMGettingToken = false
-				GetGSM()
+
 			}
 		}
 	} else {
@@ -486,17 +519,16 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 }
 
 func refreshGSM() {
-	AppStatus.GSMGettingToken = true
 	var CherwellToken CherwellAuthResponse
 	payload := url.Values{
 		"grant_type":    {"refresh_token"},
 		"client_id":     {"814f9a74-c86a-451e-b6bb-deea65acf72a"},
 		"username":      {AuthenticationTokens.GSM.userid},
-		"password":      {""},
 		"refresh_token": {AuthenticationTokens.GSM.refresh_token},
 		"site_name":     {""},
 	}
-	targetURL, _ := url.JoinPath(GSMBaseUrl, "token?auth_mode=SAML")
+	targetURL, _ := url.JoinPath(GSMBaseUrl, "token")
+	targetURL += "?auth_mode=SAML"
 	resp, err := http.PostForm(
 		targetURL,
 		payload,
@@ -517,15 +549,21 @@ func refreshGSM() {
 	}
 }
 
-func getStuffFromCherwell(method string, path string, payload []byte) (io.ReadCloser, error) {
+func getStuffFromCherwell(method string, path string, payload []byte, refreshToken bool) (io.ReadCloser, error) {
 	client := &http.Client{
 		Timeout: time.Second * 10,
 	}
 	newpath, _ := url.JoinPath(GSMBaseUrl, path)
 	req, _ := http.NewRequest(method, newpath, bytes.NewReader(payload))
-	returnOrGetGSMAccessToken()
+	if refreshToken {
+		returnOrGetGSMAccessToken()
+	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", AuthenticationTokens.GSM.access_token))
 	req.Header.Set("Content-type", "application/json")
 	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("What happened? %s\n", err)
+		return nil, err
+	}
 	return resp.Body, err
 }

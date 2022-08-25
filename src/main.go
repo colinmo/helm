@@ -57,30 +57,22 @@ type AppPreferences struct {
 	ZettlekastenHome string
 	RouterUsername   string
 	RouterPassword   string
-	//
-	MSPlannerActive bool
-	MSAccessToken   string
-	MSRefreshToken  string
-	MSExpiresAt     time.Time
-	MSGroups        string
-	//
-	CWActive       bool
-	CWAccessToken  string
-	CWRefreshToken string
-	CWExpiresAt    time.Time
-	//
+	MSPlannerActive  bool
+	MSAccessToken    string
+	MSRefreshToken   string
+	MSExpiresAt      time.Time
+	MSGroups         string
+	CWActive         bool
 	PriorityOverride string
-	//
-	JiraActive   bool
-	JiraUsername string
-	JiraKey      string
+	JiraActive       bool
+	JiraUsername     string
+	JiraKey          string
 }
 
 var thisApp fyne.App
 var mainWindow fyne.Window
 var preferencesWindow fyne.Window
 
-// var internetWindow fyne.Window
 var taskWindow fyne.Window
 var markdownInput *widget.Entry
 var AppStatus AppStatusStruct
@@ -99,23 +91,6 @@ func setup() {
 		MSGettingToken:      false,
 	}
 	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
-	CWFields.Task.OwnerID = "93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf"
-	CWFields.Task.CreatedDateTime = "9355d5ed416bbc9408615c4145978ff8538a3f6eb4"
-	CWFields.Task.TaskTitle = "93ad98a2d68a61778eda3d4d9cbb30acbfd458aea4"
-	CWFields.Task.TaskStatus = "9368f0fb7b744108a666984c21afc932562eb7dc16"
-	CWFields.Task.TaskID = "93d5409c4bcbf7a38ed75a47dd92671f374236fa32"
-	CWFields.Task.IncidentID = "BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676"
-	CWFields.Task.IncidentShortDesc = "BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676"
-	CWFields.Task.IncidentPriority = "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676"
-	CWFields.Incident.OwnerID = "9339fc404e39ae705648ab43969f29262e6d167606"
-	CWFields.Incident.Status = "5eb3234ae1344c64a19819eda437f18d"
-	CWFields.Incident.CreatedDateTime = "c1e86f31eb2c4c5f8e8615a5189e9b19"
-	CWFields.Incident.IncidentID = "6ae282c55e8e4266ae66ffc070c17fa3"
-	CWFields.Incident.ShortDesc = "93e8ea93ff67fd95118255419690a50ef2d56f910c"
-	CWFields.Incident.Priority = "83c36313e97b4e6b9028aff3b401b71c"
-	CWFields.Incident.RequestorSNumber = "941aa0889094428a6f4c054dbea345b09b4d87c77e"
-	CWFields.Incident.TeamID = "9339fc404e312b6d43436041fc8af1c07c6197f559"
-	CWFields.Incident.OwnerName = "9339fc404e4c93350bf5be446fb13d693b0bb7f219"
 }
 func overrides() {
 	// Priority Overrides
@@ -130,6 +105,7 @@ func overrides() {
 	thisApp.Preferences().SetString("PriorityOverride", appPreferences.PriorityOverride)
 	loadPriorityOverride()
 	startLocalServers()
+	AppStatus.GSMGettingToken = true
 	browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
 	go singleThreadReturnOrGetGSMAccessToken()
 	go func() {
@@ -150,11 +126,12 @@ func main() {
 	markdownWindowSetup()
 	taskWindow = thisApp.NewWindow("Tasks")
 	taskWindowSetup()
-
+	fmt.Printf("Getting tasks")
 	GetAllTasks()
 	if desk, ok := thisApp.(desktop.App); ok {
 		m := fyne.NewMenu("MyApp",
 			fyne.NewMenuItem("Todays Notes", func() {
+				// @TODO: Save first if anything in there
 				mainWindow.Show()
 				// Reload from file
 				x, _ := AppStatus.CurrentZettleDKB.Get()
@@ -166,12 +143,15 @@ func main() {
 			}),
 			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem("Preferences", func() {
+				preferencesWindowSetup()
 				preferencesWindow.Show()
 			}),
 		)
 		desk.SetSystemTrayMenu(m)
+	} else {
+		fmt.Printf("Nerts")
 	}
-
+	fmt.Printf("Running?")
 	thisApp.Run()
 }
 
@@ -459,12 +439,7 @@ func preferencesWindowSetup() {
 	stringDateFormat := "20060102T15:04:05"
 	appPreferences = AppPreferences{}
 	appPreferences.ZettlekastenHome = thisApp.Preferences().StringWithFallback("ZettlekastenHome", os.TempDir())
-	//	appPreferences.RouterUsername = thisApp.Preferences().StringWithFallback("RouterUsername", "")
-	//	appPreferences.RouterPassword = thisApp.Preferences().StringWithFallback("RouterPassword", "")
 	appPreferences.MSPlannerActive = thisApp.Preferences().BoolWithFallback("MSPlannerActive", false)
-	appPreferences.MSAccessToken = thisApp.Preferences().StringWithFallback("MSAccessToken", "")
-	appPreferences.MSRefreshToken = thisApp.Preferences().StringWithFallback("MSRefreshToken", "")
-	appPreferences.MSExpiresAt, _ = time.Parse(stringDateFormat, thisApp.Preferences().StringWithFallback("MSExpiresAt", "20060102T15:04:05"))
 	appPreferences.MSGroups = thisApp.Preferences().StringWithFallback("MSGroups", "")
 	appPreferences.PriorityOverride = thisApp.Preferences().String("PriorityOverride")
 	appPreferences.JiraActive = thisApp.Preferences().BoolWithFallback("JiraActive", false)
@@ -473,28 +448,34 @@ func preferencesWindowSetup() {
 
 	zettlePath := widget.NewEntry()
 	zettlePath.SetText(appPreferences.ZettlekastenHome)
-	//	routerUser := widget.NewEntry()
-	//	routerUser.SetText(appPreferences.RouterUsername)
-	//	routerPass := widget.NewPasswordEntry()
-	//	routerPass.SetText(appPreferences.RouterPassword)
+	// MSPlanner
 	plannerActive := widget.NewCheck("Active", func(res bool) {})
 	plannerActive.SetChecked(appPreferences.MSPlannerActive)
 	accessToken := widget.NewEntry()
-	accessToken.SetText(appPreferences.MSAccessToken)
+	accessToken.SetText(AuthenticationTokens.MS.access_token)
 	refreshToken := widget.NewEntry()
-	refreshToken.SetText(appPreferences.MSRefreshToken)
+	refreshToken.SetText(AuthenticationTokens.MS.refresh_token)
 	expiresAt := widget.NewEntry()
-	expiresAt.SetText(appPreferences.MSExpiresAt.Local().Format(stringDateFormat))
+	expiresAt.SetText(AuthenticationTokens.MS.expiration.Local().Format(stringDateFormat))
 	groupsList := widget.NewEntry()
 	groupsList.SetText(appPreferences.MSGroups)
 	priorityOverride := widget.NewEntry()
 	priorityOverride.SetText(appPreferences.PriorityOverride)
+	// Jira
 	jiraActive := widget.NewCheck("Active", func(res bool) {})
 	jiraActive.SetChecked(appPreferences.JiraActive)
 	jiraKey := widget.NewPasswordEntry()
 	jiraKey.SetText(appPreferences.JiraKey)
 	jiraUsername := widget.NewEntry()
 	jiraUsername.SetText(appPreferences.JiraUsername)
+	// GSM/ Cherwell
+	fmt.Printf("GAT: %s\n", AuthenticationTokens.GSM.access_token)
+	cwAccessToken := widget.NewEntry()
+	cwAccessToken.SetText(AuthenticationTokens.GSM.access_token)
+	cwRefreshToken := widget.NewEntry()
+	cwRefreshToken.SetText(AuthenticationTokens.GSM.refresh_token)
+	cwExpiresAt := widget.NewEntry()
+	cwExpiresAt.SetText(AuthenticationTokens.GSM.expiration.Local().Format(stringDateFormat))
 
 	preferencesWindow.Resize(fyne.NewSize(400, 400))
 	preferencesWindow.Hide()
@@ -503,38 +484,39 @@ func preferencesWindowSetup() {
 		// SavePreferences
 		appPreferences.ZettlekastenHome = zettlePath.Text
 		thisApp.Preferences().SetString("ZettlekastenHome", appPreferences.ZettlekastenHome)
-		//		appPreferences.RouterUsername = routerUser.Text
-		//		thisApp.Preferences().SetString("RouterUsername", appPreferences.RouterUsername)
-		//		appPreferences.RouterPassword = routerPass.Text
-		//		thisApp.Preferences().SetString("RouterPassword", appPreferences.RouterPassword)
-		appPreferences.MSPlannerActive = plannerActive.Checked
-		thisApp.Preferences().SetBool("MSPlannerActive", appPreferences.MSPlannerActive)
-		appPreferences.MSAccessToken = accessToken.Text
-		thisApp.Preferences().SetString("MSAccessToken", appPreferences.MSAccessToken)
-		appPreferences.MSRefreshToken = refreshToken.Text
-		thisApp.Preferences().SetString("MSRefreshToken", appPreferences.MSRefreshToken)
-		appPreferences.MSExpiresAt, _ = time.Parse("20060102T15:04:05", expiresAt.Text)
-		thisApp.Preferences().SetString("MSExpiresAt", appPreferences.MSExpiresAt.Format(stringDateFormat))
-		appPreferences.MSGroups = groupsList.Text
-		thisApp.Preferences().SetString("MSGroups", appPreferences.MSGroups)
 		appPreferences.PriorityOverride = priorityOverride.Text
 		thisApp.Preferences().SetString("PriorityOverride", appPreferences.PriorityOverride)
+
+		appPreferences.MSPlannerActive = plannerActive.Checked
+		thisApp.Preferences().SetBool("MSPlannerActive", appPreferences.MSPlannerActive)
+		AuthenticationTokens.MS.access_token = accessToken.Text
+		AuthenticationTokens.MS.refresh_token = refreshToken.Text
+		AuthenticationTokens.MS.expiration, _ = time.Parse("20060102T15:04:05", expiresAt.Text)
+		appPreferences.MSGroups = groupsList.Text
+		thisApp.Preferences().SetString("MSGroups", appPreferences.MSGroups)
+
 		appPreferences.JiraActive = jiraActive.Checked
 		thisApp.Preferences().SetBool("JiraActive", appPreferences.JiraActive)
 		appPreferences.JiraKey = jiraKey.Text
 		thisApp.Preferences().SetString("JiraKey", appPreferences.JiraKey)
 		appPreferences.JiraUsername = jiraUsername.Text
 		thisApp.Preferences().SetString("JiraUsername", appPreferences.JiraUsername)
+
+		AuthenticationTokens.GSM.access_token = cwAccessToken.Text
+		AuthenticationTokens.GSM.refresh_token = cwRefreshToken.Text
+		AuthenticationTokens.GSM.expiration, _ = time.Parse("20060102T15:04:05", cwExpiresAt.Text)
 	})
 	preferencesWindow.SetContent(
 		container.New(
 			layout.NewFormLayout(),
+			widget.NewLabel(""),
+			widget.NewLabelWithStyle("Paths", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 			widget.NewLabel("Zettlekasten Path"),
 			zettlePath,
-			//			widget.NewLabel("Username"),
-			//			routerUser,
-			//			widget.NewLabel("Password"),
-			//			routerPass,
+			widget.NewLabel("Priority-override file"),
+			priorityOverride,
+			widget.NewLabel(""),
+			widget.NewLabelWithStyle("Planner", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 			widget.NewLabel("Planner active"),
 			plannerActive,
 			widget.NewLabel("MS Access Token"),
@@ -543,14 +525,22 @@ func preferencesWindowSetup() {
 			refreshToken,
 			widget.NewLabel("MS Expires At"),
 			expiresAt,
-			widget.NewLabel("Store priorities"),
-			priorityOverride,
+			widget.NewLabel(""),
+			widget.NewLabelWithStyle("JIRA", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 			widget.NewLabel("Jira active"),
 			jiraActive,
 			widget.NewLabel("Jira Key"),
 			jiraKey,
 			widget.NewLabel("Jira Username"),
 			jiraUsername,
+			widget.NewLabel(""),
+			widget.NewLabelWithStyle("GSM", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			widget.NewLabel("CW Access Token"),
+			cwAccessToken,
+			widget.NewLabel("CW Refresh Token"),
+			cwRefreshToken,
+			widget.NewLabel("CW Expires At"),
+			cwExpiresAt,
 		),
 	)
 }
@@ -822,7 +812,7 @@ func activeTaskStatusUpdate(by int) {
 func taskWindowRefresh(specific string) {
 	var list fyne.CanvasObject
 
-	fmt.Printf("Refreshing\n")
+	fmt.Printf("Refreshing %s\n", specific)
 	priorityIcons := setupPriorityIcons()
 	if specific == "" || specific == "CWTasks" {
 		if len(AppStatus.MyTasksFromGSM) == 0 {
@@ -836,6 +826,7 @@ func taskWindowRefresh(specific string) {
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 
 			for _, x := range AppStatus.MyTasksFromGSM {
+				fmt.Printf("Task: %v\n", x)
 				thisID := x[1]
 				myPriority := x[6]
 				if len(x) >= 8 && x[6] != x[7] {
@@ -881,6 +872,7 @@ func taskWindowRefresh(specific string) {
 						taskWindow,
 					)
 				}
+				fmt.Printf("%s|%v\n", myPriority, priorityIcons)
 				col4.Objects = append(col4.Objects, container.NewMax(
 					priorityIcons[x[6]],
 					newTappableLabelWithStyle(

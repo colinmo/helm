@@ -17,6 +17,8 @@ import (
 
 // @todo: Use Golang parallelism to refresh a token in the background, leaving a message/ action in its wake to resolve before processing a request
 //        Or, record pending requests and then access them again once a refresh is complete.
+//        OR have a message based process for handling requests for information from the remote client that handles all the authentication etc. by itself
+//        So requests for refresh are sent to this parallel process via a message queue, and it processes them individually and in order.
 
 type Tokens struct {
 	GSM struct {

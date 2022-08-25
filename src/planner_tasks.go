@@ -53,12 +53,13 @@ func authenticateToMS(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	if query.Get("code") != "" {
 		payload := url.Values{
-			"client_id":     {msApplicationClientId},
-			"scope":         {msScopes},
-			"code":          {query.Get("code")},
-			"redirect_uri":  {"http://localhost:84/ms"},
-			"grant_type":    {"authorization_code"},
-			"client_secret": {msApplicationSecret},
+			"client_id":           {msApplicationClientId},
+			"scope":               {msScopes},
+			"code":                {query.Get("code")},
+			"redirect_uri":        {"http://localhost:84/ms"},
+			"grant_type":          {"authorization_code"},
+			"client_secret":       {msApplicationSecret},
+			"requested_token_use": {"on_behalf_of"},
 		}
 		resp, err := http.PostForm(
 			fmt.Sprintf(`https://login.microsoftonline.com/%s/oauth2/v2.0/token`,
@@ -97,7 +98,7 @@ func refreshMS() {
 	payload := url.Values{
 		"client_id":     {msApplicationClientId},
 		"scope":         {msScopes},
-		"refresh_token": {appPreferences.MSRefreshToken},
+		"refresh_token": {AuthenticationTokens.MS.refresh_token},
 		"redirect_uri":  {"http://localhost:84/ms"},
 		"grant_type":    {"refresh_token"},
 		"client_secret": {msApplicationSecret},
@@ -196,7 +197,6 @@ func DownloadPlanners() {
 			}
 			return AppStatus.MyTasksFromPlanner[i][7] < AppStatus.MyTasksFromPlanner[j][7]
 		})
-		taskWindowRefresh("MSPlanner")
 	}
 }
 
