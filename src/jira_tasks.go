@@ -39,6 +39,7 @@ func GetJira() {
 		activeTaskStatusUpdate(1)
 		defer activeTaskStatusUpdate(-1)
 		AppStatus.MyTasksFromJira = [][]string{}
+		connectionStatusBox(true, "J")
 		var jiraResponse JiraResponseType
 		baseQuery := "jql=assignee=currentuser()+and+status+not+in+(Done)+order+by+priority,+created+asc&fields=status,summary,created,priority&orderBy=priority,created"
 		queryToCall := fmt.Sprintf("%s&startAt=0", baseQuery)

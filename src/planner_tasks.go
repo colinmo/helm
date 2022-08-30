@@ -78,8 +78,10 @@ func authenticateToMS(w http.ResponseWriter, r *http.Request) {
 			AuthenticationTokens.MS.refresh_token = MSToken.RefreshToken
 			seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", MSToken.ExpiresIn))
 			AuthenticationTokens.MS.expiration = time.Now().Add(seconds)
+			connectionStatusBox(true, "M")
 			AppStatus.MSGettingToken = false
-			GetPlanner()
+			DownloadPlanners()
+			taskWindowRefresh("MSPlanner")
 		}
 	} else {
 		// Redirect to Cherwell AUTH
@@ -147,6 +149,8 @@ type PlanGraphResponse struct {
 	Title string `json:"title"`
 }
 
+var MSPlannerPlanTitles = map[string]string{}
+
 func DownloadPlanners() {
 	if GetPlanner() {
 		activeTaskStatusUpdate(1)
@@ -165,19 +169,24 @@ func DownloadPlanners() {
 
 				for _, y := range teamResponse.Value {
 					if y.PercentComplete < 100 {
+						row := []string{
+							y.TaskID,
+							y.PlanID,
+							y.BucketID,
+							y.Title,
+							y.OrderHint,
+							y.CreatedDateTime,
+							teamPriorityToGSMPriority(y.Priority),
+							TruncateShort(y.Details.Description, 60),
+							fmt.Sprintf("%d", y.PercentComplete),
+							teamPriorityToGSMPriority(y.Priority),
+						}
+						if val, ok := priorityOverrides.MSPlanner[row[0]]; ok {
+							row[6] = val
+						}
 						AppStatus.MyTasksFromPlanner = append(
 							AppStatus.MyTasksFromPlanner,
-							[]string{
-								y.TaskID,
-								y.PlanID,
-								y.BucketID,
-								y.Title,
-								y.OrderHint,
-								y.CreatedDateTime,
-								teamPriorityToGSMPriority(y.Priority),
-								TruncateShort(y.Details.Description, 60),
-								fmt.Sprintf("%d", y.PercentComplete),
-							},
+							row,
 						)
 						uniquePlans[y.PlanID] = append(uniquePlans[y.PlanID], len(AppStatus.MyTasksFromPlanner)-1)
 					}
@@ -198,23 +207,26 @@ func DownloadPlanners() {
 		}
 		// Get the Plan names
 		for id, members := range uniquePlans {
-			r, err := callGraphURI("GET", "planner/plans/"+id, []byte{}, "")
-			if err == nil {
-				defer r.Close()
-				var planResponse PlanGraphResponse
-				_ = json.NewDecoder(r).Decode(&planResponse)
-				for _, index := range members {
-					AppStatus.MyTasksFromPlanner[index][3] = fmt.Sprintf("[%s]: %s", planResponse.Title, AppStatus.MyTasksFromPlanner[index][3])
+			if _, ok := MSPlannerPlanTitles[id]; !ok {
+				r, err := callGraphURI("GET", "planner/plans/"+id, []byte{}, "")
+				if err == nil {
+					defer r.Close()
+					var planResponse PlanGraphResponse
+					_ = json.NewDecoder(r).Decode(&planResponse)
+					MSPlannerPlanTitles[id] = planResponse.Title
 				}
+			}
+			for _, index := range members {
+				AppStatus.MyTasksFromPlanner[index][3] = fmt.Sprintf("[%s]: %s", MSPlannerPlanTitles[id], AppStatus.MyTasksFromPlanner[index][3])
 			}
 		}
 
 		// sort
 		sort.SliceStable(AppStatus.MyTasksFromPlanner, func(i, j int) bool {
-			if AppStatus.MyTasksFromPlanner[i][7] == AppStatus.MyTasksFromPlanner[j][7] {
-				return AppStatus.MyTasksFromPlanner[i][5] < AppStatus.MyTasksFromPlanner[j][5]
+			if AppStatus.MyTasksFromPlanner[i][6] == AppStatus.MyTasksFromPlanner[j][6] {
+				return AppStatus.MyTasksFromPlanner[i][5] > AppStatus.MyTasksFromPlanner[j][5]
 			}
-			return AppStatus.MyTasksFromPlanner[i][7] < AppStatus.MyTasksFromPlanner[j][7]
+			return AppStatus.MyTasksFromPlanner[i][6] < AppStatus.MyTasksFromPlanner[j][6]
 		})
 	}
 }

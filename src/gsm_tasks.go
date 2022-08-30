@@ -46,7 +46,6 @@ func singleThreadReturnOrGetGSMAccessToken() {
 		}
 		for {
 			if AuthenticationTokens.GSM.access_token != "" &&
-				AuthenticationTokens.GSM.cherwelluser != "" &&
 				!AppStatus.GSMGettingToken {
 				break
 			}
@@ -475,12 +474,10 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 		ticket := r.PostFormValue("ticket")
 		if len(ticket) > 0 {
 			payload := url.Values{
-				"grant_type":    {"password"},
-				"client_id":     {"814f9a74-c86a-451e-b6bb-deea65acf72a"},
-				"username":      {r.PostFormValue("userId")},
-				"password":      {ticket},
-				"refresh_token": {""},
-				"site_name":     {""},
+				"grant_type": {"password"},
+				"client_id":  {"814f9a74-c86a-451e-b6bb-deea65acf72a"},
+				"username":   {r.PostFormValue("userId")},
+				"password":   {ticket},
 			}
 			targetURL, _ := url.JoinPath(GSMBaseUrl, "token")
 			targetURL += "?auth_mode=SAML"
@@ -491,12 +488,12 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				log.Fatalf("Login failed %s\n", err)
 			} else {
+				fmt.Printf("Getting token active\n")
+				AppStatus.GSMGettingToken = true
 				json.NewDecoder(resp.Body).Decode(&CherwellToken)
 				if len(CherwellToken.Error) > 0 {
 					log.Fatalf("Failed 1 %s\n", CherwellToken.ErrorDescription)
 				}
-				fmt.Printf("Getting token\n")
-				AppStatus.GSMGettingToken = true
 				AuthenticationTokens.GSM.access_token = CherwellToken.AccessToken
 				AuthenticationTokens.GSM.refresh_token = CherwellToken.RefreshToken
 				AuthenticationTokens.GSM.userid = CherwellToken.Username
@@ -507,6 +504,7 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				}
 				var decodedResponse CherwellSearchResponse
 				// Get my UserID in Cherwell
+				fmt.Printf("Getting my user id")
 				r, _ := SearchCherwellFor(GSMSearchQuery{
 					Filters: []GSMFilter{
 						{FieldId: "941798910e24d4b1ae3c6a408cb3f8c5eba26e2b2b", Operator: "eq", Value: AuthenticationTokens.GSM.userid},
@@ -518,12 +516,13 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				_ = json.NewDecoder(r).Decode(&decodedResponse)
 				AuthenticationTokens.GSM.cherwelluser = decodedResponse.BusinessObjects[0].BusObRecId
 				AuthenticationTokens.GSM.myteam = decodedResponse.BusinessObjects[0].Fields[1].Value
+				connectionStatusBox(true, "G")
+				AppStatus.GSMGettingToken = false
 				fmt.Printf("Token got\n")
 				w.Header().Add("Content-type", "text/html")
 				fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.</body></html>")
 				fmt.Printf("Authenticated, time to refresh\n")
 				activeTaskStatusUpdate(-1)
-				AppStatus.GSMGettingToken = false
 
 			}
 		}

@@ -59,7 +59,6 @@ var AuthenticationTokens = Tokens{
 func GetAllTasks() {
 	GetGSM()
 	if appPreferences.MSPlannerActive {
-		GetPlanner()
 		DownloadPlanners()
 		taskWindowRefresh("MSPlanner")
 	}
