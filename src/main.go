@@ -35,11 +35,13 @@ import (
 /**
 * This is a systray item for:
 *   - Markdown Daily status
-*   - Internet Parent control
+*   - Jira/ MS/ Cherwell job visibility
 **/
 
-// @todo - Sorting
+// @todo - Sorting or remove buttons
 // @todo - Replace the returned Task results with a named Struct instead of array
+// @todo - Don't auto-refresh anything that doesn't have a back-end refresh via RefreshTokens.
+//         Just set the status to Offline and give user the ability to click it to reconnect.
 
 type AppStatusStruct struct {
 	CurrentZettleDBDate    time.Time

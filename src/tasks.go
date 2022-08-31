@@ -56,6 +56,16 @@ var AuthenticationTokens = Tokens{
 	},
 }
 
+type TaskResponseStruct struct {
+	ID              string
+	Title           string
+	ParentTitle     string
+	ParentID        string
+	CreatedDateTime time.Time
+	Priority        string
+	Status          string
+}
+
 func GetAllTasks() {
 	GetGSM()
 	if appPreferences.MSPlannerActive {

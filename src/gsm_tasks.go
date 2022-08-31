@@ -523,7 +523,6 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.</body></html>")
 				fmt.Printf("Authenticated, time to refresh\n")
 				activeTaskStatusUpdate(-1)
-
 			}
 		}
 	} else {
