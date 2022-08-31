@@ -893,7 +893,7 @@ func taskWindowRefresh(specific string) {
 				thisTask := x.Title
 				myPriority := x.PriorityOverride
 				if x.Priority != x.PriorityOverride {
-					myPriority = fmt.Sprintf("%s (%s)", x.PriorityOverride, x.Priority)
+					myPriority = fmt.Sprintf("%s(%s)", x.PriorityOverride, x.Priority)
 				}
 				tempVar := ""
 				col0.Objects = append(
@@ -1196,7 +1196,7 @@ func taskWindowRefresh(specific string) {
 				thisID := x.ID
 				myPriority := x.PriorityOverride
 				if x.Priority != x.PriorityOverride {
-					myPriority = fmt.Sprintf("%s (%s)", x.PriorityOverride, x.Priority)
+					myPriority = fmt.Sprintf("%s(%s)", x.PriorityOverride, x.Priority)
 				}
 				tempVar := ""
 				col0.Objects = append(
