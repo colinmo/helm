@@ -618,9 +618,9 @@ func taskWindowSetup() {
 	taskWindow.Hide()
 	taskStatusWidget := widget.NewLabelWithData(AppStatus.TaskTaskStatus)
 	connectionStatusContainer = container.NewGridWithColumns(3)
-	connectionStatusBox(false, "G1")
-	connectionStatusBox(false, "M1")
-	connectionStatusBox(false, "J1")
+	connectionStatusBox(false, "G")
+	connectionStatusBox(false, "M")
+	connectionStatusBox(false, "J")
 	connectionStatusContainer = container.NewHBox(
 		gsmConnectionActive,
 		widget.NewSeparator(),
