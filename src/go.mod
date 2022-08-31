@@ -5,13 +5,11 @@ go 1.18
 require (
 	fyne.io/fyne/v2 v2.2.3
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
-	github.com/tebeka/selenium v0.9.9
 	github.com/yuin/goldmark v1.4.13
 )
 
 require (
 	fyne.io/systray v1.10.1-0.20220621085403-9a2652634e93 // indirect
-	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fredbi/uri v0.0.0-20181227131451-3dcfdacbaaf3 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
@@ -29,7 +27,6 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220615024203-67b7089efd25 // indirect
 	github.com/stretchr/testify v1.8.0 // indirect
 	github.com/tevino/abool v1.2.0 // indirect
-	github.com/webview/webview v0.0.0-20220816141928-2ee04ccd0530 // indirect
 	golang.org/x/image v0.0.0-20220617043117-41969df76e82 // indirect
 	golang.org/x/mobile v0.0.0-20220518205345-8578da9835fd // indirect
 	golang.org/x/net v0.0.0-20220708220712-1185a9018129 // indirect

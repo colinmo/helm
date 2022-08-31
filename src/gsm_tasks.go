@@ -82,22 +82,48 @@ func GetGSM() {
 	}()
 }
 
+/*
+	Task: CWFieldIDSTask{
+		OwnerID:           "93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf",
+		CreatedDateTime:   "9355d5ed416bbc9408615c4145978ff8538a3f6eb4",
+		TaskTitle:         "93ad98a2d68a61778eda3d4d9cbb30acbfd458aea4",
+		TaskStatus:        "9368f0fb7b744108a666984c21afc932562eb7dc16",
+		TaskID:            "93d5409c4bcbf7a38ed75a47dd92671f374236fa32",
+		IncidentID:        "BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
+		IncidentShortDesc: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
+		IncidentPriority:  "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
+	},
+*/
 func DownloadTasks() {
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
-	AppStatus.MyTasksFromGSM = [][]string{}
+	AppStatus.MyTasksFromGSM = []TaskResponseStruct{}
 	for page := 1; page < 200; page++ {
 		tasksResponse, _ := GetMyTasksFromGSMForPage(page)
 		if len(tasksResponse.BusinessObjects) > 0 {
 			for _, x := range tasksResponse.BusinessObjects {
-				row := []string{}
-				for _, y := range x.Fields {
-					row = append(row, y.Value)
+				row := TaskResponseStruct{
+					ID: x.BusObPublicId,
 				}
-				if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
-					orig := len(row) - 1
-					row = append(row, row[orig])
-					row[orig] = val
+				for _, y := range x.Fields {
+					switch y.FieldId {
+					case CWFields.Task.TaskStatus:
+						row.Status = y.Value
+					case CWFields.Task.TaskTitle:
+						row.Title = y.Value
+					case CWFields.Task.IncidentShortDesc:
+						row.ParentTitle = y.Value
+					case CWFields.Task.IncidentID:
+						row.ParentID = y.Value
+					case CWFields.Task.CreatedDateTime:
+						row.CreatedDateTime, _ = time.Parse("1/2/2006 3:04:05 PM", y.Value)
+					case CWFields.Task.IncidentPriority:
+						row.Priority = y.Value
+						row.PriorityOverride = y.Value
+					}
+				}
+				if val, ok := priorityOverrides.CWIncidents[row.ID]; ok {
+					row.PriorityOverride = val
 				}
 				AppStatus.MyTasksFromGSM = append(AppStatus.MyTasksFromGSM, row)
 			}
@@ -112,10 +138,10 @@ func DownloadTasks() {
 		AppStatus.MyTasksFromGSM,
 		func(i, j int) bool {
 			var toReturn bool
-			if AppStatus.MyTasksFromGSM[i][6] == AppStatus.MyTasksFromGSM[j][6] {
-				toReturn = AppStatus.MyTasksFromGSM[i][0] < AppStatus.MyTasksFromGSM[j][0]
+			if AppStatus.MyTasksFromGSM[i].PriorityOverride == AppStatus.MyTasksFromGSM[j].PriorityOverride {
+				toReturn = AppStatus.MyTasksFromGSM[i].CreatedDateTime.Before(AppStatus.MyTasksFromGSM[j].CreatedDateTime)
 			} else {
-				toReturn = AppStatus.MyTasksFromGSM[i][6] < AppStatus.MyTasksFromGSM[j][6]
+				toReturn = AppStatus.MyTasksFromGSM[i].PriorityOverride < AppStatus.MyTasksFromGSM[j].PriorityOverride
 			}
 			return toReturn
 		},
@@ -125,19 +151,29 @@ func DownloadTasks() {
 func DownloadIncidents() {
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
-	AppStatus.MyIncidentsFromGSM = [][]string{}
+	AppStatus.MyIncidentsFromGSM = []TaskResponseStruct{}
 	for page := 1; page < 200; page++ {
 		tasksResponse, _ := GetMyIncidentsFromGSMForPage(page)
 		if len(tasksResponse.BusinessObjects) > 0 {
 			for _, x := range tasksResponse.BusinessObjects {
-				row := []string{}
-				for _, y := range x.Fields {
-					row = append(row, y.Value)
+				row := TaskResponseStruct{
+					ID: x.BusObPublicId,
 				}
-				lastIndex := len(row) - 1
-				row = append(row, row[lastIndex])
-				if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
-					row[lastIndex] = val
+				for _, y := range x.Fields {
+					switch y.FieldId {
+					case CWFields.Incident.Status:
+						row.Status = y.Value
+					case CWFields.Incident.ShortDesc:
+						row.Title = y.Value
+					case CWFields.Incident.CreatedDateTime:
+						row.CreatedDateTime, _ = time.Parse("1/2/2006 3:04:05 PM", y.Value)
+					case CWFields.Incident.Priority:
+						row.Priority = y.Value
+						row.PriorityOverride = y.Value
+					}
+				}
+				if val, ok := priorityOverrides.CWIncidents[row.ID]; ok {
+					row.PriorityOverride = val
 				}
 				AppStatus.MyIncidentsFromGSM = append(AppStatus.MyIncidentsFromGSM, row)
 			}
@@ -151,19 +187,29 @@ func DownloadIncidents() {
 func DownloadMyRequests() {
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
-	AppStatus.MyRequestsInGSM = [][]string{}
+	AppStatus.MyRequestsInGSM = []TaskResponseStruct{}
 	for page := 1; page < 200; page++ {
 		tasksResponse, _ := GetMyRequestsInGSMForPage(page)
 		if len(tasksResponse.BusinessObjects) > 0 {
 			for _, x := range tasksResponse.BusinessObjects {
-				row := []string{}
-				for _, y := range x.Fields {
-					row = append(row, y.Value)
+				row := TaskResponseStruct{
+					ID: x.BusObPublicId,
 				}
-				lastIndex := len(row) - 1
-				row = append(row, row[lastIndex])
-				if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
-					row[lastIndex] = val
+				for _, y := range x.Fields {
+					switch y.FieldId {
+					case CWFields.Incident.Status:
+						row.Status = y.Value
+					case CWFields.Incident.ShortDesc:
+						row.Title = y.Value
+					case CWFields.Incident.CreatedDateTime:
+						row.CreatedDateTime, _ = time.Parse("1/2/2006 3:04:05 PM", y.Value)
+					case CWFields.Incident.Priority:
+						row.Priority = y.Value
+						row.PriorityOverride = y.Value
+					}
+				}
+				if val, ok := priorityOverrides.CWIncidents[row.ID]; ok {
+					row.PriorityOverride = val
 				}
 				AppStatus.MyRequestsInGSM = append(AppStatus.MyRequestsInGSM, row)
 			}
@@ -177,7 +223,7 @@ func DownloadMyRequests() {
 func DownloadTeam() {
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
-	AppStatus.MyTeamIncidentsFromGSM = [][]string{}
+	AppStatus.MyTeamIncidentsFromGSM = []TaskResponseStruct{}
 	for page := 1; page < 200; page++ {
 		tasksResponse, _ := GetMyTeamIncidentsInGSMForPage(page)
 		if len(tasksResponse.BusinessObjects) > 0 {
@@ -185,14 +231,26 @@ func DownloadTeam() {
 				if x.Fields[6].Value == AuthenticationTokens.GSM.cherwelluser {
 					continue
 				}
-				row := []string{}
-				for _, y := range x.Fields {
-					row = append(row, y.Value)
+				row := TaskResponseStruct{
+					ID: x.BusObPublicId,
 				}
-				lastIndex := len(row) - 1
-				row = append(row, row[lastIndex])
-				if val, ok := priorityOverrides.CWIncidents[row[1]]; ok {
-					row[lastIndex] = val
+				for _, y := range x.Fields {
+					switch y.FieldId {
+					case CWFields.Incident.Status:
+						row.Status = y.Value
+					case CWFields.Incident.ShortDesc:
+						row.Title = y.Value
+					case CWFields.Incident.CreatedDateTime:
+						row.CreatedDateTime, _ = time.Parse("1/2/2006 3:04:05 PM", y.Value)
+					case CWFields.Incident.Priority:
+						row.Priority = y.Value
+						row.PriorityOverride = y.Value
+					case CWFields.Incident.OwnerName:
+						row.Owner = y.Value
+					}
+				}
+				if val, ok := priorityOverrides.CWIncidents[row.ID]; ok {
+					row.PriorityOverride = val
 				}
 				AppStatus.MyTeamIncidentsFromGSM = append(AppStatus.MyTeamIncidentsFromGSM, row)
 			}

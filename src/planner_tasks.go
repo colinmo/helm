@@ -157,7 +157,7 @@ func DownloadPlanners() {
 		defer activeTaskStatusUpdate(-1)
 
 		// * @todo Add Sort
-		AppStatus.MyTasksFromPlanner = [][]string{}
+		AppStatus.MyTasksFromPlanner = []TaskResponseStruct{}
 		uniquePlans := map[string][]int{}
 		var teamResponse myTasksGraphResponse
 		urlToCall := "/me/planner/tasks"
@@ -169,20 +169,23 @@ func DownloadPlanners() {
 
 				for _, y := range teamResponse.Value {
 					if y.PercentComplete < 100 {
-						row := []string{
-							y.TaskID,
-							y.PlanID,
-							y.BucketID,
-							y.Title,
-							y.OrderHint,
-							y.CreatedDateTime,
-							teamPriorityToGSMPriority(y.Priority),
-							TruncateShort(y.Details.Description, 60),
-							fmt.Sprintf("%d", y.PercentComplete),
-							teamPriorityToGSMPriority(y.Priority),
+						row := TaskResponseStruct{
+							ID:               y.TaskID,
+							ParentID:         y.PlanID,
+							Title:            y.Title,
+							Priority:         teamPriorityToGSMPriority(y.Priority),
+							PriorityOverride: teamPriorityToGSMPriority(y.Priority),
+							// TruncateShort(y.Details.Description, 60),
 						}
-						if val, ok := priorityOverrides.MSPlanner[row[0]]; ok {
-							row[6] = val
+						row.CreatedDateTime, _ = time.Parse("2006-01-02T15:04:05.999999999Z", y.CreatedDateTime)
+						switch row.Status {
+						case "0":
+							row.Status = "Not started(0)"
+						case "50":
+							row.Status = "In progress (50)"
+						}
+						if val, ok := priorityOverrides.MSPlanner[row.ID]; ok {
+							row.PriorityOverride = val
 						}
 						AppStatus.MyTasksFromPlanner = append(
 							AppStatus.MyTasksFromPlanner,
@@ -217,16 +220,16 @@ func DownloadPlanners() {
 				}
 			}
 			for _, index := range members {
-				AppStatus.MyTasksFromPlanner[index][3] = fmt.Sprintf("[%s]: %s", MSPlannerPlanTitles[id], AppStatus.MyTasksFromPlanner[index][3])
+				AppStatus.MyTasksFromPlanner[index].Title = fmt.Sprintf("[%s]: %s", MSPlannerPlanTitles[id], AppStatus.MyTasksFromPlanner[index].Title)
 			}
 		}
 
 		// sort
 		sort.SliceStable(AppStatus.MyTasksFromPlanner, func(i, j int) bool {
-			if AppStatus.MyTasksFromPlanner[i][6] == AppStatus.MyTasksFromPlanner[j][6] {
-				return AppStatus.MyTasksFromPlanner[i][5] > AppStatus.MyTasksFromPlanner[j][5]
+			if AppStatus.MyTasksFromPlanner[i].PriorityOverride == AppStatus.MyTasksFromPlanner[j].PriorityOverride {
+				return AppStatus.MyTasksFromPlanner[i].CreatedDateTime.Before(AppStatus.MyTasksFromPlanner[j].CreatedDateTime)
 			}
-			return AppStatus.MyTasksFromPlanner[i][6] < AppStatus.MyTasksFromPlanner[j][6]
+			return AppStatus.MyTasksFromPlanner[i].PriorityOverride < AppStatus.MyTasksFromPlanner[j].PriorityOverride
 		})
 	}
 }

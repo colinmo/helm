@@ -38,7 +38,7 @@ func GetJira() {
 	if appPreferences.JiraActive && appPreferences.JiraKey > "" {
 		activeTaskStatusUpdate(1)
 		defer activeTaskStatusUpdate(-1)
-		AppStatus.MyTasksFromJira = [][]string{}
+		AppStatus.MyTasksFromJira = []TaskResponseStruct{}
 		connectionStatusBox(true, "J")
 		var jiraResponse JiraResponseType
 		baseQuery := "jql=assignee=currentuser()+and+status+not+in+(Done)+order+by+priority,+created+asc&fields=status,summary,created,priority&orderBy=priority,created"
@@ -50,14 +50,16 @@ func GetJira() {
 				_ = json.NewDecoder(r).Decode(&jiraResponse)
 
 				for _, y := range jiraResponse.Issues {
+					dt, _ := time.Parse("2006-01-02T15:04:05.999-0700", y.Fields.CreatedDateTime)
 					AppStatus.MyTasksFromJira = append(
 						AppStatus.MyTasksFromJira,
-						[]string{
-							y.Key,
-							TruncateShort(y.Fields.Summary, 60),
-							y.Fields.CreatedDateTime,
-							jiraPriorityToGSMPriority(y.Fields.Priority.Name),
-							y.Fields.Status.Name,
+						TaskResponseStruct{
+							ID:               y.Key,
+							Title:            TruncateShort(y.Fields.Summary, 60),
+							CreatedDateTime:  dt,
+							Priority:         jiraPriorityToGSMPriority(y.Fields.Priority.Name),
+							Status:           y.Fields.Status.Name,
+							PriorityOverride: jiraPriorityToGSMPriority(y.Fields.Priority.Name),
 						},
 					)
 				}
@@ -72,10 +74,10 @@ func GetJira() {
 		}
 		// sort
 		sort.SliceStable(AppStatus.MyTasksFromPlanner, func(i, j int) bool {
-			if AppStatus.MyTasksFromPlanner[i][3] == AppStatus.MyTasksFromPlanner[j][3] {
-				return AppStatus.MyTasksFromPlanner[i][2] < AppStatus.MyTasksFromPlanner[j][2]
+			if AppStatus.MyTasksFromPlanner[i].PriorityOverride == AppStatus.MyTasksFromPlanner[j].PriorityOverride {
+				return AppStatus.MyTasksFromPlanner[i].CreatedDateTime.Before(AppStatus.MyTasksFromPlanner[j].CreatedDateTime)
 			}
-			return AppStatus.MyTasksFromPlanner[i][3] < AppStatus.MyTasksFromPlanner[j][3]
+			return AppStatus.MyTasksFromPlanner[i].PriorityOverride < AppStatus.MyTasksFromPlanner[j].PriorityOverride
 		})
 		taskWindowRefresh("Jira")
 	}

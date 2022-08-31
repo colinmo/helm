@@ -57,13 +57,15 @@ var AuthenticationTokens = Tokens{
 }
 
 type TaskResponseStruct struct {
-	ID              string
-	Title           string
-	ParentTitle     string
-	ParentID        string
-	CreatedDateTime time.Time
-	Priority        string
-	Status          string
+	ID               string
+	Title            string
+	ParentTitle      string
+	ParentID         string
+	CreatedDateTime  time.Time
+	Priority         string
+	Status           string
+	PriorityOverride string
+	Owner            string
 }
 
 func GetAllTasks() {

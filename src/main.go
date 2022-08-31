@@ -39,7 +39,6 @@ import (
 **/
 
 // @todo - Sorting or remove buttons
-// @todo - Replace the returned Task results with a named Struct instead of array
 // @todo - Don't auto-refresh anything that doesn't have a back-end refresh via RefreshTokens.
 //         Just set the status to Offline and give user the ability to click it to reconnect.
 
@@ -48,14 +47,14 @@ type AppStatusStruct struct {
 	CurrentZettleDKB       binding.String
 	GSMGettingToken        bool
 	MSGettingToken         bool
-	MyTasksFromGSM         [][]string
-	MyIncidentsFromGSM     [][]string
-	MyRequestsInGSM        [][]string
-	MyTeamIncidentsFromGSM [][]string
+	MyTasksFromGSM         []TaskResponseStruct
+	MyIncidentsFromGSM     []TaskResponseStruct
+	MyRequestsInGSM        []TaskResponseStruct
+	MyTeamIncidentsFromGSM []TaskResponseStruct
 	TaskTaskCount          int
 	TaskTaskStatus         binding.String
-	MyTasksFromPlanner     [][]string
-	MyTasksFromJira        [][]string
+	MyTasksFromPlanner     []TaskResponseStruct
+	MyTasksFromJira        []TaskResponseStruct
 }
 
 type AppPreferences struct {
@@ -890,11 +889,11 @@ func taskWindowRefresh(specific string) {
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 
 			for _, x := range AppStatus.MyTasksFromGSM {
-				thisID := x[1]
-				thisTask := x[5]
-				myPriority := x[6]
-				if len(x) >= 8 && x[6] != x[7] {
-					myPriority = x[6] + "(" + x[7] + ")"
+				thisID := x.ID
+				thisTask := x.Title
+				myPriority := x.PriorityOverride
+				if x.Priority != x.PriorityOverride {
+					myPriority = fmt.Sprintf("%s (%s)", x.PriorityOverride, x.Priority)
 				}
 				tempVar := ""
 				col0.Objects = append(
@@ -906,18 +905,17 @@ func taskWindowRefresh(specific string) {
 						}),
 					))
 				col1.Objects = append(col1.Objects,
-					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x.ParentID, x.ParentTitle), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 				col2.Objects = append(
 					col2.Objects,
 					newTappableLabel(
-						fmt.Sprintf("[%s] %s", x[5], x[3]),
+						fmt.Sprintf("[%s] %s", x.ID, x.Title),
 						func(_ *fyne.PointEvent) {
 							browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/task/" + thisTask)
 						},
 					),
 				)
-				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
-				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
 				tempFunc := func(_ *fyne.PointEvent) {
 					dialog.ShowForm(
 						"Priority override "+thisID,
@@ -934,7 +932,7 @@ func taskWindowRefresh(specific string) {
 								)),
 						},
 						func(isit bool) {
-							if tempVar == x[6] || tempVar == "" {
+							if tempVar == x.Priority || tempVar == "" {
 								delete(priorityOverrides.CWIncidents, thisID)
 							} else {
 								priorityOverrides.CWIncidents[thisID] = tempVar
@@ -945,13 +943,13 @@ func taskWindowRefresh(specific string) {
 					)
 				}
 				col4.Objects = append(col4.Objects, container.NewMax(
-					getPriorityIconFor(x[6], priorityIcons),
+					getPriorityIconFor(x.PriorityOverride, priorityIcons),
 					newTappableLabelWithStyle(
 						myPriority,
 						fyne.TextAlignCenter,
 						fyne.TextStyle{},
 						tempFunc)))
-				col5.Objects = append(col5.Objects, widget.NewLabel(x[4]))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
 			}
 			list = container.NewVScroll(
 				container.NewHBox(
@@ -1000,7 +998,7 @@ func taskWindowRefresh(specific string) {
 			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 			for _, x := range AppStatus.MyIncidentsFromGSM {
-				thisID := x[1]
+				thisID := x.ID
 				col0.Objects = append(
 					col0.Objects,
 					container.NewMax(
@@ -1010,13 +1008,12 @@ func taskWindowRefresh(specific string) {
 						}),
 					))
 				col1.Objects = append(col1.Objects,
-					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
-				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x.ID, x.Title), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
 				col4.Objects = append(col4.Objects, container.NewMax(
-					getPriorityIconFor(x[4], priorityIcons),
-					widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
-				col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
+					getPriorityIconFor(x.PriorityOverride, priorityIcons),
+					widget.NewLabelWithStyle(x.PriorityOverride, fyne.TextAlignCenter, fyne.TextStyle{})))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
 			}
 			list2 = container.NewVScroll(
 				container.NewHBox(
@@ -1065,7 +1062,7 @@ func taskWindowRefresh(specific string) {
 			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 			for _, x := range AppStatus.MyTeamIncidentsFromGSM {
-				thisID := x[1]
+				thisID := x.ID
 				col0.Objects = append(
 					col0.Objects,
 					container.NewMax(
@@ -1074,19 +1071,14 @@ func taskWindowRefresh(specific string) {
 							browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
 						}),
 					))
-				if len(x) > 5 {
-					col2.Objects = append(col2.Objects, widget.NewLabel(x[5]))
-				} else {
-					col2.Objects = append(col2.Objects, widget.NewLabel("none"))
-				}
+				col2.Objects = append(col2.Objects, widget.NewLabel(x.Owner))
 				col1.Objects = append(col1.Objects,
-					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
-				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x.ID, x.Title), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
 				col4.Objects = append(col4.Objects, container.NewMax(
-					getPriorityIconFor(x[4], priorityIcons),
-					widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
-				col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
+					getPriorityIconFor(x.PriorityOverride, priorityIcons),
+					widget.NewLabelWithStyle(x.PriorityOverride, fyne.TextAlignCenter, fyne.TextStyle{})))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
 			}
 			list3 = container.NewVScroll(
 				container.NewHBox(
@@ -1136,7 +1128,7 @@ func taskWindowRefresh(specific string) {
 			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 			for _, x := range AppStatus.MyRequestsInGSM {
-				thisID := x[1]
+				thisID := x.ID
 				col0.Objects = append(
 					col0.Objects,
 					container.NewMax(
@@ -1146,13 +1138,12 @@ func taskWindowRefresh(specific string) {
 						}),
 					))
 				col1.Objects = append(col1.Objects,
-					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x[1], x[2]), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-				dt, _ := time.Parse("1/2/2006 3:04:05 PM", x[0])
-				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x.ID, x.Title), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
 				col4.Objects = append(col4.Objects, container.NewMax(
-					getPriorityIconFor(x[4], priorityIcons),
-					widget.NewLabelWithStyle(x[4], fyne.TextAlignCenter, fyne.TextStyle{})))
-				col5.Objects = append(col5.Objects, widget.NewLabel(x[3]))
+					getPriorityIconFor(x.PriorityOverride, priorityIcons),
+					widget.NewLabelWithStyle(x.PriorityOverride, fyne.TextAlignCenter, fyne.TextStyle{})))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
 			}
 			list4 = container.NewVScroll(
 				container.NewHBox(
@@ -1202,10 +1193,10 @@ func taskWindowRefresh(specific string) {
 			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### %`))
 			for _, x := range AppStatus.MyTasksFromPlanner {
-				thisID := x[0]
-				myPriority := x[6]
-				if len(x) >= 9 && x[6] != x[9] {
-					myPriority = x[6] + "(" + x[9] + ")"
+				thisID := x.ID
+				myPriority := x.PriorityOverride
+				if x.Priority != x.PriorityOverride {
+					myPriority = fmt.Sprintf("%s (%s)", x.PriorityOverride, x.Priority)
 				}
 				tempVar := ""
 				col0.Objects = append(
@@ -1223,10 +1214,9 @@ func taskWindowRefresh(specific string) {
 						}),
 					))
 				col1.Objects = append(col1.Objects,
-					widget.NewLabelWithStyle(x[3], fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-				dt, _ := time.Parse("2006-01-02T15:04:05.999999999Z", x[5])
-				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
-				iconContainer := container.NewMax(getPriorityIconFor(x[6], priorityIcons))
+					widget.NewLabelWithStyle(x.Title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
+				iconContainer := container.NewMax(getPriorityIconFor(x.PriorityOverride, priorityIcons))
 				textContainer := newTappableLabel(myPriority, func(_ *fyne.PointEvent) {})
 				tempFunc := func(_ *fyne.PointEvent) {
 					dialog.ShowForm(
@@ -1246,12 +1236,12 @@ func taskWindowRefresh(specific string) {
 						func(isit bool) {
 							if isit {
 								var thisPriority string
-								if tempVar == x[9] {
+								if tempVar == x.Priority {
 									delete(priorityOverrides.MSPlanner, thisID)
 									thisPriority = tempVar
 								} else {
 									priorityOverrides.MSPlanner[thisID] = tempVar
-									thisPriority = tempVar + "(" + x[9] + ")"
+									thisPriority = tempVar + "(" + x.Priority + ")"
 								}
 								savePriorityOverride()
 								iconContainer.Objects[0] = getPriorityIconFor(tempVar, priorityIcons)
@@ -1272,12 +1262,7 @@ func taskWindowRefresh(specific string) {
 					iconContainer,
 					textContainer,
 				))
-				if x[8] == "0" {
-					x[8] = "Not started (0)"
-				} else if x[8] == "50" {
-					x[8] = "In Progress (50)"
-				}
-				col5.Objects = append(col5.Objects, widget.NewLabel(x[8]))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
 			}
 			list5 = container.NewVScroll(
 				container.NewHBox(
@@ -1326,7 +1311,7 @@ func taskWindowRefresh(specific string) {
 			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 			for _, x := range AppStatus.MyTasksFromJira {
-				thisID := x[0]
+				thisID := x.ID
 				col0.Objects = append(
 					col0.Objects,
 					container.NewMax(
@@ -1341,13 +1326,12 @@ func taskWindowRefresh(specific string) {
 						}),
 					))
 				col1.Objects = append(col1.Objects,
-					widget.NewLabelWithStyle(x[1], fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-				dt, _ := time.Parse("2006-01-02T15:04:05.999-0700", x[2])
-				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(dt)))
+					widget.NewLabelWithStyle(x.Title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
 				col4.Objects = append(col4.Objects, container.NewMax(
-					getPriorityIconFor(x[3], priorityIcons),
-					widget.NewLabelWithStyle(x[3], fyne.TextAlignCenter, fyne.TextStyle{})))
-				col5.Objects = append(col5.Objects, widget.NewLabel(x[4]))
+					getPriorityIconFor(x.PriorityOverride, priorityIcons),
+					widget.NewLabelWithStyle(x.PriorityOverride, fyne.TextAlignCenter, fyne.TextStyle{})))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
 			}
 			list = container.NewVScroll(
 				container.NewHBox(
