@@ -39,6 +39,7 @@ var GSMAuthURL = `https://serviceportal.griffith.edu.au/cherwellapi/saml/login.c
 
 // @todo: cannot silently refresh, so should put a status of "Disconnected:GSM" in the status and prompt a reconnect.
 func singleThreadReturnOrGetGSMAccessToken() {
+	fmt.Printf("Lets go\n")
 	for {
 		_, ok := <-GSMAccessTokenRequestsChan
 		if !ok {
@@ -49,7 +50,12 @@ func singleThreadReturnOrGetGSMAccessToken() {
 				!AppStatus.GSMGettingToken {
 				break
 			}
+			fmt.Printf(".[%s]", AuthenticationTokens.GSM.access_token)
 			time.Sleep(1 * time.Second)
+		}
+		if AuthenticationTokens.GSM.expiration.Before(time.Now()) {
+			AuthenticationTokens.GSM.access_token = ""
+			connectionStatusBox(false, "G")
 		}
 		GSMAccessTokenChan <- AuthenticationTokens.GSM.access_token
 	}
@@ -60,10 +66,14 @@ func returnOrGetGSMAccessToken() string {
 	return <-GSMAccessTokenChan
 }
 
-func GetGSM() {
+func AuthenticateToGSM() {
 	if AuthenticationTokens.GSM.access_token == "" {
-		browser.OpenURL(`https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`)
+		browser.OpenURL(GSMAuthURL)
 	}
+}
+
+func GetGSM() {
+	returnOrGetGSMAccessToken()
 	go func() {
 		DownloadTasks()
 		taskWindowRefresh("CWTasks")
@@ -82,18 +92,6 @@ func GetGSM() {
 	}()
 }
 
-/*
-	Task: CWFieldIDSTask{
-		OwnerID:           "93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf",
-		CreatedDateTime:   "9355d5ed416bbc9408615c4145978ff8538a3f6eb4",
-		TaskTitle:         "93ad98a2d68a61778eda3d4d9cbb30acbfd458aea4",
-		TaskStatus:        "9368f0fb7b744108a666984c21afc932562eb7dc16",
-		TaskID:            "93d5409c4bcbf7a38ed75a47dd92671f374236fa32",
-		IncidentID:        "BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
-		IncidentShortDesc: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
-		IncidentPriority:  "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
-	},
-*/
 func DownloadTasks() {
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
@@ -338,7 +336,7 @@ func GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldID: CWFields.Task.IncidentPriority, SortDirection: 1},
 			{FieldID: CWFields.Task.CreatedDateTime, SortDirection: 1},
 		},
-	}, true)
+	}, false)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -372,7 +370,7 @@ func GetMyIncidentsFromGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldID: CWFields.Incident.Priority, SortDirection: 1},
 			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
-	}, true)
+	}, false)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -406,7 +404,7 @@ func GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldID: CWFields.Incident.Priority, SortDirection: 1},
 			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
-	}, true)
+	}, false)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -469,7 +467,7 @@ func GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
 			{FieldID: CWFields.Incident.Priority, SortDirection: 1},
 			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
-	}, true)
+	}, false)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -579,7 +577,6 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				fmt.Printf("Token got\n")
 				w.Header().Add("Content-type", "text/html")
 				fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.</body></html>")
-				fmt.Printf("Authenticated, time to refresh\n")
 				activeTaskStatusUpdate(-1)
 			}
 		}
@@ -598,6 +595,11 @@ func getStuffFromCherwell(method string, path string, payload []byte, refreshTok
 	req, _ := http.NewRequest(method, newpath, bytes.NewReader(payload))
 	if refreshToken {
 		returnOrGetGSMAccessToken()
+	}
+	if AuthenticationTokens.GSM.access_token == "" || time.Now().After(AuthenticationTokens.GSM.expiration) {
+		gsmConnectionActive.Objects[1] = CloudDisconnect
+		gsmConnectionActive.Refresh()
+		return nil, fmt.Errorf("expired token")
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", AuthenticationTokens.GSM.access_token))
 	req.Header.Set("Content-type", "application/json")

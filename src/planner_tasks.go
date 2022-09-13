@@ -14,8 +14,6 @@ import (
 	"github.com/pkg/browser"
 )
 
-var MSAuthWebServer *http.Server
-
 type MSAuthResponse struct {
 	TokenType    string `json:"token_type"`
 	Scope        string `json:"scope"`
@@ -25,27 +23,32 @@ type MSAuthResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func GetPlanner() bool {
-	if AppStatus.MSGettingToken {
-		return false
+var PlannerAccessTokenRequestsChan = make(chan string)
+var PlannerAccessTokenChan = make(chan string)
+
+func singleThreadReturnOrGetPlannerAccessToken() {
+	for {
+		_, ok := <-PlannerAccessTokenRequestsChan
+		if !ok {
+			break
+		}
+		for {
+			if AuthenticationTokens.MS.access_token != "" &&
+				!AppStatus.MSGettingToken {
+				break
+			}
+			time.Sleep(1 * time.Second)
+		}
+		if AuthenticationTokens.MS.expiration.Before(time.Now()) {
+			refreshMS()
+		}
+		PlannerAccessTokenChan <- AuthenticationTokens.MS.access_token
 	}
-	if AuthenticationTokens.GSM.refresh_token != "" && AuthenticationTokens.GSM.expiration.Before(time.Now()) {
-		fmt.Printf("Refresh token with %s\n", AuthenticationTokens.GSM.refresh_token)
-		refreshMS()
-		activeTaskStatusUpdate(1)
-		return true
-	}
-	if AuthenticationTokens.MS.access_token == "" || AuthenticationTokens.MS.expiration.Before(time.Now()) {
-		// Login if expired
-		browser.OpenURL(
-			fmt.Sprintf(`https://login.microsoftonline.com/%s/oauth2/v2.0/authorize?finalUri=?code=xy&client_id=%s&response_type=code&redirect_uri=http://localhost:84/ms&response_mode=query&scope=%s`,
-				msApplicationTenant,
-				msApplicationClientId,
-				msScopes),
-		)
-		return false
-	}
-	return true
+}
+
+func returnOrGetPlannerAccessToken() string {
+	PlannerAccessTokenRequestsChan <- time.Now().String()
+	return <-PlannerAccessTokenChan
 }
 
 func authenticateToMS(w http.ResponseWriter, r *http.Request) {
@@ -77,26 +80,36 @@ func authenticateToMS(w http.ResponseWriter, r *http.Request) {
 			AuthenticationTokens.MS.access_token = MSToken.AccessToken
 			AuthenticationTokens.MS.refresh_token = MSToken.RefreshToken
 			seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", MSToken.ExpiresIn))
+			fmt.Printf("Seconds is %v\n", seconds)
 			AuthenticationTokens.MS.expiration = time.Now().Add(seconds)
 			connectionStatusBox(true, "M")
 			AppStatus.MSGettingToken = false
 			DownloadPlanners()
+			if appPreferences.DynamicsActive {
+				DownloadDynamics()
+			}
 			taskWindowRefresh("MSPlanner")
 		}
 	} else {
-		// Redirect to Cherwell AUTH
-		browser.OpenURL(
-			fmt.Sprintf(`https://login.microsoftonline.com/%s/oauth2/v2.0/authorize?finalUri=?code=xy&client_id=%s&response_type=code&redirect_uri=http://localhost:84/ms&response_mode=query&scope=%s`,
-				msApplicationTenant,
-				msApplicationClientId,
-				msScopes),
-		)
+		LoginToMS()
 	}
 }
 
+func LoginToMS() {
+	browser.OpenURL(
+		fmt.Sprintf(`https://login.microsoftonline.com/%s/oauth2/v2.0/authorize?finalUri=?code=xy&client_id=%s&response_type=code&redirect_uri=http://localhost:84/ms&response_mode=query&scope=%s`,
+			msApplicationTenant,
+			msApplicationClientId,
+			msScopes),
+	)
+}
 func refreshMS() {
 	var MSToken MSAuthResponse
 	AppStatus.MSGettingToken = true
+	if len(AuthenticationTokens.MS.refresh_token) == 0 || time.Now().After(AuthenticationTokens.MS.expiration) {
+		LoginToMS()
+		return
+	}
 	payload := url.Values{
 		"client_id":     {msApplicationClientId},
 		"scope":         {msScopes},
@@ -123,9 +136,7 @@ func refreshMS() {
 		seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", MSToken.ExpiresIn))
 		AuthenticationTokens.MS.expiration = time.Now().Add(seconds)
 		AppStatus.MSGettingToken = false
-		GetPlanner()
 	}
-
 }
 
 type myTasksGraphResponse struct {
@@ -152,11 +163,11 @@ type PlanGraphResponse struct {
 var MSPlannerPlanTitles = map[string]string{}
 
 func DownloadPlanners() {
-	if GetPlanner() {
+	go func() {
+		returnOrGetPlannerAccessToken()
 		activeTaskStatusUpdate(1)
 		defer activeTaskStatusUpdate(-1)
 
-		// * @todo Add Sort
 		AppStatus.MyTasksFromPlanner = []TaskResponseStruct{}
 		uniquePlans := map[string][]int{}
 		var teamResponse myTasksGraphResponse
@@ -224,14 +235,15 @@ func DownloadPlanners() {
 			}
 		}
 
-		// sort
 		sort.SliceStable(AppStatus.MyTasksFromPlanner, func(i, j int) bool {
 			if AppStatus.MyTasksFromPlanner[i].PriorityOverride == AppStatus.MyTasksFromPlanner[j].PriorityOverride {
 				return AppStatus.MyTasksFromPlanner[i].CreatedDateTime.Before(AppStatus.MyTasksFromPlanner[j].CreatedDateTime)
 			}
 			return AppStatus.MyTasksFromPlanner[i].PriorityOverride < AppStatus.MyTasksFromPlanner[j].PriorityOverride
 		})
-	}
+
+		taskWindowRefresh("MSPlanner")
+	}()
 }
 
 func teamPriorityToGSMPriority(priority int) string {

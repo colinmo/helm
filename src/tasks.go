@@ -69,13 +69,23 @@ type TaskResponseStruct struct {
 }
 
 func GetAllTasks() {
-	GetGSM()
+	if appPreferences.GSMActive {
+		fmt.Printf("GSM Authenticating\n")
+		AuthenticateToGSM()
+		fmt.Printf("GSM Authenticated\n")
+		GetGSM()
+		fmt.Printf("GSM Gotten\n")
+	}
 	if appPreferences.MSPlannerActive {
+		refreshMS()
 		DownloadPlanners()
 		taskWindowRefresh("MSPlanner")
 	}
 	if appPreferences.JiraActive {
 		GetJira()
+	}
+	if appPreferences.DynamicsActive {
+		GetDynamics()
 	}
 }
 
@@ -85,6 +95,7 @@ func startLocalServers() {
 	fmt.Printf("Server Active\n")
 	http.HandleFunc("/cherwell", authenticateToCherwell)
 	http.HandleFunc("/ms", authenticateToMS)
+	http.HandleFunc("/dy", authenticateToDY)
 	go func() {
 		AuthWebServer = &http.Server{Addr: ":84", Handler: nil}
 		if err := AuthWebServer.ListenAndServe(); err != nil {

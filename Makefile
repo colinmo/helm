@@ -13,6 +13,9 @@ build-osx:
 build-oldosx:
 	cd src ; GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CGO_CFLAGS="-mmacosx-version-min=10.12" CGO_LDFLAGS="-mmacosx-version-min=10.12" go build -mod=readonly
 
+build-newosx:
+	cd src ; GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CGO_CFLAGS="-mmacosx-version-min=10.12" CGO_LDFLAGS="-mmacosx-version-min=10.12" go build -mod=readonly -o ../bin/macnew
+
 # export GOOS=windows
 # export GOARCH=amd64
 # export CGO_ENABLED=1

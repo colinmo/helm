@@ -8,3 +8,4 @@ vendor
 Helm.app
 src/msplannersecret.go
 src/jirasecret.go
+src/dynamicssecret.go
