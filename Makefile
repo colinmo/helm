@@ -12,7 +12,7 @@ build-oldosx:
 
 build-newosx:
 	cd src && \
-	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CGO_CFLAGS="-mmacosx-version-min=10.12" CGO_LDFLAGS="-mmacosx-version-min=10.12" go build -mod=readonly -o ../bin/macnew
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CGO_CFLAGS="-mmacosx-version-min=10.14" CGO_LDFLAGS="-mmacosx-version-min=10.14" go build -mod=readonly -o ../bin/macnew
 
 build-osxu: build-oldosx build-newosx build-osx
 	cd bin && \
