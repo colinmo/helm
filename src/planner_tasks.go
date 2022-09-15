@@ -82,6 +82,8 @@ func authenticateToMS(w http.ResponseWriter, r *http.Request) {
 			seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", MSToken.ExpiresIn))
 			AuthenticationTokens.MS.expiration = time.Now().Add(seconds)
 			connectionStatusBox(true, "M")
+			w.Header().Add("Content-type", "text/html")
+			fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.</body></html>")
 			AppStatus.MSGettingToken = false
 		}
 	} else {
