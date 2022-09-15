@@ -186,10 +186,10 @@ func DownloadPlanners() {
 							// TruncateShort(y.Details.Description, 60),
 						}
 						row.CreatedDateTime, _ = time.Parse("2006-01-02T15:04:05.999999999Z", y.CreatedDateTime)
-						switch row.Status {
-						case "0":
-							row.Status = "Not started(0)"
-						case "50":
+						switch y.PercentComplete {
+						case 0:
+							row.Status = "Not started (0)"
+						case 50:
 							row.Status = "In progress (50)"
 						}
 						if val, ok := priorityOverrides.MSPlanner[row.ID]; ok {
