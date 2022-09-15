@@ -11,13 +11,28 @@ import (
 	"github.com/pkg/browser"
 )
 
-func TestSingleThreadReturnOrGetGSMAccessToken(t *testing.T) {
-	go singleThreadReturnOrGetGSMAccessToken()
+func TestSingleThreadReturnGSMAccessTokenActive(t *testing.T) {
+	go singleThreadReturnGSMAccessToken()
 	AuthenticationTokens.GSM.access_token = "x"
 	AuthenticationTokens.GSM.expiration = time.Now().Add(200 * time.Hour)
-	val := returnOrGetGSMAccessToken()
+	val := ""
+	go func() { val = returnOrGetGSMAccessToken() }()
+	time.Sleep(1 * time.Second)
 	if val != AuthenticationTokens.GSM.access_token {
 		t.Fatalf("Didn't get the access token expected")
+	}
+}
+
+func TestSingleThreadReturnGSMAccessTokenExpired(t *testing.T) {
+	go singleThreadReturnGSMAccessToken()
+	AuthenticationTokens.GSM.access_token = "y"
+	AuthenticationTokens.GSM.expiration = time.Now().Add(-200 * time.Hour)
+	connectionStatusBox = func(bool, string) {}
+	val := ""
+	go func() { val = returnOrGetGSMAccessToken() }()
+	time.Sleep(5 * time.Second)
+	if val != "" {
+		t.Fatalf("Didn't handle an expired token")
 	}
 }
 
@@ -28,8 +43,10 @@ func TestGoodAccessToken(t *testing.T) {
 		GSMGettingToken: false,
 		MSGettingToken:  false,
 	}
-	startFakeMS("http://localhost:84/cherwell?code=ok", 301, []string{})
-	go singleThreadReturnOrGetGSMAccessToken()
+	go func() { startFakeMS("http://localhost:84/cherwell?code=ok", 301, []string{}) }()
+	connectionStatusBox = func(bool, string) {}
+	time.Sleep(5 * time.Second)
+	go singleThreadReturnGSMAccessToken()
 	browser.OpenURL(GSMAuthURL)
 	val := returnOrGetGSMAccessToken()
 	if val != "OKToken" {
@@ -38,8 +55,8 @@ func TestGoodAccessToken(t *testing.T) {
 }
 
 func startFakeMS(authReturnLocation string, authReturnCode int, apiResponses []string) {
-	GSMBaseUrl = `http://localhost:85/CherwellAPI/`
-	GSMAuthURL = `http://localhost:86/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`
+	GSMBaseUrl = `http://localhost:84/CherwellAPI/`
+	GSMAuthURL = `http://localhost:84/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`
 
 	http.HandleFunc("/cherwell", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Local Auth Endpoint called\n")
@@ -57,23 +74,7 @@ func startFakeMS(authReturnLocation string, authReturnCode int, apiResponses []s
 			fmt.Fprintf(w, "<html><head></head><body><script>window.close()</script></body></html>")
 		}
 	})
-	go func() {
-		AuthWebServer = &http.Server{Addr: ":84", Handler: nil}
-		if err := AuthWebServer.ListenAndServe(); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	http.HandleFunc("/cherwellapi", func(w http.ResponseWriter, r *http.Request) {
-
-	})
-	go func() {
-		AuthWebServer = &http.Server{Addr: ":85", Handler: nil}
-		if err := AuthWebServer.ListenAndServe(); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
+	http.HandleFunc("/cherwellapi", func(w http.ResponseWriter, r *http.Request) {})
 	http.HandleFunc(
 		"/cherwellapi/saml/login.cshtml",
 		func(w http.ResponseWriter, r *http.Request) {
@@ -84,11 +85,8 @@ func startFakeMS(authReturnLocation string, authReturnCode int, apiResponses []s
 			w.WriteHeader(authReturnCode)
 		},
 	)
-	go func() {
-		AuthWebServer = &http.Server{Addr: ":86", Handler: nil}
-		if err := AuthWebServer.ListenAndServe(); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
+	AuthWebServer = &http.Server{Addr: ":84", Handler: nil}
+	if err := AuthWebServer.ListenAndServe(); err != nil {
+		log.Fatal(err)
+	}
 }

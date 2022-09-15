@@ -80,15 +80,9 @@ func authenticateToMS(w http.ResponseWriter, r *http.Request) {
 			AuthenticationTokens.MS.access_token = MSToken.AccessToken
 			AuthenticationTokens.MS.refresh_token = MSToken.RefreshToken
 			seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", MSToken.ExpiresIn))
-			fmt.Printf("Seconds is %v\n", seconds)
 			AuthenticationTokens.MS.expiration = time.Now().Add(seconds)
 			connectionStatusBox(true, "M")
 			AppStatus.MSGettingToken = false
-			DownloadPlanners()
-			if appPreferences.DynamicsActive {
-				DownloadDynamics()
-			}
-			taskWindowRefresh("MSPlanner")
 		}
 	} else {
 		LoginToMS()
@@ -164,6 +158,7 @@ var MSPlannerPlanTitles = map[string]string{}
 
 func DownloadPlanners() {
 	go func() {
+		fmt.Printf("Downloading Planner\n")
 		returnOrGetPlannerAccessToken()
 		activeTaskStatusUpdate(1)
 		defer activeTaskStatusUpdate(-1)

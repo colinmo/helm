@@ -37,25 +37,23 @@ var GSMAccessTokenChan = make(chan string)
 var GSMBaseUrl = `https://griffith.cherwellondemand.com/CherwellAPI/`
 var GSMAuthURL = `https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`
 
-// @todo: cannot silently refresh, so should put a status of "Disconnected:GSM" in the status and prompt a reconnect.
-func singleThreadReturnOrGetGSMAccessToken() {
-	fmt.Printf("Lets go\n")
+func singleThreadReturnGSMAccessToken() {
 	for {
 		_, ok := <-GSMAccessTokenRequestsChan
 		if !ok {
+			// Close channel
 			break
 		}
-		for {
-			if AuthenticationTokens.GSM.access_token != "" &&
-				!AppStatus.GSMGettingToken {
-				break
-			}
-			fmt.Printf(".[%s]", AuthenticationTokens.GSM.access_token)
-			time.Sleep(1 * time.Second)
-		}
-		if AuthenticationTokens.GSM.expiration.Before(time.Now()) {
+		if time.Now().After(AuthenticationTokens.GSM.expiration) {
 			AuthenticationTokens.GSM.access_token = ""
 			connectionStatusBox(false, "G")
+		}
+		for {
+			if AuthenticationTokens.GSM.access_token != "" {
+				break
+			}
+			connectionStatusBox(false, "G")
+			time.Sleep(1 * time.Second)
 		}
 		GSMAccessTokenChan <- AuthenticationTokens.GSM.access_token
 	}
@@ -67,13 +65,11 @@ func returnOrGetGSMAccessToken() string {
 }
 
 func AuthenticateToGSM() {
-	if AuthenticationTokens.GSM.access_token == "" {
-		browser.OpenURL(GSMAuthURL)
-	}
+	AuthenticationTokens.GSM.access_token = ""
+	browser.OpenURL(GSMAuthURL)
 }
 
 func GetGSM() {
-	returnOrGetGSMAccessToken()
 	go func() {
 		DownloadTasks()
 		taskWindowRefresh("CWTasks")
@@ -93,6 +89,7 @@ func GetGSM() {
 }
 
 func DownloadTasks() {
+	returnOrGetGSMAccessToken()
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
 	AppStatus.MyTasksFromGSM = []TaskResponseStruct{}
@@ -147,6 +144,7 @@ func DownloadTasks() {
 }
 
 func DownloadIncidents() {
+	returnOrGetGSMAccessToken()
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
 	AppStatus.MyIncidentsFromGSM = []TaskResponseStruct{}
@@ -183,6 +181,7 @@ func DownloadIncidents() {
 }
 
 func DownloadMyRequests() {
+	returnOrGetGSMAccessToken()
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
 	AppStatus.MyRequestsInGSM = []TaskResponseStruct{}
@@ -219,6 +218,7 @@ func DownloadMyRequests() {
 }
 
 func DownloadTeam() {
+	returnOrGetGSMAccessToken()
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
 	AppStatus.MyTeamIncidentsFromGSM = []TaskResponseStruct{}

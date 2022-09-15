@@ -104,24 +104,67 @@ func setup() {
 	}
 	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
 }
+
 func overrides() {
-	// Priority Overrides
-	myself, error := user.Current()
-	pribase := ""
-	if error == nil {
-		pribase = filepath.Join(myself.HomeDir, "/.helm")
-	} else {
-		pribase = filepath.Join(os.TempDir(), "/.helm")
-	}
-	appPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", pribase)
-	thisApp.Preferences().SetString("PriorityOverride", appPreferences.PriorityOverride)
+	preferencesToLocalVar()
 	loadPriorityOverride()
 	startLocalServers()
-	// GSM and 5 minute update
-	if thisApp.Preferences().BoolWithFallback("GSMActive", true) {
-		fmt.Printf("Get that token\n")
+	connectionStatusBox = func(onl bool, label string) {
+		//background := color.NRGBA{R: 125, G: 125, B: 125, A: 125}
+		icon := CloudDisconnect
+		if onl {
+			fmt.Printf("Connect %s\n", label)
+			// background = color.NRGBA{R: 125, G: 125, B: 125, A: 125}
+			icon = CloudConnect
+		}
+		button := widget.NewButton(label, func() {})
+		button.Importance = widget.LowImportance
+
+		fmt.Printf("Refresh %s\n", label[0:1])
+		switch label[0:1] {
+		case "G":
+			button.OnTapped = func() {
+				if onl {
+					GetGSM()
+				} else {
+					browser.OpenURL(GSMAuthURL)
+					activeTaskStatusUpdate(1)
+				}
+			}
+			gsmConnectionActive.Objects = container.NewMax(
+				button,
+				icon,
+			).Objects
+			gsmConnectionActive.Refresh()
+		case "J":
+			button.OnTapped = func() {
+				if onl {
+					GetJira()
+				}
+			}
+			jiraConnectionActive.Objects = container.NewMax(
+				button,
+				icon,
+			).Objects
+			jiraConnectionActive.Refresh()
+		case "M":
+			button.OnTapped = func() {
+				DownloadPlanners()
+			}
+			msConnectionActive.Objects = container.NewMax(
+				button,
+				icon,
+			).Objects
+			msConnectionActive.Refresh()
+		}
+		taskWindow.Content().Refresh()
+	}
+	gsmConnectionActive = container.NewMax()
+	jiraConnectionActive = container.NewMax()
+	msConnectionActive = container.NewMax()
+	if appPreferences.GSMActive {
 		AppStatus.GSMGettingToken = true
-		go singleThreadReturnOrGetGSMAccessToken()
+		go singleThreadReturnGSMAccessToken()
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
@@ -129,10 +172,7 @@ func overrides() {
 			}
 		}()
 	}
-	gsmConnectionActive = container.NewMax()
-	jiraConnectionActive = container.NewMax()
-	// Planner and 5 minute update
-	if thisApp.Preferences().BoolWithFallback("MSPlannerActive", false) {
+	if appPreferences.MSPlannerActive {
 		AppStatus.MSGettingToken = true
 		go singleThreadReturnOrGetPlannerAccessToken()
 		go func() {
@@ -142,7 +182,14 @@ func overrides() {
 			}
 		}()
 	}
-	msConnectionActive = container.NewMax()
+	if appPreferences.JiraActive {
+		go func() {
+			for {
+				time.Sleep(5 * time.Minute)
+				GetJira()
+			}
+		}()
+	}
 }
 
 func main() {
@@ -156,7 +203,6 @@ func main() {
 	markdownWindowSetup()
 	taskWindow = thisApp.NewWindow("Tasks")
 	taskWindowSetup()
-	fmt.Printf("Getting tasks\n")
 	go func() {
 		GetAllTasks()
 	}()
@@ -468,20 +514,31 @@ func markdownWindowSetup() {
 	})
 }
 
-func preferencesWindowSetup() {
-	stringDateFormat := "20060102T15:04:05"
+func preferencesToLocalVar() {
 	appPreferences = AppPreferences{}
 	appPreferences.ZettlekastenHome = thisApp.Preferences().StringWithFallback("ZettlekastenHome", os.TempDir())
 	appPreferences.GSMActive = thisApp.Preferences().BoolWithFallback("GSMActive", true)
 	appPreferences.MSPlannerActive = thisApp.Preferences().BoolWithFallback("MSPlannerActive", false)
 	appPreferences.MSGroups = thisApp.Preferences().StringWithFallback("MSGroups", "")
-	appPreferences.PriorityOverride = thisApp.Preferences().String("PriorityOverride")
 	appPreferences.JiraActive = thisApp.Preferences().BoolWithFallback("JiraActive", false)
 	appPreferences.JiraKey = thisApp.Preferences().StringWithFallback("JiraKey", "")
 	appPreferences.JiraUsername = thisApp.Preferences().StringWithFallback("JiraUsername", "")
-	appPreferences.DynamicsActive = thisApp.Preferences().BoolWithFallback("DynamicsActive", false)
-	appPreferences.DynamicsKey = thisApp.Preferences().StringWithFallback("DynamicsKey", "")
+	appPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", "")
+	if appPreferences.PriorityOverride == "" {
+		myself, error := user.Current()
+		pribase := ""
+		if error == nil {
+			pribase = filepath.Join(myself.HomeDir, "/.helm")
+		} else {
+			pribase = filepath.Join(os.TempDir(), "/.helm")
+		}
+		appPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", pribase)
+	}
+}
+func preferencesWindowSetup() {
+	stringDateFormat := "20060102T15:04:05"
 
+	// Fields
 	zettlePath := widget.NewEntry()
 	zettlePath.SetText(appPreferences.ZettlekastenHome)
 	// MSPlanner
@@ -544,65 +601,49 @@ func preferencesWindowSetup() {
 		appPreferences.JiraUsername = jiraUsername.Text
 		thisApp.Preferences().SetString("JiraUsername", appPreferences.JiraUsername)
 
-		appPreferences.DynamicsActive = dynamicsActive.Checked
-		thisApp.Preferences().SetBool("DynamicsActive", appPreferences.DynamicsActive)
-		appPreferences.DynamicsKey = dynamicsKey.Text
-		thisApp.Preferences().SetString("DynamicsKey", appPreferences.DynamicsKey)
-
 		appPreferences.GSMActive = gsmActive.Checked
 		thisApp.Preferences().SetBool("GSMActive", appPreferences.GSMActive)
 		AuthenticationTokens.GSM.access_token = cwAccessToken.Text
 		AuthenticationTokens.GSM.refresh_token = cwRefreshToken.Text
 		AuthenticationTokens.GSM.expiration, _ = time.Parse("20060102T15:04:05", cwExpiresAt.Text)
 	})
-	attribution := widget.NewRichTextFromMarkdown("Warning status by Tomas Knopp from [Noun Project](https://thenounproject.com/browse/icons/term/warning-status/)\n\n\nCloud Connect by Tomas Knopp from [Noun Project](https://thenounproject.com/browse/icons/term/cloud-connect/)")
-	attribution.Wrapping = fyne.TextWrapWord
 	preferencesWindow.SetContent(
-		container.NewVBox(
-			container.New(
-				layout.NewFormLayout(),
-				widget.NewLabel(""),
-				widget.NewLabelWithStyle("Paths", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-				widget.NewLabel("Zettlekasten Path"),
-				zettlePath,
-				widget.NewLabel("Priority-override file"),
-				priorityOverride,
-				widget.NewLabel(""),
-				widget.NewLabelWithStyle("Planner", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-				widget.NewLabel("Planner active"),
-				plannerActive,
-				widget.NewLabel("MS Access Token"),
-				accessToken,
-				widget.NewLabel("MS Refresh Token"),
-				refreshToken,
-				widget.NewLabel("MS Expires At"),
-				expiresAt,
-				widget.NewLabel(""),
-				widget.NewLabelWithStyle("JIRA", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-				widget.NewLabel("Jira active"),
-				jiraActive,
-				widget.NewLabel("Jira Key"),
-				jiraKey,
-				widget.NewLabel("Jira Username"),
-				jiraUsername,
-				widget.NewLabel(""),
-				widget.NewLabelWithStyle("GSM", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-				widget.NewLabel("GSM Active"),
-				gsmActive,
-				widget.NewLabel("CW Access Token"),
-				cwAccessToken,
-				widget.NewLabel("CW Refresh Token"),
-				cwRefreshToken,
-				widget.NewLabel("CW Expires At"),
-				cwExpiresAt,
-				widget.NewLabel(""),
-				widget.NewLabelWithStyle("Dynamics (Projects)", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-				widget.NewLabel("Dynamics active"),
-				dynamicsActive,
-				widget.NewLabel("Dynamics key"),
-				dynamicsKey,
-			),
-			container.NewVScroll(attribution),
+		container.New(
+			layout.NewFormLayout(),
+			widget.NewLabel(""),
+			widget.NewLabelWithStyle("Paths", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			widget.NewLabel("Zettlekasten Path"),
+			zettlePath,
+			widget.NewLabel("Priority-override file"),
+			priorityOverride,
+			widget.NewLabel(""),
+			widget.NewLabelWithStyle("Planner", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			widget.NewLabel("Planner active"),
+			plannerActive,
+			widget.NewLabel("Access Token"),
+			accessToken,
+			widget.NewLabel("Refresh Token"),
+			refreshToken,
+			widget.NewLabel("Expires At"),
+			expiresAt,
+			widget.NewLabel(""),
+			widget.NewLabelWithStyle("JIRA", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			widget.NewLabel("Jira active"),
+			jiraActive,
+			widget.NewLabel("Key"),
+			jiraKey,
+			widget.NewLabel("Username"),
+			jiraUsername,
+			widget.NewLabel(""),
+			widget.NewLabelWithStyle("GSM", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			widget.NewLabel("GSM Active"),
+			gsmActive,
+			widget.NewLabel("Access Token"),
+			cwAccessToken,
+			widget.NewLabel("Refresh Token"),
+			cwRefreshToken,
+			widget.NewLabel("Expires At"),
+			cwExpiresAt,
 		),
 	)
 }
@@ -627,57 +668,7 @@ func zettleFileName(date time.Time) string {
 	return fmt.Sprintf("%s-retro.markdown", date.Local().Format("20060102"))
 }
 
-func connectionStatusBox(onl bool, label string) {
-	//background := color.NRGBA{R: 125, G: 125, B: 125, A: 125}
-	icon := CloudDisconnect
-	if onl {
-		fmt.Printf("Connect %s\n", label)
-		// background = color.NRGBA{R: 125, G: 125, B: 125, A: 125}
-		icon = CloudConnect
-	}
-	button := widget.NewButton(label, func() {})
-	button.Importance = widget.LowImportance
-	switch label[0:1] {
-	case "G":
-		button.OnTapped = func() {
-			if onl {
-				GetGSM()
-			} else {
-				browser.OpenURL(GSMAuthURL)
-				activeTaskStatusUpdate(1)
-			}
-		}
-		gsmConnectionActive.Objects = container.NewMax(
-			button,
-			icon,
-		).Objects
-		fmt.Printf("Refresh G\n")
-		gsmConnectionActive.Refresh()
-	case "J":
-		button.OnTapped = func() {
-			if onl {
-				GetJira()
-			}
-		}
-		jiraConnectionActive.Objects = container.NewMax(
-			button,
-			icon,
-		).Objects
-		fmt.Printf("Refresh J\n")
-		jiraConnectionActive.Refresh()
-	case "M":
-		button.OnTapped = func() {
-			DownloadPlanners()
-		}
-		msConnectionActive.Objects = container.NewMax(
-			button,
-			icon,
-		).Objects
-		fmt.Printf("Refresh M\n")
-		msConnectionActive.Refresh()
-	}
-	taskWindow.Content().Refresh()
-}
+var connectionStatusBox func(bool, string)
 
 func taskWindowSetup() {
 	taskWindow.Resize(fyne.NewSize(430, 550))
@@ -836,35 +827,6 @@ func taskWindowSetup() {
 						theme.ViewRefreshIcon(),
 						func() {
 							GetJira()
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.HistoryIcon(),
-						func() {},
-					),
-					widget.NewToolbarAction(
-						theme.ErrorIcon(),
-						func() {},
-					),
-				),
-				nil,
-				nil,
-				nil,
-				container.NewWithoutLayout(),
-			)),
-		)
-	}
-	if appPreferences.DynamicsActive {
-		TaskTabsIndexes["Dynamics"] = len(TaskTabsIndexes)
-		TaskTabs.Append(
-			container.NewTabItem("My Project Tasks", container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							DownloadDynamics()
-							taskWindowRefresh("Dynamics")
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1095,6 +1057,11 @@ func taskWindowRefresh(specific string) {
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 				for _, x := range AppStatus.MyIncidentsFromGSM {
 					thisID := x.ID
+					myPriority := x.PriorityOverride
+					if x.Priority != x.PriorityOverride {
+						myPriority = fmt.Sprintf("%s(%s)", x.PriorityOverride, x.Priority)
+					}
+					tempVar := ""
 					col0.Objects = append(
 						col0.Objects,
 						container.NewMax(
@@ -1106,9 +1073,39 @@ func taskWindowRefresh(specific string) {
 					col1.Objects = append(col1.Objects,
 						widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x.ID, x.Title), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 					col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
+					tempFunc := func(_ *fyne.PointEvent) {
+						dialog.ShowForm(
+							"Priority override "+thisID,
+							"Override",
+							"Cancel",
+							[]*widget.FormItem{
+								widget.NewFormItem(
+									"Priority",
+									widget.NewSelect(
+										[]string{"1", "2", "3", "4", "5"},
+										func(changed string) {
+											tempVar = changed
+										},
+									)),
+							},
+							func(isit bool) {
+								if tempVar == x.Priority || tempVar == "" {
+									delete(priorityOverrides.CWIncidents, thisID)
+								} else {
+									priorityOverrides.CWIncidents[thisID] = tempVar
+								}
+								savePriorityOverride()
+							},
+							taskWindow,
+						)
+					}
 					col4.Objects = append(col4.Objects, container.NewMax(
 						getPriorityIconFor(x.PriorityOverride, priorityIcons),
-						widget.NewLabelWithStyle(x.PriorityOverride, fyne.TextAlignCenter, fyne.TextStyle{})))
+						newTappableLabelWithStyle(
+							myPriority,
+							fyne.TextAlignCenter,
+							fyne.TextStyle{},
+							tempFunc)))
 					col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
 				}
 				list2 = container.NewVScroll(
@@ -1409,6 +1406,11 @@ func taskWindowRefresh(specific string) {
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 			for _, x := range AppStatus.MyTasksFromJira {
 				thisID := x.ID
+				myPriority := x.PriorityOverride
+				if x.Priority != x.PriorityOverride {
+					myPriority = fmt.Sprintf("%s(%s)", x.PriorityOverride, x.Priority)
+				}
+				tempVar := ""
 				col0.Objects = append(
 					col0.Objects,
 					container.NewMax(
@@ -1424,86 +1426,6 @@ func taskWindowRefresh(specific string) {
 					))
 				col1.Objects = append(col1.Objects,
 					widget.NewLabelWithStyle(x.Title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
-				col4.Objects = append(col4.Objects, container.NewMax(
-					getPriorityIconFor(x.PriorityOverride, priorityIcons),
-					widget.NewLabelWithStyle(x.PriorityOverride, fyne.TextAlignCenter, fyne.TextStyle{})))
-				col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
-			}
-			list = container.NewVScroll(
-				container.NewHBox(
-					col0,
-					col1,
-					col3,
-					col4,
-					col5,
-				),
-			)
-		}
-
-		TaskTabs.Items[TaskTabsIndexes["Jira"]].Content = container.NewBorder(
-			widget.NewToolbar(
-				widget.NewToolbarAction(
-					theme.ViewRefreshIcon(),
-					func() {
-						GetJira()
-					},
-				),
-				widget.NewToolbarSeparator(),
-				widget.NewToolbarAction(
-					theme.HistoryIcon(),
-					func() {},
-				),
-				widget.NewToolbarAction(
-					theme.ErrorIcon(),
-					func() {},
-				),
-			),
-			nil,
-			nil,
-			nil,
-			list,
-		)
-	}
-	if appPreferences.DynamicsActive && (specific == "" || specific == "Dynamics") {
-		// MY PLANNER
-		var list5 fyne.CanvasObject
-		if len(AppStatus.MyTasksFromDynamics) == 0 {
-			list5 = widget.NewLabel("No requests")
-		} else {
-			col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
-			col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Title`))
-			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
-			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
-			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### %`))
-			for _, x := range AppStatus.MyTasksFromDynamics {
-				thisID := x.ID
-				thisParentID := x.ParentID
-				myPriority := x.PriorityOverride
-				if x.Priority != x.PriorityOverride {
-					myPriority = fmt.Sprintf("%s(%s)", x.PriorityOverride, x.Priority)
-				}
-				tempVar := ""
-				col0.Objects = append(
-					col0.Objects,
-					container.NewMax(
-						widget.NewLabel(""),
-						newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-							browser.OpenURL(
-								fmt.Sprintf(
-									"https://project.microsoft.com/en-AU/#/taskboard?projectId=%s&taskId=%s",
-									thisParentID,
-									thisID,
-								),
-							)
-						}),
-					))
-				col1.Objects = append(col1.Objects,
-					widget.NewLabelWithStyle(
-						fmt.Sprintf("[%s] %s", x.ParentTitle, x.Title),
-						fyne.TextAlignLeading,
-						fyne.TextStyle{Bold: true},
-					))
 				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
 				iconContainer := container.NewMax(getPriorityIconFor(x.PriorityOverride, priorityIcons))
 				textContainer := newTappableLabel(myPriority, func(_ *fyne.PointEvent) {})
@@ -1553,7 +1475,7 @@ func taskWindowRefresh(specific string) {
 				))
 				col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
 			}
-			list5 = container.NewVScroll(
+			list = container.NewVScroll(
 				container.NewHBox(
 					col0,
 					col1,
@@ -1564,13 +1486,12 @@ func taskWindowRefresh(specific string) {
 			)
 		}
 
-		TaskTabs.Items[TaskTabsIndexes["Dynamics"]].Content = container.NewBorder(
+		TaskTabs.Items[TaskTabsIndexes["Jira"]].Content = container.NewBorder(
 			widget.NewToolbar(
 				widget.NewToolbarAction(
 					theme.ViewRefreshIcon(),
 					func() {
-						DownloadDynamics()
-						taskWindowRefresh("Dynamics")
+						GetJira()
 					},
 				),
 				widget.NewToolbarSeparator(),
@@ -1586,7 +1507,7 @@ func taskWindowRefresh(specific string) {
 			nil,
 			nil,
 			nil,
-			list5,
+			list,
 		)
 	}
 	taskWindow.Content().Refresh()
