@@ -41,7 +41,7 @@ func GetJira() {
 		AppStatus.MyTasksFromJira = []TaskResponseStruct{}
 		connectionStatusBox(true, "J")
 		var jiraResponse JiraResponseType
-		baseQuery := "jql=assignee=currentuser()+and+status+not+in+(Done)+order+by+priority,+created+asc&fields=status,summary,created,priority&orderBy=priority,created"
+		baseQuery := `jql=assignee%3Dcurrentuser()%20AND%20status%20!%3D%20%22Done%22%20order%20by%20priority,created%20asc&fields=summary,created,priority,status`
 		queryToCall := fmt.Sprintf("%s&startAt=0", baseQuery)
 		for page := 1; page < 200; page++ {
 			r, err := callJiraURI("GET", "search", []byte{}, queryToCall)

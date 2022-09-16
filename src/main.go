@@ -948,7 +948,9 @@ func taskWindowRefresh(specific string) {
 
 				for _, x := range AppStatus.MyTasksFromGSM {
 					thisID := x.ID
+					thisObjRecId := x.BusObRecId
 					thisParent := x.ParentID
+					thisParentInternal := x.ParentIDInternal
 					myPriority := x.PriorityOverride
 					if x.Priority != x.PriorityOverride {
 						myPriority = fmt.Sprintf("%s(%s)", x.PriorityOverride, x.Priority)
@@ -958,9 +960,105 @@ func taskWindowRefresh(specific string) {
 						col0.Objects,
 						container.NewMax(
 							widget.NewLabel(""),
-							newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-								browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisParent)
-							}),
+							container.NewHBox(
+								newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+									browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisParent)
+								}),
+								newTappableIcon(theme.DocumentIcon(), func(_ *fyne.PointEvent) {
+									journals, err := GetJournalNotesForIncident(thisParentInternal)
+
+									if err == nil {
+										list := container.NewVBox()
+										for _, x := range journals {
+											deets := widget.NewLabel(x.Details)
+											deets.Wrapping = fyne.TextWrapBreak
+											list.Add(container.NewVBox(
+												container.NewHBox(
+													widget.NewLabel(x.Date.Format("2006-01-02 15:04:05")),
+													layout.NewSpacer(),
+													widget.NewLabel(x.Class),
+												),
+												deets,
+											))
+										}
+
+										deepdeep := thisApp.NewWindow("Journals for " + thisParent)
+										deepdeep.SetContent(container.NewVScroll(list))
+										deepdeep.Resize(fyne.NewSize(400, 500))
+										deepdeep.Show()
+									} else {
+										fmt.Printf("FAILED %v\n", err)
+									}
+								}),
+								newTappableIcon(theme.ComputerIcon(), func(_ *fyne.PointEvent) {
+									var deepdeep dialog.Dialog
+									var foundPeople []struct {
+										Label  string
+										Target string
+									}
+									foundsList := widget.NewList(
+										func() int { return len(foundPeople) },
+										func() fyne.CanvasObject { return newTappableLabel("x", func(_ *fyne.PointEvent) {}) },
+										func(lii widget.ListItemID, co fyne.CanvasObject) {
+											me := foundPeople[lii]
+											co.(*tappableLabel).SetText(me.Label)
+											co.(*tappableLabel).OnTapGo = func(_ *fyne.PointEvent) {
+												splits := strings.Split(me.Target, "-")
+												fmt.Printf("Target: %s|%s\n", me.Target, splits[0])
+												ReassignTaskToPersonInTeam(thisObjRecId, splits[0], splits[1])
+												fmt.Printf("Reassigning to %s|%s\n", me.Label, me.Target)
+												deepdeep.Hide()
+											}
+										},
+									)
+									foundsList.Resize(fyne.NewSize(300, 500))
+									foundsContainer := container.NewMax(foundsList)
+									lookinFor := widget.NewEntry()
+									deepdeep = dialog.NewCustom("Reassign task",
+										"Actually, no",
+										container.NewBorder(
+											container.NewVBox(
+												container.New(layout.NewFormLayout(),
+													widget.NewLabel("Reassign to"),
+													lookinFor,
+												),
+												widget.NewButtonWithIcon(
+													"Search",
+													theme.SearchIcon(),
+													func() {
+														founds, err := FindPeopleToReasignTo(lookinFor.Text)
+														foundPeople = []struct {
+															Label  string
+															Target string
+														}{}
+														if err == nil {
+															for _, c := range founds {
+																for tId, tName := range c.Teams {
+																	foundPeople = append(foundPeople, struct {
+																		Label  string
+																		Target string
+																	}{
+																		Label:  fmt.Sprintf("%s - %s", c.Name, tName),
+																		Target: fmt.Sprintf("%s-%s", c.UserID, tId),
+																	})
+																}
+															}
+															foundsList.Refresh()
+															foundsContainer.Refresh()
+														} else {
+															fmt.Printf("Failed %v\n", err)
+														}
+													},
+												),
+											), nil, nil, nil,
+											foundsContainer,
+										),
+										taskWindow,
+									)
+									deepdeep.Resize(fyne.NewSize(300, 500))
+									deepdeep.Show()
+									//
+								})),
 						))
 					col1.Objects = append(col1.Objects,
 						widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x.ParentID, x.ParentTitle), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
@@ -1425,7 +1523,7 @@ func taskWindowRefresh(specific string) {
 						}),
 					))
 				col1.Objects = append(col1.Objects,
-					widget.NewLabelWithStyle(x.Title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+					widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", thisID, x.Title), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
 				iconContainer := container.NewMax(getPriorityIconFor(x.PriorityOverride, priorityIcons))
 				textContainer := newTappableLabel(myPriority, func(_ *fyne.PointEvent) {})

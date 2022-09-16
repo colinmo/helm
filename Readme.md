@@ -20,3 +20,4 @@ This is meant to be a main controller for my day-to-day work and other tasks. Cu
 * [ ] Add ability to reassign jobs
 * [ ] Add ability to comment on jobs
 * [ ] Add ability to see current comments/ journals for jobs
+* [ ] Change sort icons to be a filter to show/ hide backlog items

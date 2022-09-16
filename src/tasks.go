@@ -58,9 +58,11 @@ var AuthenticationTokens = Tokens{
 
 type TaskResponseStruct struct {
 	ID               string
+	BusObRecId       string
 	Title            string
 	ParentTitle      string
 	ParentID         string
+	ParentIDInternal string
 	CreatedDateTime  time.Time
 	Priority         string
 	Status           string
