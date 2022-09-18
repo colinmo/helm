@@ -70,14 +70,20 @@ type TaskResponseStruct struct {
 	Owner            string
 }
 
+var planner = Planner{}
+
+func InitTasks() {
+	planner.Init("http://localhost:84/", connectionStatusBox, "", "", time.Now())
+}
+
 func GetAllTasks() {
 	if appPreferences.GSMActive {
 		AuthenticateToGSM()
 		GetGSM()
 	}
 	if appPreferences.MSPlannerActive {
-		refreshMS()
-		DownloadPlanners()
+		planner.Refresh()
+		planner.Download("")
 		taskWindowRefresh("MSPlanner")
 	}
 	if appPreferences.JiraActive {
@@ -89,7 +95,9 @@ var AuthWebServer *http.Server
 
 func startLocalServers() {
 	http.HandleFunc("/cherwell", authenticateToCherwell)
-	http.HandleFunc("/ms", authenticateToMS)
+	http.HandleFunc(planner.RedirectPath, func(w http.ResponseWriter, r *http.Request) {
+		planner.Authenticate(w, r)
+	})
 	go func() {
 		AuthWebServer = &http.Server{Addr: ":84", Handler: nil}
 		if err := AuthWebServer.ListenAndServe(); err != nil {
@@ -129,8 +137,6 @@ func loadPriorityOverride() {
 	}
 }
 
-// @todo - add a cleanup somewhere so that if the priorty matches the actual value, don't save it
-// OR add an element to the dropdown saying "Default" that removes an override
 func savePriorityOverride() {
 	f, err := os.OpenFile(appPreferences.PriorityOverride, os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModeExclusive)
 	if err == nil {
@@ -148,4 +154,17 @@ func TruncateShort(s string, i int) string {
 		return string(runes[:i]) + "..."
 	}
 	return s
+}
+
+// Generic task object needs
+type Task struct {
+}
+
+func (t *Task) Init() {
+	// Initialising
+	fmt.Printf("Generic init")
+}
+
+func (t *Task) Authenticate(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("Authenticating")
 }

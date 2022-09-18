@@ -100,7 +100,6 @@ func setup() {
 		TaskTaskStatus:      binding.NewString(),
 		TaskTaskCount:       0,
 		GSMGettingToken:     false,
-		MSGettingToken:      false,
 	}
 	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
 }
@@ -108,7 +107,6 @@ func setup() {
 func overrides() {
 	preferencesToLocalVar()
 	loadPriorityOverride()
-	startLocalServers()
 	connectionStatusBox = func(onl bool, label string) {
 		//background := color.NRGBA{R: 125, G: 125, B: 125, A: 125}
 		icon := CloudDisconnect
@@ -149,7 +147,7 @@ func overrides() {
 			jiraConnectionActive.Refresh()
 		case "M":
 			button.OnTapped = func() {
-				DownloadPlanners()
+				planner.Download("")
 			}
 			msConnectionActive.Objects = container.NewMax(
 				button,
@@ -162,6 +160,8 @@ func overrides() {
 	gsmConnectionActive = container.NewMax()
 	jiraConnectionActive = container.NewMax()
 	msConnectionActive = container.NewMax()
+	InitTasks()
+	startLocalServers()
 	if appPreferences.GSMActive {
 		AppStatus.GSMGettingToken = true
 		go singleThreadReturnGSMAccessToken()
@@ -174,11 +174,10 @@ func overrides() {
 	}
 	if appPreferences.MSPlannerActive {
 		AppStatus.MSGettingToken = true
-		go singleThreadReturnOrGetPlannerAccessToken()
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
-				DownloadPlanners()
+				planner.Download("")
 			}
 		}()
 	}
@@ -683,6 +682,7 @@ func taskWindowSetup() {
 		msConnectionActive,
 		jiraConnectionActive,
 	)
+	TaskTabsIndexes = map[string]int{}
 	TaskTabs = container.NewAppTabs()
 	if appPreferences.GSMActive {
 		TaskTabs = container.NewAppTabs(
@@ -798,7 +798,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							DownloadPlanners()
+							planner.Download("")
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1376,7 +1376,7 @@ func taskWindowRefresh(specific string) {
 	if appPreferences.MSPlannerActive && (specific == "" || specific == "MSPlanner") {
 		// MY PLANNER
 		var list5 fyne.CanvasObject
-		if len(AppStatus.MyTasksFromPlanner) == 0 {
+		if len(planner.MyTasks) == 0 {
 			list5 = widget.NewLabel("No requests")
 		} else {
 			col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1384,7 +1384,7 @@ func taskWindowRefresh(specific string) {
 			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### %`))
-			for _, x := range AppStatus.MyTasksFromPlanner {
+			for _, x := range planner.MyTasks {
 				thisID := x.ID
 				myPriority := x.PriorityOverride
 				if x.Priority != x.PriorityOverride {
@@ -1472,7 +1472,7 @@ func taskWindowRefresh(specific string) {
 				widget.NewToolbarAction(
 					theme.ViewRefreshIcon(),
 					func() {
-						DownloadPlanners()
+						planner.Download("")
 						taskWindowRefresh("MSPlanner")
 					},
 				),
