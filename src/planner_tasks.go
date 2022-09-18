@@ -1,5 +1,7 @@
 package main
 
+// @todo: Make this into an Object with a singular concern
+
 import (
 	"bytes"
 	"encoding/json"
