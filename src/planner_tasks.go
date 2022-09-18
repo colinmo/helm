@@ -1,7 +1,5 @@
 package main
 
-// @todo: Make this into an Object with a singular concern
-
 import (
 	"bytes"
 	"encoding/json"
@@ -62,7 +60,6 @@ type Planner struct {
 }
 
 func (p *Planner) Init(baseRedirect string, statusCallback func(bool, string), accessToken string, refreshToken string, expiration time.Time) {
-	fmt.Printf("Init planner")
 	p.PlannerAccessTokenChan = make(chan string)
 	p.PlannerAccessTokenRequestsChan = make(chan string)
 	p.PlanTitles = map[string]string{}
@@ -79,6 +76,10 @@ func (p *Planner) Init(baseRedirect string, statusCallback func(bool, string), a
 	p.StatusCallback = statusCallback
 }
 
+// @todo: Add an initial check to see if login
+// has happened - and start the login if it hasn't
+// but don't try and open the login browser multiple
+// times.
 func (p *Planner) SingleThreadReturnOrGetPlannerAccessToken() {
 	go func() {
 		for {

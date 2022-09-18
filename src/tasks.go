@@ -73,6 +73,7 @@ type TaskResponseStruct struct {
 var planner = Planner{}
 
 func InitTasks() {
+	fmt.Printf("%v\n", connectionStatusBox)
 	planner.Init("http://localhost:84/", connectionStatusBox, "", "", time.Now())
 }
 

@@ -108,16 +108,13 @@ func overrides() {
 	preferencesToLocalVar()
 	loadPriorityOverride()
 	connectionStatusBox = func(onl bool, label string) {
-		//background := color.NRGBA{R: 125, G: 125, B: 125, A: 125}
 		icon := CloudDisconnect
 		if onl {
 			fmt.Printf("Connect %s\n", label)
-			// background = color.NRGBA{R: 125, G: 125, B: 125, A: 125}
 			icon = CloudConnect
 		}
 		button := widget.NewButton(label, func() {})
 		button.Importance = widget.LowImportance
-
 		fmt.Printf("Refresh %s\n", label[0:1])
 		switch label[0:1] {
 		case "G":
