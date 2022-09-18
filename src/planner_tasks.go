@@ -46,8 +46,6 @@ type PlanGraphResponse struct {
 	Title string `json:"title"`
 }
 
-var MSPlannerPlanTitles = map[string]string{}
-
 type Planner struct {
 	Task
 	PlannerAccessTokenChan         chan string
@@ -137,6 +135,7 @@ func (p *Planner) Authenticate(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("Content-type", "text/html")
 			fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.</body></html>")
 			p.AccessToken = MSToken.AccessToken
+			p.Download("")
 		}
 	}
 }
@@ -269,14 +268,14 @@ func (p *Planner) TeamPriorityToGSMPriority(priority int) string {
 
 func (p *Planner) Refresh() {
 	var MSToken MSAuthResponse
-	if len(AuthenticationTokens.MS.refresh_token) == 0 {
+	if len(p.RefreshToken) == 0 {
 		p.Login()
 		return
 	}
 	payload := url.Values{
 		"client_id":     {msApplicationClientId},
 		"scope":         {msScopes},
-		"refresh_token": {AuthenticationTokens.MS.refresh_token},
+		"refresh_token": {p.RefreshToken},
 		"redirect_uri":  {p.RedirectURI},
 		"grant_type":    {"refresh_token"},
 		"client_secret": {msApplicationSecret},
@@ -298,7 +297,6 @@ func (p *Planner) Refresh() {
 		seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", MSToken.ExpiresIn-10))
 		p.Expiration = time.Now().Add(seconds)
 		p.AccessToken = MSToken.AccessToken
-		fmt.Printf("Tokens: %s|%s|%s\n", p.AccessToken, p.RefreshToken, p.Expiration)
 	}
 }
 

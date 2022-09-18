@@ -173,7 +173,6 @@ func overrides() {
 		}()
 	}
 	if appPreferences.MSPlannerActive {
-		AppStatus.MSGettingToken = true
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
