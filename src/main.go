@@ -91,6 +91,9 @@ var gsmConnectionActive *fyne.Container
 var msConnectionActive *fyne.Container
 var jiraConnectionActive *fyne.Container
 var connectionStatusContainer *fyne.Container
+var connectionStatusBox = func(bool, string) {
+	// nothing
+}
 
 func setup() {
 	os.Setenv("TZ", "Australia/Brisbane")
@@ -110,12 +113,11 @@ func overrides() {
 	connectionStatusBox = func(onl bool, label string) {
 		icon := CloudDisconnect
 		if onl {
-			fmt.Printf("Connect %s\n", label)
 			icon = CloudConnect
 		}
 		button := widget.NewButton(label, func() {})
 		button.Importance = widget.LowImportance
-		fmt.Printf("Refresh %s\n", label[0:1])
+		fmt.Printf("Refresh Connection Status %s|%v\n", label[0:1], onl)
 		switch label[0:1] {
 		case "G":
 			button.OnTapped = func() {
@@ -134,7 +136,7 @@ func overrides() {
 		case "J":
 			button.OnTapped = func() {
 				if onl {
-					GetJira()
+					jira.Download()
 				}
 			}
 			jiraConnectionActive.Objects = container.NewMax(
@@ -181,7 +183,7 @@ func overrides() {
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
-				GetJira()
+				jira.Download()
 			}
 		}()
 	}
@@ -663,8 +665,6 @@ func zettleFileName(date time.Time) string {
 	return fmt.Sprintf("%s-retro.markdown", date.Local().Format("20060102"))
 }
 
-var connectionStatusBox func(bool, string)
-
 func taskWindowSetup() {
 	taskWindow.Resize(fyne.NewSize(430, 550))
 	taskWindow.Hide()
@@ -822,7 +822,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							GetJira()
+							jira.Download()
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1490,7 +1490,7 @@ func taskWindowRefresh(specific string) {
 	}
 	if appPreferences.JiraActive && (specific == "" || specific == "Jira") {
 		var list fyne.CanvasObject
-		if len(AppStatus.MyTasksFromJira) == 0 {
+		if len(jira.MyTasks) == 0 {
 			list = widget.NewLabel("No requests")
 		} else {
 			col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1498,7 +1498,8 @@ func taskWindowRefresh(specific string) {
 			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-			for _, x := range AppStatus.MyTasksFromJira {
+			fmt.Printf("Got %d tasks\n", len(jira.MyTasks))
+			for _, x := range jira.MyTasks {
 				thisID := x.ID
 				myPriority := x.PriorityOverride
 				if x.Priority != x.PriorityOverride {
@@ -1585,7 +1586,7 @@ func taskWindowRefresh(specific string) {
 				widget.NewToolbarAction(
 					theme.ViewRefreshIcon(),
 					func() {
-						GetJira()
+						jira.Download()
 					},
 				),
 				widget.NewToolbarSeparator(),

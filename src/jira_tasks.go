@@ -34,32 +34,41 @@ type JiraResponseType struct {
 	} `json:"issues"`
 }
 
-func GetJira() {
+type Jira struct {
+	Task
+	MyTasks []TaskResponseStruct
+}
+
+func (j *Jira) Init() {
+	//
+}
+
+func (j *Jira) Download() {
 	if appPreferences.JiraActive && appPreferences.JiraKey > "" {
 		activeTaskStatusUpdate(1)
 		defer activeTaskStatusUpdate(-1)
-		AppStatus.MyTasksFromJira = []TaskResponseStruct{}
+		j.MyTasks = []TaskResponseStruct{}
 		connectionStatusBox(true, "J")
 		var jiraResponse JiraResponseType
 		baseQuery := `jql=assignee%3Dcurrentuser()%20AND%20status%20!%3D%20%22Done%22%20order%20by%20priority,created%20asc&fields=summary,created,priority,status`
 		queryToCall := fmt.Sprintf("%s&startAt=0", baseQuery)
 		for page := 1; page < 200; page++ {
-			r, err := callJiraURI("GET", "search", []byte{}, queryToCall)
+			r, err := j.callJiraURI("GET", "search", []byte{}, queryToCall)
 			if err == nil {
 				defer r.Close()
 				_ = json.NewDecoder(r).Decode(&jiraResponse)
 
 				for _, y := range jiraResponse.Issues {
 					dt, _ := time.Parse("2006-01-02T15:04:05.999-0700", y.Fields.CreatedDateTime)
-					AppStatus.MyTasksFromJira = append(
-						AppStatus.MyTasksFromJira,
+					j.MyTasks = append(
+						j.MyTasks,
 						TaskResponseStruct{
 							ID:               y.Key,
 							Title:            TruncateShort(y.Fields.Summary, 60),
 							CreatedDateTime:  dt,
-							Priority:         jiraPriorityToGSMPriority(y.Fields.Priority.Name),
+							Priority:         j.jiraPriorityToGSMPriority(y.Fields.Priority.Name),
 							Status:           y.Fields.Status.Name,
-							PriorityOverride: jiraPriorityToGSMPriority(y.Fields.Priority.Name),
+							PriorityOverride: j.jiraPriorityToGSMPriority(y.Fields.Priority.Name),
 						},
 					)
 				}
@@ -73,16 +82,16 @@ func GetJira() {
 			}
 		}
 		// sort
-		sort.SliceStable(AppStatus.MyTasksFromPlanner, func(i, j int) bool {
-			if AppStatus.MyTasksFromPlanner[i].PriorityOverride == AppStatus.MyTasksFromPlanner[j].PriorityOverride {
-				return AppStatus.MyTasksFromPlanner[i].CreatedDateTime.Before(AppStatus.MyTasksFromPlanner[j].CreatedDateTime)
+		sort.SliceStable(j.MyTasks, func(i, k int) bool {
+			if j.MyTasks[i].PriorityOverride == j.MyTasks[k].PriorityOverride {
+				return j.MyTasks[i].CreatedDateTime.Before(j.MyTasks[k].CreatedDateTime)
 			}
-			return AppStatus.MyTasksFromPlanner[i].PriorityOverride < AppStatus.MyTasksFromPlanner[j].PriorityOverride
+			return j.MyTasks[i].PriorityOverride < j.MyTasks[k].PriorityOverride
 		})
 		taskWindowRefresh("Jira")
 	}
 }
-func callJiraURI(method string, path string, payload []byte, query string) (io.ReadCloser, error) {
+func (j *Jira) callJiraURI(method string, path string, payload []byte, query string) (io.ReadCloser, error) {
 	client := &http.Client{
 		Timeout: time.Second * 10,
 	}
@@ -97,7 +106,7 @@ func callJiraURI(method string, path string, payload []byte, query string) (io.R
 	resp, err := client.Do(req)
 	return resp.Body, err
 }
-func jiraPriorityToGSMPriority(priority string) string {
+func (j *Jira) jiraPriorityToGSMPriority(priority string) string {
 	switch priority {
 	case "Highest":
 		return "1"

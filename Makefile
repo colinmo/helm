@@ -17,7 +17,10 @@ build-newosx:
 build-osxu: build-oldosx build-newosx build-osx
 	cd bin && \
 	lipo -create -output helm macold macnew && \
-	cp helm ../src/Helm.app/Contents/MacOS
+	cp helm ../src/Helm.app/Contents/MacOS && \
+	codesign -f -s - ../src/Helm.app
+
+
 
 # export GOOS=windows
 # export GOARCH=amd64

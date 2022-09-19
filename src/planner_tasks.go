@@ -76,10 +76,6 @@ func (p *Planner) Init(baseRedirect string, statusCallback func(bool, string), a
 	p.StatusCallback = statusCallback
 }
 
-// @todo: Add an initial check to see if login
-// has happened - and start the login if it hasn't
-// but don't try and open the login browser multiple
-// times.
 func (p *Planner) SingleThreadReturnOrGetPlannerAccessToken() {
 	go func() {
 		for {
@@ -105,6 +101,7 @@ func (p *Planner) Authenticate(w http.ResponseWriter, r *http.Request) {
 	var MSToken MSAuthResponse
 	query := r.URL.Query()
 	if query.Get("code") != "" {
+		fmt.Printf("Authenticate Planner\n")
 		payload := url.Values{
 			"client_id":           {msApplicationClientId},
 			"scope":               {msScopes},
@@ -142,7 +139,6 @@ func (p *Planner) Authenticate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Planner) Login() {
-	p.StatusCallback(false, "M")
 	browser.OpenURL(
 		fmt.Sprintf(`https://login.microsoftonline.com/%s/oauth2/v2.0/authorize?finalUri=?code=xy&client_id=%s&response_type=code&redirect_uri=http://localhost:84/ms&response_mode=query&scope=%s`,
 			msApplicationTenant,
@@ -153,7 +149,6 @@ func (p *Planner) Login() {
 
 func (p *Planner) Download(specific string) {
 	go func() {
-		fmt.Printf("Downloading Planner\n")
 		activeTaskStatusUpdate(1)
 		defer activeTaskStatusUpdate(-1)
 
@@ -246,7 +241,6 @@ func (p *Planner) CallGraphURI(method string, path string, payload []byte, query
 	req.Header.Set("Content-type", "application/json")
 
 	resp, err := client.Do(req)
-	// @todo - handle unauthorised w' refresh if needed
 	return resp.Body, err
 }
 
@@ -270,7 +264,6 @@ func (p *Planner) TeamPriorityToGSMPriority(priority int) string {
 func (p *Planner) Refresh() {
 	var MSToken MSAuthResponse
 	if len(p.RefreshToken) == 0 {
-		p.Login()
 		return
 	}
 	payload := url.Values{
