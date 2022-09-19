@@ -122,9 +122,9 @@ func overrides() {
 		case "G":
 			button.OnTapped = func() {
 				if onl {
-					GetGSM()
+					gsm.Download()
 				} else {
-					browser.OpenURL(GSMAuthURL)
+					gsm.Login()
 					activeTaskStatusUpdate(1)
 				}
 			}
@@ -162,12 +162,10 @@ func overrides() {
 	InitTasks()
 	startLocalServers()
 	if appPreferences.GSMActive {
-		AppStatus.GSMGettingToken = true
-		go singleThreadReturnGSMAccessToken()
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
-				GetGSM()
+				gsm.Download()
 			}
 		}()
 	}
@@ -687,7 +685,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							DownloadTasks()
+							gsm.DownloadTasks()
 							taskWindowRefresh("CWTasks")
 						},
 					),
@@ -711,7 +709,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							DownloadIncidents()
+							gsm.DownloadIncidents()
 							taskWindowRefresh("CWIncidents")
 						},
 					),
@@ -735,7 +733,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							DownloadTeam()
+							gsm.DownloadTeam()
 							taskWindowRefresh("CWTeamIncidents")
 						},
 					),
@@ -759,7 +757,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							DownloadMyRequests()
+							gsm.DownloadMyRequests()
 							taskWindowRefresh("CWRequests")
 						},
 					),
@@ -932,7 +930,8 @@ func taskWindowRefresh(specific string) {
 	priorityIcons := setupPriorityIcons()
 	if appPreferences.GSMActive {
 		if specific == "" || specific == "CWTasks" {
-			if len(AppStatus.MyTasksFromGSM) == 0 {
+			fmt.Printf("Task count %d\n", len(gsm.MyTasks))
+			if len(gsm.MyTasks) == 0 {
 				list = widget.NewLabel("No tasks")
 			} else {
 				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -942,7 +941,7 @@ func taskWindowRefresh(specific string) {
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 
-				for _, x := range AppStatus.MyTasksFromGSM {
+				for _, x := range gsm.MyTasks {
 					thisID := x.ID
 					thisObjRecId := x.BusObRecId
 					thisParent := x.ParentID
@@ -961,7 +960,7 @@ func taskWindowRefresh(specific string) {
 									browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisParent)
 								}),
 								newTappableIcon(theme.DocumentIcon(), func(_ *fyne.PointEvent) {
-									journals, err := GetJournalNotesForIncident(thisParentInternal)
+									journals, err := gsm.GetJournalNotesForIncident(thisParentInternal)
 
 									if err == nil {
 										list := container.NewVBox()
@@ -1001,7 +1000,7 @@ func taskWindowRefresh(specific string) {
 											co.(*tappableLabel).OnTapGo = func(_ *fyne.PointEvent) {
 												splits := strings.Split(me.Target, "-")
 												fmt.Printf("Target: %s|%s\n", me.Target, splits[0])
-												ReassignTaskToPersonInTeam(thisObjRecId, splits[0], splits[1])
+												gsm.ReassignTaskToPersonInTeam(thisObjRecId, splits[0], splits[1])
 												fmt.Printf("Reassigning to %s|%s\n", me.Label, me.Target)
 												deepdeep.Hide()
 											}
@@ -1022,7 +1021,7 @@ func taskWindowRefresh(specific string) {
 													"Search",
 													theme.SearchIcon(),
 													func() {
-														founds, err := FindPeopleToReasignTo(lookinFor.Text)
+														founds, err := gsm.FindPeopleToReasignTo(lookinFor.Text)
 														foundPeople = []struct {
 															Label  string
 															Target string
@@ -1119,7 +1118,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							DownloadTasks()
+							gsm.DownloadTasks()
 							taskWindowRefresh("CWTasks")
 						},
 					),
@@ -1141,7 +1140,7 @@ func taskWindowRefresh(specific string) {
 		}
 		if specific == "" || specific == "CWIncidents" {
 			var list2 fyne.CanvasObject
-			if len(AppStatus.MyIncidentsFromGSM) == 0 {
+			if len(gsm.MyIncidents) == 0 {
 				list2 = widget.NewLabel("No incidents")
 			} else {
 				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1149,7 +1148,7 @@ func taskWindowRefresh(specific string) {
 				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-				for _, x := range AppStatus.MyIncidentsFromGSM {
+				for _, x := range gsm.MyIncidents {
 					thisID := x.ID
 					myPriority := x.PriorityOverride
 					if x.Priority != x.PriorityOverride {
@@ -1217,7 +1216,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							DownloadIncidents()
+							gsm.DownloadIncidents()
 							taskWindowRefresh("CWIncidents")
 						},
 					),
@@ -1239,7 +1238,7 @@ func taskWindowRefresh(specific string) {
 		}
 		if specific == "" || specific == "CWTeamIncidents" {
 			var list3 fyne.CanvasObject
-			if len(AppStatus.MyTeamIncidentsFromGSM) == 0 {
+			if len(gsm.TeamIncidents) == 0 {
 				list3 = widget.NewLabel("No incidents")
 			} else {
 				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1248,7 +1247,7 @@ func taskWindowRefresh(specific string) {
 				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-				for _, x := range AppStatus.MyTeamIncidentsFromGSM {
+				for _, x := range gsm.TeamIncidents {
 					thisID := x.ID
 					col0.Objects = append(
 						col0.Objects,
@@ -1284,7 +1283,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							DownloadTeam()
+							gsm.DownloadTeam()
 							taskWindowRefresh("CWTeamIncidents")
 						},
 					),
@@ -1306,7 +1305,7 @@ func taskWindowRefresh(specific string) {
 		}
 		if specific == "" || specific == "CWRequests" {
 			var list4 fyne.CanvasObject
-			if len(AppStatus.MyRequestsInGSM) == 0 {
+			if len(gsm.LoggedIncidents) == 0 {
 				list4 = widget.NewLabel("No requests")
 			} else {
 				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1314,7 +1313,7 @@ func taskWindowRefresh(specific string) {
 				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-				for _, x := range AppStatus.MyRequestsInGSM {
+				for _, x := range gsm.LoggedIncidents {
 					thisID := x.ID
 					col0.Objects = append(
 						col0.Objects,
@@ -1348,7 +1347,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							DownloadMyRequests()
+							gsm.DownloadMyRequests()
 							taskWindowRefresh("CWRequests")
 						},
 					),

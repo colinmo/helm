@@ -72,16 +72,22 @@ type TaskResponseStruct struct {
 
 var planner = Planner{}
 var jira = Jira{}
+var gsm = Cherwell{}
 
 func InitTasks() {
-	planner.Init("http://localhost:84/", connectionStatusBox, "", "", time.Now())
-	planner.Login()
+	if appPreferences.JiraActive {
+		planner.Init("http://localhost:84/", connectionStatusBox, "", "", time.Now())
+		planner.Login()
+	}
+	if appPreferences.GSMActive {
+		gsm.Init("http://localhost:84/", connectionStatusBox, "", "", time.Now())
+		gsm.Login()
+	}
 }
 
 func GetAllTasks() {
 	if appPreferences.GSMActive {
-		AuthenticateToGSM()
-		GetGSM()
+		gsm.Download()
 	}
 	if appPreferences.MSPlannerActive {
 		planner.Refresh()
@@ -96,10 +102,16 @@ func GetAllTasks() {
 var AuthWebServer *http.Server
 
 func startLocalServers() {
-	http.HandleFunc("/cherwell", authenticateToCherwell)
-	http.HandleFunc(planner.RedirectPath, func(w http.ResponseWriter, r *http.Request) {
-		planner.Authenticate(w, r)
-	})
+	if appPreferences.GSMActive {
+		http.HandleFunc(gsm.RedirectPath, func(w http.ResponseWriter, r *http.Request) {
+			gsm.AuthenticateToCherwell(w, r)
+		})
+	}
+	if appPreferences.JiraActive {
+		http.HandleFunc(planner.RedirectPath, func(w http.ResponseWriter, r *http.Request) {
+			planner.Authenticate(w, r)
+		})
+	}
 	go func() {
 		AuthWebServer = &http.Server{Addr: ":84", Handler: nil}
 		if err := AuthWebServer.ListenAndServe(); err != nil {
