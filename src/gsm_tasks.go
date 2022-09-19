@@ -33,69 +33,93 @@ type GSMSearchQuery struct {
 	Sorting    []GSMSort   `json:"sorting"`
 }
 
-var GSMAccessTokenRequestsChan = make(chan string)
-var GSMAccessTokenChan = make(chan string)
-var GSMBaseUrl = `https://griffith.cherwellondemand.com/CherwellAPI/`
-var GSMAuthURL = `https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`
+type Cherwell struct {
+	Task
+	AccessTokenChan        chan string
+	AccessTokenRequestChan chan string
+	AccessToken            string
+	UserID                 string
+	UserSnumber            string
+	UserTeams              []string
+	DefaultTeam            string
+	RefreshToken           string
+	Expiration             time.Time
+	MyTasks                []TaskResponseStruct
+	MyIncidents            []TaskResponseStruct
+	LoggedIncidents        []TaskResponseStruct
+	TeamIncidents          []TaskResponseStruct
+	BaseURL                string
+	AuthURL                string
+}
 
-func singleThreadReturnGSMAccessToken() {
+func (gsm *Cherwell) Init(accessToken string, refreshToken string, expiration time.Time) {
+	gsm.AccessTokenChan = make(chan string)
+	gsm.AccessTokenRequestChan = make(chan string)
+	if accessToken != "" {
+		gsm.AccessToken = accessToken
+		gsm.RefreshToken = refreshToken
+		gsm.Expiration = expiration
+	}
+	gsm.BaseURL = `https://griffith.cherwellondemand.com/CherwellAPI/`
+	gsm.AuthURL = `https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`
+}
+
+func (gsm *Cherwell) singleThreadReturnGSMAccessToken() {
 	for {
-		_, ok := <-GSMAccessTokenRequestsChan
+		_, ok := <-gsm.AccessTokenRequestChan
 		if !ok {
-			// Close channel
 			break
 		}
-		if time.Now().After(AuthenticationTokens.GSM.expiration) {
-			AuthenticationTokens.GSM.access_token = ""
+		if time.Now().After(gsm.Expiration) {
+			gsm.AccessToken = ""
 			connectionStatusBox(false, "G")
 		}
 		for {
-			if AuthenticationTokens.GSM.access_token != "" {
+			if gsm.AccessToken != "" {
 				break
 			}
 			connectionStatusBox(false, "G")
 			time.Sleep(1 * time.Second)
 		}
-		GSMAccessTokenChan <- AuthenticationTokens.GSM.access_token
+		gsm.AccessTokenChan <- gsm.AccessToken
 	}
 }
 
-func returnOrGetGSMAccessToken() string {
-	GSMAccessTokenRequestsChan <- time.Now().String()
-	return <-GSMAccessTokenChan
+func (gsm *Cherwell) returnOrGetGSMAccessToken() string {
+	gsm.AccessTokenRequestChan <- time.Now().String()
+	return <-gsm.AccessTokenChan
 }
 
-func AuthenticateToGSM() {
-	AuthenticationTokens.GSM.access_token = ""
-	browser.OpenURL(GSMAuthURL)
+func (gsm *Cherwell) Authenticate() {
+	browser.OpenURL(gsm.AuthURL)
 }
 
-func GetGSM() {
+func (gsm *Cherwell) Download() {
 	go func() {
-		DownloadTasks()
+		gsm.DownloadTasks()
 		taskWindowRefresh("CWTasks")
 	}()
 	go func() {
-		DownloadIncidents()
+		gsm.DownloadIncidents()
 		taskWindowRefresh("CWIncidents")
 	}()
 	go func() {
-		DownloadMyRequests()
+		gsm.DownloadMyRequests()
 		taskWindowRefresh("CWRequests")
 	}()
 	go func() {
-		DownloadTeam()
+		gsm.DownloadTeam()
 		taskWindowRefresh("CWTeamIncidents")
 	}()
 }
 
-func DownloadTasks() {
-	returnOrGetGSMAccessToken()
+func (gsm *Cherwell) DownloadTasks() {
+	gsm.returnOrGetGSMAccessToken()
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
-	AppStatus.MyTasksFromGSM = []TaskResponseStruct{}
+	gsm.MyTasks = []TaskResponseStruct{}
 	for page := 1; page < 200; page++ {
-		tasksResponse, _ := GetMyTasksFromGSMForPage(page)
+		tasksResponse, _ := gsm.GetMyTasksFromGSMForPage(page)
 		if len(tasksResponse.BusinessObjects) > 0 {
 			for _, x := range tasksResponse.BusinessObjects {
 				row := TaskResponseStruct{
@@ -124,7 +148,7 @@ func DownloadTasks() {
 				if val, ok := priorityOverrides.CWIncidents[row.ID]; ok {
 					row.PriorityOverride = val
 				}
-				AppStatus.MyTasksFromGSM = append(AppStatus.MyTasksFromGSM, row)
+				gsm.MyTasks = append(gsm.MyTasks, row)
 			}
 		} else {
 			fmt.Printf("Nothing found")
@@ -134,26 +158,26 @@ func DownloadTasks() {
 		}
 	}
 	sort.SliceStable(
-		AppStatus.MyTasksFromGSM,
+		gsm.MyTasks,
 		func(i, j int) bool {
 			var toReturn bool
-			if AppStatus.MyTasksFromGSM[i].PriorityOverride == AppStatus.MyTasksFromGSM[j].PriorityOverride {
-				toReturn = AppStatus.MyTasksFromGSM[i].CreatedDateTime.Before(AppStatus.MyTasksFromGSM[j].CreatedDateTime)
+			if gsm.MyTasks[i].PriorityOverride == gsm.MyTasks[j].PriorityOverride {
+				toReturn = gsm.MyTasks[i].CreatedDateTime.Before(gsm.MyTasks[j].CreatedDateTime)
 			} else {
-				toReturn = AppStatus.MyTasksFromGSM[i].PriorityOverride < AppStatus.MyTasksFromGSM[j].PriorityOverride
+				toReturn = gsm.MyTasks[i].PriorityOverride < gsm.MyTasks[j].PriorityOverride
 			}
 			return toReturn
 		},
 	)
 }
 
-func DownloadIncidents() {
-	returnOrGetGSMAccessToken()
+func (gsm *Cherwell) DownloadIncidents() {
+	gsm.returnOrGetGSMAccessToken()
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
-	AppStatus.MyIncidentsFromGSM = []TaskResponseStruct{}
+	gsm.MyIncidents = []TaskResponseStruct{}
 	for page := 1; page < 200; page++ {
-		tasksResponse, _ := GetMyIncidentsFromGSMForPage(page)
+		tasksResponse, _ := gsm.GetMyIncidentsFromGSMForPage(page)
 		if len(tasksResponse.BusinessObjects) > 0 {
 			for _, x := range tasksResponse.BusinessObjects {
 				row := TaskResponseStruct{
@@ -175,7 +199,7 @@ func DownloadIncidents() {
 				if val, ok := priorityOverrides.CWIncidents[row.ID]; ok {
 					row.PriorityOverride = val
 				}
-				AppStatus.MyIncidentsFromGSM = append(AppStatus.MyIncidentsFromGSM, row)
+				gsm.MyIncidents = append(gsm.MyIncidents, row)
 			}
 		}
 		if len(tasksResponse.BusinessObjects) != 200 {
@@ -184,13 +208,13 @@ func DownloadIncidents() {
 	}
 }
 
-func DownloadMyRequests() {
-	returnOrGetGSMAccessToken()
+func (gsm *Cherwell) DownloadMyRequests() {
+	gsm.returnOrGetGSMAccessToken()
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
-	AppStatus.MyRequestsInGSM = []TaskResponseStruct{}
+	gsm.LoggedIncidents = []TaskResponseStruct{}
 	for page := 1; page < 200; page++ {
-		tasksResponse, _ := GetMyRequestsInGSMForPage(page)
+		tasksResponse, _ := gsm.GetMyRequestsInGSMForPage(page)
 		if len(tasksResponse.BusinessObjects) > 0 {
 			for _, x := range tasksResponse.BusinessObjects {
 				row := TaskResponseStruct{
@@ -212,7 +236,7 @@ func DownloadMyRequests() {
 				if val, ok := priorityOverrides.CWIncidents[row.ID]; ok {
 					row.PriorityOverride = val
 				}
-				AppStatus.MyRequestsInGSM = append(AppStatus.MyRequestsInGSM, row)
+				gsm.LoggedIncidents = append(gsm.LoggedIncidents, row)
 			}
 		}
 		if len(tasksResponse.BusinessObjects) != 200 {
@@ -221,13 +245,13 @@ func DownloadMyRequests() {
 	}
 }
 
-func DownloadTeam() {
-	returnOrGetGSMAccessToken()
+func (gsm *Cherwell) DownloadTeam() {
+	gsm.returnOrGetGSMAccessToken()
 	activeTaskStatusUpdate(1)
 	defer activeTaskStatusUpdate(-1)
-	AppStatus.MyTeamIncidentsFromGSM = []TaskResponseStruct{}
+	gsm.TeamIncidents = []TaskResponseStruct{}
 	for page := 1; page < 200; page++ {
-		tasksResponse, _ := GetMyTeamIncidentsInGSMForPage(page)
+		tasksResponse, _ := gsm.GetMyTeamIncidentsInGSMForPage(page)
 		if len(tasksResponse.BusinessObjects) > 0 {
 			for _, x := range tasksResponse.BusinessObjects {
 				if x.Fields[6].Value == AuthenticationTokens.GSM.cherwelluser {
@@ -254,7 +278,7 @@ func DownloadTeam() {
 				if val, ok := priorityOverrides.CWIncidents[row.ID]; ok {
 					row.PriorityOverride = val
 				}
-				AppStatus.MyTeamIncidentsFromGSM = append(AppStatus.MyTeamIncidentsFromGSM, row)
+				gsm.TeamIncidents = append(gsm.TeamIncidents, row)
 			}
 		}
 		if len(tasksResponse.BusinessObjects) != 200 {
@@ -360,12 +384,12 @@ type FoundGSMPeople struct {
 	DefaultTeamID string
 }
 
-func GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse, error) {
+func (gsm *Cherwell) GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse, error) {
 	var tasksResponse CherwellSearchResponse
-	returnOrGetGSMAccessToken() // Wait for CherwellUser to be a value
-	r, err := SearchCherwellFor(GSMSearchQuery{
+	gsm.returnOrGetGSMAccessToken() // Wait for CherwellUser to be a value
+	r, err := gsm.SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
-			{FieldId: CWFields.Task.OwnerID, Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
+			{FieldId: CWFields.Task.OwnerID, Operator: "eq", Value: gsm.UserID},
 			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "Acknowledged"},
 			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "New"},
 			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "In Progress"},
@@ -397,12 +421,12 @@ func GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse, error) {
 	return tasksResponse, err
 }
 
-func GetMyIncidentsFromGSMForPage(page int) (CherwellSearchResponse, error) {
+func (gsm *Cherwell) GetMyIncidentsFromGSMForPage(page int) (CherwellSearchResponse, error) {
 	var tasksResponse CherwellSearchResponse
-	returnOrGetGSMAccessToken()
-	r, err := SearchCherwellFor(GSMSearchQuery{
+	gsm.returnOrGetGSMAccessToken()
+	r, err := gsm.SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
-			{FieldId: CWFields.Incident.OwnerID, Operator: "eq", Value: AuthenticationTokens.GSM.cherwelluser},
+			{FieldId: CWFields.Incident.OwnerID, Operator: "eq", Value: gsm.UserID},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Acknowledged"},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "New"},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "In Progress"},
@@ -431,12 +455,12 @@ func GetMyIncidentsFromGSMForPage(page int) (CherwellSearchResponse, error) {
 	return tasksResponse, err
 }
 
-func GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse, error) {
+func (gsm *Cherwell) GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse, error) {
 	var tasksResponse CherwellSearchResponse
-	returnOrGetGSMAccessToken()
-	r, err := SearchCherwellFor(GSMSearchQuery{
+	gsm.returnOrGetGSMAccessToken()
+	r, err := gsm.SearchCherwellFor(GSMSearchQuery{
 		Filters: []GSMFilter{
-			{FieldId: CWFields.Incident.RequestorSNumber, Operator: "eq", Value: AuthenticationTokens.GSM.userid},
+			{FieldId: CWFields.Incident.RequestorSNumber, Operator: "eq", Value: gsm.UserID},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Acknowledged"},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "New"},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "In Progress"},
@@ -465,7 +489,7 @@ func GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse, error) {
 	return tasksResponse, err
 }
 
-func GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
+func (gsm *Cherwell) GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
 	var tasksResponse CherwellSearchResponse
 	baseFilter := []GSMFilter{
 		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Acknowledged"},
@@ -476,34 +500,34 @@ func GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
 	}
 	// Refresh my teams, just in case.
 	// Get my TeamIDs in Cherwell
-	returnOrGetGSMAccessToken()
+	gsm.returnOrGetGSMAccessToken()
 	var teamResponse struct {
 		Teams []struct {
 			TeamID   string `json:"teamId"`
 			TeamName string `json:"teamName"`
 		} `json:"teams"`
 	}
-	r, err := getStuffFromCherwell(
+	r, err := gsm.getStuffFromCherwell(
 		"GET",
-		"api/V2/getusersteams/userrecordid/"+AuthenticationTokens.GSM.cherwelluser,
+		"api/V2/getusersteams/userrecordid/"+gsm.UserID,
 		[]byte{},
 		false)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&teamResponse)
-		AuthenticationTokens.GSM.allteams = []string{}
+		gsm.UserTeams = []string{}
 		for _, x := range teamResponse.Teams {
-			AuthenticationTokens.GSM.allteams = append(AuthenticationTokens.GSM.allteams, x.TeamID)
+			gsm.UserTeams = append(gsm.UserTeams, x.TeamID)
 		}
 	}
 	//
-	for _, x := range AuthenticationTokens.GSM.allteams {
+	for _, x := range gsm.UserTeams {
 		baseFilter = append(baseFilter, GSMFilter{FieldId: CWFields.Incident.TeamID, Operator: "eq", Value: x})
 	}
-	if len(AuthenticationTokens.GSM.myteam) > 0 {
-		baseFilter = append(baseFilter, GSMFilter{FieldId: CWFields.Incident.TeamID, Operator: "eq", Value: AuthenticationTokens.GSM.myteam})
+	if len(gsm.DefaultTeam) > 0 {
+		baseFilter = append(baseFilter, GSMFilter{FieldId: CWFields.Incident.TeamID, Operator: "eq", Value: gsm.DefaultTeam})
 	}
-	r, err = SearchCherwellFor(GSMSearchQuery{
+	r, err = gsm.SearchCherwellFor(GSMSearchQuery{
 		Filters:    baseFilter,
 		BusObjId:   "6dd53665c0c24cab86870a21cf6434ae",
 		PageNumber: page,
@@ -529,7 +553,7 @@ func GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchResponse, error) {
 	return tasksResponse, err
 }
 
-func FindPeopleToReasignTo(lookfor string) ([]FoundGSMPeople, error) {
+func (gsm *Cherwell) FindPeopleToReasignTo(lookfor string) ([]FoundGSMPeople, error) {
 	var searchResponse CherwellSearchResponse
 	var foundPeople []FoundGSMPeople
 	alreadyLooked := map[string]bool{}
@@ -551,7 +575,7 @@ func FindPeopleToReasignTo(lookfor string) ([]FoundGSMPeople, error) {
 			{FieldID: CWFields.User.Name, SortDirection: 1},
 		},
 	}
-	r, err := SearchCherwellFor(searchingFor, false)
+	r, err := gsm.SearchCherwellFor(searchingFor, false)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&searchResponse)
@@ -559,7 +583,7 @@ func FindPeopleToReasignTo(lookfor string) ([]FoundGSMPeople, error) {
 			person := FoundGSMPeople{
 				UserID: x1.BusObRecId,
 			}
-			person.Teams = GetTeamsForUser(person.UserID)
+			person.Teams = gsm.GetTeamsForUser(person.UserID)
 			for _, y := range x1.Fields {
 				switch y.Name {
 				case "DefaultTeamID":
@@ -591,7 +615,7 @@ func FindPeopleToReasignTo(lookfor string) ([]FoundGSMPeople, error) {
 			{FieldID: CWFields.User.Name, SortDirection: 1},
 		},
 	}
-	r, err = SearchCherwellFor(searchingFor, false)
+	r, err = gsm.SearchCherwellFor(searchingFor, false)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&searchResponse)
@@ -600,7 +624,7 @@ func FindPeopleToReasignTo(lookfor string) ([]FoundGSMPeople, error) {
 				person := FoundGSMPeople{
 					UserID: x1.BusObRecId,
 				}
-				person.Teams = GetTeamsForUser(person.UserID)
+				person.Teams = gsm.GetTeamsForUser(person.UserID)
 				for _, y := range x1.Fields {
 					switch y.Name {
 					case "DefaultTeamID":
@@ -625,10 +649,10 @@ type UserTeamsResponse struct {
 	} `json:"teams"`
 }
 
-func GetTeamsForUser(userId string) map[string]string {
+func (gsm *Cherwell) GetTeamsForUser(userId string) map[string]string {
 	var response UserTeamsResponse
 	toReturn := map[string]string{}
-	r, err := getStuffFromCherwell(
+	r, err := gsm.getStuffFromCherwell(
 		"GET",
 		"api/V2/getusersteams/userrecordid/"+userId,
 		[]byte{},
@@ -659,7 +683,7 @@ type ReassignStruct struct {
 	} `json:"fields"`
 }
 
-func ReassignTaskToPersonInTeam(incidentId string, userId string, teamId string) error {
+func (gsm *Cherwell) ReassignTaskToPersonInTeam(incidentId string, userId string, teamId string) error {
 	payload, _ := json.Marshal(ReassignStruct{
 		BusObId:    CWFields.Task.BusObId,
 		BusObRecId: incidentId,
@@ -677,7 +701,7 @@ func ReassignTaskToPersonInTeam(incidentId string, userId string, teamId string)
 		},
 	})
 	fmt.Printf("%s\n", payload)
-	_, err := getStuffFromCherwell(
+	_, err := gsm.getStuffFromCherwell(
 		"POST",
 		"api/V1/savebusinessobject",
 		payload,
@@ -685,10 +709,10 @@ func ReassignTaskToPersonInTeam(incidentId string, userId string, teamId string)
 	return err
 }
 
-func SearchCherwellFor(toSend GSMSearchQuery, refreshToken bool) (io.ReadCloser, error) {
+func (gsm *Cherwell) SearchCherwellFor(toSend GSMSearchQuery, refreshToken bool) (io.ReadCloser, error) {
 	var err error
 	sendThis, _ := json.Marshal(toSend)
-	result, err := getStuffFromCherwell(
+	result, err := gsm.getStuffFromCherwell(
 		"POST",
 		"api/V1/getsearchresults",
 		sendThis,
@@ -761,10 +785,10 @@ type CherwellJournal struct {
 	Details string
 }
 
-func GetJournalNotesForIncident(incident string) ([]CherwellJournal, error) {
+func (gsm *Cherwell) GetJournalNotesForIncident(incident string) ([]CherwellJournal, error) {
 	var tasksResponse CherwellRelatedResponse
 	var toReturn []CherwellJournal
-	returnOrGetGSMAccessToken()
+	gsm.returnOrGetGSMAccessToken()
 
 	toSend := GSMRelatedBusinessObject{
 		Filters: []GSMFilter{
@@ -786,7 +810,7 @@ func GetJournalNotesForIncident(incident string) ([]CherwellJournal, error) {
 		},
 	}
 	sendThis, _ := json.Marshal(toSend)
-	result, err := getStuffFromCherwell(
+	result, err := gsm.getStuffFromCherwell(
 		"POST",
 		"api/V1/getrelatedbusinessobject",
 		sendThis,
@@ -813,7 +837,7 @@ func GetJournalNotesForIncident(incident string) ([]CherwellJournal, error) {
 	return toReturn, err
 }
 
-func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
+func (gsm *Cherwell) authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 	var CherwellToken CherwellAuthResponse
 	query := r.URL.Query()
 	if query.Get("code") != "" {
@@ -826,7 +850,7 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				"username":   {r.PostFormValue("userId")},
 				"password":   {ticket},
 			}
-			targetURL, _ := url.JoinPath(GSMBaseUrl, "token")
+			targetURL, _ := url.JoinPath(gsm.BaseURL, "token")
 			targetURL += "?auth_mode=SAML"
 			resp, err := http.PostForm(
 				targetURL,
@@ -836,35 +860,33 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 				log.Fatalf("Login failed %s\n", err)
 			} else {
 				fmt.Printf("Getting token active\n")
-				AppStatus.GSMGettingToken = true
 				json.NewDecoder(resp.Body).Decode(&CherwellToken)
 				if len(CherwellToken.Error) > 0 {
 					log.Fatalf("Failed 1 %s\n", CherwellToken.ErrorDescription)
 				}
-				AuthenticationTokens.GSM.access_token = CherwellToken.AccessToken
-				AuthenticationTokens.GSM.refresh_token = CherwellToken.RefreshToken
-				AuthenticationTokens.GSM.userid = CherwellToken.Username
+				gsm.AccessToken = CherwellToken.AccessToken
+				gsm.RefreshToken = CherwellToken.RefreshToken
+				gsm.UserSnumber = CherwellToken.Username
 				if CherwellToken.Expires == "" {
-					AuthenticationTokens.GSM.expiration = time.Now().Add(2000 * time.Hour)
+					gsm.Expiration = time.Now().Add(2000 * time.Hour)
 				} else {
-					AuthenticationTokens.GSM.expiration, _ = time.Parse(time.RFC1123, CherwellToken.Expires)
+					gsm.Expiration, _ = time.Parse(time.RFC1123, CherwellToken.Expires)
 				}
 				var decodedResponse CherwellSearchResponse
 				// Get my UserID in Cherwell
 				fmt.Printf("Getting my user id")
-				r, _ := SearchCherwellFor(GSMSearchQuery{
+				r, _ := gsm.SearchCherwellFor(GSMSearchQuery{
 					Filters: []GSMFilter{
-						{FieldId: "941798910e24d4b1ae3c6a408cb3f8c5eba26e2b2b", Operator: "eq", Value: AuthenticationTokens.GSM.userid},
+						{FieldId: "941798910e24d4b1ae3c6a408cb3f8c5eba26e2b2b", Operator: "eq", Value: gsm.UserSnumber},
 					},
 					BusObjId: "9338216b3c549b75607cf54667a4e67d1f644d9fed",
 					Fields:   []string{"933a15d131ff727ca7ed3f4e1c8f528d719b99b82d", "933a15d17f1f10297df7604b58a76734d6106ac428"},
 				}, false)
 				defer r.Close()
 				_ = json.NewDecoder(r).Decode(&decodedResponse)
-				AuthenticationTokens.GSM.cherwelluser = decodedResponse.BusinessObjects[0].BusObRecId
-				AuthenticationTokens.GSM.myteam = decodedResponse.BusinessObjects[0].Fields[1].Value
+				gsm.UserID = decodedResponse.BusinessObjects[0].BusObRecId
+				gsm.DefaultTeam = decodedResponse.BusinessObjects[0].Fields[1].Value
 				connectionStatusBox(true, "G")
-				AppStatus.GSMGettingToken = false
 				fmt.Printf("Token got\n")
 				w.Header().Add("Content-type", "text/html")
 				fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.</body></html>")
@@ -873,26 +895,26 @@ func authenticateToCherwell(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// Redirect to Cherwell AUTH
-		browser.OpenURL(GSMAuthURL)
+		browser.OpenURL(gsm.AuthURL)
 		activeTaskStatusUpdate(1)
 	}
 }
 
-func getStuffFromCherwell(method string, path string, payload []byte, refreshToken bool) (io.ReadCloser, error) {
+func (gsm *Cherwell) getStuffFromCherwell(method string, path string, payload []byte, refreshToken bool) (io.ReadCloser, error) {
 	client := &http.Client{
 		Timeout: time.Second * 10,
 	}
-	newpath, _ := url.JoinPath(GSMBaseUrl, path)
+	newpath, _ := url.JoinPath(gsm.BaseURL, path)
 	req, _ := http.NewRequest(method, newpath, bytes.NewReader(payload))
 	if refreshToken {
-		returnOrGetGSMAccessToken()
+		gsm.returnOrGetGSMAccessToken()
 	}
-	if AuthenticationTokens.GSM.access_token == "" || time.Now().After(AuthenticationTokens.GSM.expiration) {
+	if gsm.AccessToken == "" || time.Now().After(gsm.Expiration) {
 		gsmConnectionActive.Objects[1] = CloudDisconnect
 		gsmConnectionActive.Refresh()
 		return nil, fmt.Errorf("expired token")
 	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", AuthenticationTokens.GSM.access_token))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", gsm.AccessToken))
 	req.Header.Set("Content-type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
