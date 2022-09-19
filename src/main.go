@@ -39,23 +39,12 @@ import (
 **/
 
 // @todo - Sorting or remove buttons
-// @todo - Don't auto-refresh anything that doesn't have a back-end refresh via RefreshTokens.
-//         Just set the status to Offline and give user the ability to click it to reconnect.
 
 type AppStatusStruct struct {
-	CurrentZettleDBDate    time.Time
-	CurrentZettleDKB       binding.String
-	GSMGettingToken        bool
-	MSGettingToken         bool
-	MyTasksFromGSM         []TaskResponseStruct
-	MyIncidentsFromGSM     []TaskResponseStruct
-	MyRequestsInGSM        []TaskResponseStruct
-	MyTeamIncidentsFromGSM []TaskResponseStruct
-	TaskTaskCount          int
-	TaskTaskStatus         binding.String
-	MyTasksFromPlanner     []TaskResponseStruct
-	MyTasksFromJira        []TaskResponseStruct
-	MyTasksFromDynamics    []TaskResponseStruct
+	CurrentZettleDBDate time.Time
+	CurrentZettleDKB    binding.String
+	TaskTaskCount       int
+	TaskTaskStatus      binding.String
 }
 
 type AppPreferences struct {
@@ -102,7 +91,6 @@ func setup() {
 		CurrentZettleDKB:    binding.NewString(),
 		TaskTaskStatus:      binding.NewString(),
 		TaskTaskCount:       0,
-		GSMGettingToken:     false,
 	}
 	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
 }
