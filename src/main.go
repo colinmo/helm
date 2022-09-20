@@ -49,6 +49,7 @@ type AppStatusStruct struct {
 
 type AppPreferences struct {
 	ZettlekastenHome string
+	JiraProjectHome  string
 	RouterUsername   string
 	RouterPassword   string
 	GSMActive        bool
@@ -499,7 +500,8 @@ func markdownWindowSetup() {
 
 func preferencesToLocalVar() {
 	appPreferences = AppPreferences{}
-	appPreferences.ZettlekastenHome = thisApp.Preferences().StringWithFallback("ZettlekastenHome", os.TempDir())
+	appPreferences.ZettlekastenHome = thisApp.Preferences().StringWithFallback("ZettlekastenHome", path.Join(os.TempDir(), "zett"))
+	appPreferences.JiraProjectHome = thisApp.Preferences().StringWithFallback("JiraProjectHome", path.Join(os.TempDir(), "project"))
 	appPreferences.GSMActive = thisApp.Preferences().BoolWithFallback("GSMActive", true)
 	appPreferences.MSPlannerActive = thisApp.Preferences().BoolWithFallback("MSPlannerActive", false)
 	appPreferences.MSGroups = thisApp.Preferences().StringWithFallback("MSGroups", "")
@@ -524,6 +526,8 @@ func preferencesWindowSetup() {
 	// Fields
 	zettlePath := widget.NewEntry()
 	zettlePath.SetText(appPreferences.ZettlekastenHome)
+	jiraPath := widget.NewEntry()
+	jiraPath.SetText(appPreferences.JiraProjectHome)
 	// MSPlanner
 	plannerActive := widget.NewCheck("Active", func(res bool) {})
 	plannerActive.SetChecked(appPreferences.MSPlannerActive)
@@ -566,6 +570,8 @@ func preferencesWindowSetup() {
 		// SavePreferences
 		appPreferences.ZettlekastenHome = zettlePath.Text
 		thisApp.Preferences().SetString("ZettlekastenHome", appPreferences.ZettlekastenHome)
+		appPreferences.JiraProjectHome = jiraPath.Text
+		thisApp.Preferences().SetString("JiraProjectHome", appPreferences.JiraProjectHome)
 		appPreferences.PriorityOverride = priorityOverride.Text
 		thisApp.Preferences().SetString("PriorityOverride", appPreferences.PriorityOverride)
 
@@ -599,6 +605,8 @@ func preferencesWindowSetup() {
 			zettlePath,
 			widget.NewLabel("Priority-override file"),
 			priorityOverride,
+			widget.NewLabel("Jira Project Path"),
+			jiraPath,
 			widget.NewLabel(""),
 			widget.NewLabelWithStyle("Planner", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 			widget.NewLabel("Planner active"),
