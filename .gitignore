@@ -10,3 +10,4 @@ src/msplannersecret.go
 src/jirasecret.go
 src/dynamicssecret.go
 src/jira_tasks_token_test.go
+src/Helm-Installer.dmg
