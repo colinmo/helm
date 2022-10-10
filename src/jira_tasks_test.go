@@ -1,13 +1,8 @@
 package main
 
-import (
-	"path"
-	"testing"
-	"time"
-)
-
 var JiraFixtures = "/Users/s457972/Dropbox/swap/golang/helm/fixtures/"
 
+/*
 func TestConvertFileToData(t *testing.T) {
 	j := Jira{}
 	bob := MarkdownTask{}
@@ -145,3 +140,4 @@ func TestDifferenceObjects(t *testing.T) {
 		t.Fatalf("Didn't figure the remote file")
 	}
 }
+*/

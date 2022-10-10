@@ -106,7 +106,6 @@ func overrides() {
 		}
 		button := widget.NewButton(label, func() {})
 		button.Importance = widget.LowImportance
-		fmt.Printf("Refresh Connection Status %s|%v\n", label[0:1], onl)
 		switch label[0:1] {
 		case "G":
 			button.OnTapped = func() {
@@ -114,7 +113,6 @@ func overrides() {
 					gsm.Download()
 				} else {
 					gsm.Login()
-					activeTaskStatusUpdate(1)
 				}
 			}
 			gsmConnectionActive.Objects = container.NewMax(
@@ -126,6 +124,7 @@ func overrides() {
 			button.OnTapped = func() {
 				if onl {
 					jira.Download()
+					taskWindowRefresh("Jira")
 				}
 			}
 			jiraConnectionActive.Objects = container.NewMax(
@@ -154,6 +153,7 @@ func overrides() {
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
+				gsm.Login()
 				gsm.Download()
 			}
 		}()
@@ -171,6 +171,7 @@ func overrides() {
 			for {
 				time.Sleep(5 * time.Minute)
 				jira.Download()
+				taskWindowRefresh("Jira")
 			}
 		}()
 	}
@@ -681,8 +682,10 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadTasks()
-							taskWindowRefresh("CWTasks")
+							go func() {
+								gsm.DownloadTasks()
+								taskWindowRefresh("CWTasks")
+							}()
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -705,8 +708,10 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadIncidents()
-							taskWindowRefresh("CWIncidents")
+							go func() {
+								gsm.DownloadIncidents()
+								taskWindowRefresh("CWIncidents")
+							}()
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -753,8 +758,36 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadMyRequests()
-							taskWindowRefresh("CWRequests")
+							go func() {
+								gsm.DownloadMyRequests()
+								taskWindowRefresh("CWRequests")
+							}()
+						},
+					),
+					widget.NewToolbarSeparator(),
+					widget.NewToolbarAction(
+						theme.HistoryIcon(),
+						func() {},
+					),
+					widget.NewToolbarAction(
+						theme.ErrorIcon(),
+						func() {},
+					),
+				),
+				nil,
+				nil,
+				nil,
+				container.NewWithoutLayout(),
+			)),
+			container.NewTabItem("My Team Tasks", container.NewBorder(
+				widget.NewToolbar(
+					widget.NewToolbarAction(
+						theme.ViewRefreshIcon(),
+						func() {
+							go func() {
+								gsm.DownloadMyRequests()
+								taskWindowRefresh("CWRequests")
+							}()
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -778,6 +811,7 @@ func taskWindowSetup() {
 			"CWIncidents":     1,
 			"CWRequests":      2,
 			"CWTeamIncidents": 3,
+			"CWTeamTasks":     4,
 		}
 	}
 	if appPreferences.MSPlannerActive {
@@ -788,7 +822,10 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							planner.Download("")
+							go func() {
+								planner.Download("")
+								taskWindowRefresh("MSPlanner")
+							}()
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -816,7 +853,10 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							jira.Download()
+							go func() {
+								jira.Download()
+								taskWindowRefresh("Jira")
+							}()
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -926,7 +966,6 @@ func taskWindowRefresh(specific string) {
 	priorityIcons := setupPriorityIcons()
 	if appPreferences.GSMActive {
 		if specific == "" || specific == "CWTasks" {
-			fmt.Printf("Task count %d\n", len(gsm.MyTasks))
 			if len(gsm.MyTasks) == 0 {
 				list = widget.NewLabel("No tasks")
 			} else {
@@ -981,7 +1020,7 @@ func taskWindowRefresh(specific string) {
 										fmt.Printf("FAILED %v\n", err)
 									}
 								}),
-								newTappableIcon(theme.ComputerIcon(), func(_ *fyne.PointEvent) {
+								newTappableIcon(theme.AccountIcon(), func(_ *fyne.PointEvent) {
 									var deepdeep dialog.Dialog
 									var foundPeople []struct {
 										Label  string
@@ -1299,6 +1338,218 @@ func taskWindowRefresh(specific string) {
 				list3,
 			)
 		}
+		if specific == "" || specific == "CWTeamTasks" {
+			var list fyne.CanvasObject
+			if len(gsm.TeamTasks) == 0 {
+				list = widget.NewLabel("No tasks")
+			} else {
+				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
+				col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Incident`))
+				col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Task`))
+				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
+				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
+				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
+				for _, x := range gsm.TeamTasks {
+					thisID := x.ID
+					thisObjRecId := x.BusObRecId
+					thisParent := x.ParentID
+					thisParentInternal := x.ParentIDInternal
+					myPriority := x.PriorityOverride
+					if x.Priority != x.PriorityOverride {
+						myPriority = fmt.Sprintf("%s(%s)", x.PriorityOverride, x.Priority)
+					}
+					tempVar := ""
+					col0.Objects = append(
+						col0.Objects,
+						container.NewMax(
+							widget.NewLabel(""),
+							container.NewHBox(
+								newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+									browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisParent)
+								}),
+								newTappableIcon(theme.DocumentIcon(), func(_ *fyne.PointEvent) {
+									journals, err := gsm.GetJournalNotesForIncident(thisParentInternal)
+
+									if err == nil {
+										list := container.NewVBox()
+										for _, x := range journals {
+											deets := widget.NewLabel(x.Details)
+											deets.Wrapping = fyne.TextWrapBreak
+											list.Add(container.NewVBox(
+												container.NewHBox(
+													widget.NewLabel(x.Date.Format("2006-01-02 15:04:05")),
+													layout.NewSpacer(),
+													widget.NewLabel(x.Class),
+												),
+												deets,
+											))
+										}
+
+										deepdeep := thisApp.NewWindow("Journals for " + thisParent)
+										deepdeep.SetContent(container.NewVScroll(list))
+										deepdeep.Resize(fyne.NewSize(400, 500))
+										deepdeep.Show()
+									} else {
+										fmt.Printf("FAILED %v\n", err)
+									}
+								}),
+								newTappableIcon(theme.AccountIcon(), func(_ *fyne.PointEvent) {
+									var deepdeep dialog.Dialog
+									var foundPeople []struct {
+										Label  string
+										Target string
+									}
+									foundsList := widget.NewList(
+										func() int {
+											return len(foundPeople)
+										},
+										func() fyne.CanvasObject {
+											return newTappableLabel("x", func(_ *fyne.PointEvent) {})
+										},
+										func(lii widget.ListItemID, co fyne.CanvasObject) {
+											me := foundPeople[lii]
+											co.(*tappableLabel).SetText(me.Label)
+											co.(*tappableLabel).OnTapGo = func(_ *fyne.PointEvent) {
+												splits := strings.Split(me.Target, "-")
+												fmt.Printf("Target: %s|%s\n", me.Target, splits[0])
+												gsm.ReassignTaskToPersonInTeam(thisObjRecId, splits[0], splits[1])
+												fmt.Printf("Reassigning %s to %s|%s\n", thisObjRecId, me.Label, me.Target)
+												deepdeep.Hide()
+											}
+										},
+									)
+									foundsList.Resize(fyne.NewSize(300, 500))
+									foundsContainer := container.NewMax(foundsList)
+									lookinFor := widget.NewEntry()
+									deepdeep = dialog.NewCustom("Reassign task",
+										"Actually, no",
+										container.NewBorder(
+											container.NewVBox(
+												container.New(layout.NewFormLayout(),
+													widget.NewLabel("Reassign to"),
+													lookinFor,
+												),
+												widget.NewButtonWithIcon(
+													"Search",
+													theme.SearchIcon(),
+													func() {
+														founds, err := gsm.FindPeopleToReasignTo(lookinFor.Text)
+														foundPeople = []struct {
+															Label  string
+															Target string
+														}{}
+														if err == nil {
+															for _, c := range founds {
+																for tId, tName := range c.Teams {
+																	foundPeople = append(foundPeople, struct {
+																		Label  string
+																		Target string
+																	}{
+																		Label:  fmt.Sprintf("%s - %s", c.Name, tName),
+																		Target: fmt.Sprintf("%s-%s", c.UserID, tId),
+																	})
+																}
+															}
+															foundsList.Refresh()
+															foundsContainer.Refresh()
+														} else {
+															fmt.Printf("Failed %v\n", err)
+														}
+													},
+												),
+											), nil, nil, nil,
+											foundsContainer,
+										),
+										taskWindow,
+									)
+									deepdeep.Resize(fyne.NewSize(300, 500))
+									deepdeep.Show()
+									//
+								})),
+						))
+					col1.Objects = append(col1.Objects,
+						widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x.ParentID, x.ParentTitle), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+					col2.Objects = append(
+						col2.Objects,
+						newTappableLabel(
+							fmt.Sprintf("[%s] %s", x.ID, x.Title),
+							func(_ *fyne.PointEvent) {
+								browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/task/" + thisID)
+							},
+						),
+					)
+					col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
+					tempFunc := func(_ *fyne.PointEvent) {
+						dialog.ShowForm(
+							"Priority override "+thisID,
+							"Override",
+							"Cancel",
+							[]*widget.FormItem{
+								widget.NewFormItem(
+									"Priority",
+									widget.NewSelect(
+										[]string{"1", "2", "3", "4", "5"},
+										func(changed string) {
+											tempVar = changed
+										},
+									)),
+							},
+							func(isit bool) {
+								if tempVar == x.Priority || tempVar == "" {
+									delete(priorityOverrides.CWIncidents, thisID)
+								} else {
+									priorityOverrides.CWIncidents[thisID] = tempVar
+								}
+								savePriorityOverride()
+							},
+							taskWindow,
+						)
+					}
+					col4.Objects = append(col4.Objects, container.NewMax(
+						getPriorityIconFor(x.PriorityOverride, priorityIcons),
+						newTappableLabelWithStyle(
+							myPriority,
+							fyne.TextAlignCenter,
+							fyne.TextStyle{},
+							tempFunc)))
+					col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
+				}
+				list = container.NewVScroll(
+					container.NewHBox(
+						col0,
+						col1,
+						col2,
+						col3,
+						col4,
+						col5,
+					),
+				)
+			}
+			TaskTabs.Items[TaskTabsIndexes["CWTeamTasks"]].Content = container.NewBorder(
+				widget.NewToolbar(
+					widget.NewToolbarAction(
+						theme.ViewRefreshIcon(),
+						func() {
+							gsm.DownloadTeamTasks()
+							taskWindowRefresh("CWTeamTasks")
+						},
+					),
+					widget.NewToolbarSeparator(),
+					widget.NewToolbarAction(
+						theme.HistoryIcon(),
+						func() {},
+					),
+					widget.NewToolbarAction(
+						theme.ErrorIcon(),
+						func() {},
+					),
+				),
+				nil,
+				nil,
+				nil,
+				list,
+			)
+		}
 		if specific == "" || specific == "CWRequests" {
 			var list4 fyne.CanvasObject
 			if len(gsm.LoggedIncidents) == 0 {
@@ -1493,7 +1744,6 @@ func taskWindowRefresh(specific string) {
 			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-			fmt.Printf("Got %d tasks\n", len(jira.MyTasks))
 			for _, x := range jira.MyTasks {
 				thisID := x.ID
 				myPriority := x.PriorityOverride
@@ -1581,7 +1831,10 @@ func taskWindowRefresh(specific string) {
 				widget.NewToolbarAction(
 					theme.ViewRefreshIcon(),
 					func() {
-						jira.Download()
+						go func() {
+							jira.Download()
+							taskWindowRefresh("Jira")
+						}()
 					},
 				),
 				widget.NewToolbarSeparator(),

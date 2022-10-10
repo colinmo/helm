@@ -101,7 +101,6 @@ func (p *Planner) Authenticate(w http.ResponseWriter, r *http.Request) {
 	var MSToken MSAuthResponse
 	query := r.URL.Query()
 	if query.Get("code") != "" {
-		fmt.Printf("Authenticate Planner\n")
 		payload := url.Values{
 			"client_id":           {msApplicationClientId},
 			"scope":               {msScopes},
@@ -148,84 +147,83 @@ func (p *Planner) Login() {
 }
 
 func (p *Planner) Download(specific string) {
-	go func() {
-		activeTaskStatusUpdate(1)
-		defer activeTaskStatusUpdate(-1)
+	p.GetAccessToken()
+	activeTaskStatusUpdate(1)
+	defer activeTaskStatusUpdate(-1)
 
-		p.MyTasks = []TaskResponseStruct{}
-		uniquePlans := map[string][]int{}
-		var teamResponse myTasksGraphResponse
-		urlToCall := "/me/planner/tasks"
-		for page := 1; page < 200; page++ {
-			r, err := p.CallGraphURI("GET", urlToCall, []byte{}, "$expand=details")
+	p.MyTasks = []TaskResponseStruct{}
+	uniquePlans := map[string][]int{}
+	var teamResponse myTasksGraphResponse
+	urlToCall := "/me/planner/tasks"
+	for page := 1; page < 200; page++ {
+		r, err := p.CallGraphURI("GET", urlToCall, []byte{}, "$expand=details")
+		if err == nil {
+			defer r.Close()
+			_ = json.NewDecoder(r).Decode(&teamResponse)
+
+			for _, y := range teamResponse.Value {
+				if y.PercentComplete < 100 {
+					row := TaskResponseStruct{
+						ID:               y.TaskID,
+						ParentID:         y.PlanID,
+						Title:            y.Title,
+						Priority:         p.TeamPriorityToGSMPriority(y.Priority),
+						PriorityOverride: p.TeamPriorityToGSMPriority(y.Priority),
+					}
+					row.CreatedDateTime, _ = time.Parse("2006-01-02T15:04:05.999999999Z", y.CreatedDateTime)
+					switch y.PercentComplete {
+					case 0:
+						row.Status = "Not started (0)"
+					case 50:
+						row.Status = "In progress (50)"
+					}
+					if val, ok := priorityOverrides.MSPlanner[row.ID]; ok {
+						row.PriorityOverride = val
+					}
+					p.MyTasks = append(
+						p.MyTasks,
+						row,
+					)
+					uniquePlans[y.PlanID] = append(uniquePlans[y.PlanID], len(p.MyTasks)-1)
+				}
+			}
+			if len(teamResponse.NextPage) == 0 {
+				break
+			} else {
+				x, e := url.Parse(teamResponse.NextPage)
+				if e == nil {
+					urlToCall = x.Path
+				} else {
+					break
+				}
+			}
+		} else {
+			fmt.Printf("Failed to get Graph Tasks %s\n", err)
+		}
+	}
+	// Get the Plan names
+	for id, members := range uniquePlans {
+		if _, ok := p.PlanTitles[id]; !ok {
+			r, err := p.CallGraphURI("GET", "planner/plans/"+id, []byte{}, "")
 			if err == nil {
 				defer r.Close()
-				_ = json.NewDecoder(r).Decode(&teamResponse)
-
-				for _, y := range teamResponse.Value {
-					if y.PercentComplete < 100 {
-						row := TaskResponseStruct{
-							ID:               y.TaskID,
-							ParentID:         y.PlanID,
-							Title:            y.Title,
-							Priority:         p.TeamPriorityToGSMPriority(y.Priority),
-							PriorityOverride: p.TeamPriorityToGSMPriority(y.Priority),
-						}
-						row.CreatedDateTime, _ = time.Parse("2006-01-02T15:04:05.999999999Z", y.CreatedDateTime)
-						switch y.PercentComplete {
-						case 0:
-							row.Status = "Not started (0)"
-						case 50:
-							row.Status = "In progress (50)"
-						}
-						if val, ok := priorityOverrides.MSPlanner[row.ID]; ok {
-							row.PriorityOverride = val
-						}
-						p.MyTasks = append(
-							p.MyTasks,
-							row,
-						)
-						uniquePlans[y.PlanID] = append(uniquePlans[y.PlanID], len(p.MyTasks)-1)
-					}
-				}
-				if len(teamResponse.NextPage) == 0 {
-					break
-				} else {
-					x, e := url.Parse(teamResponse.NextPage)
-					if e == nil {
-						urlToCall = x.Path
-					} else {
-						break
-					}
-				}
-			} else {
-				fmt.Printf("Failed to get Graph Tasks %s\n", err)
+				var planResponse PlanGraphResponse
+				_ = json.NewDecoder(r).Decode(&planResponse)
+				p.PlanTitles[id] = planResponse.Title
 			}
 		}
-		// Get the Plan names
-		for id, members := range uniquePlans {
-			if _, ok := p.PlanTitles[id]; !ok {
-				r, err := p.CallGraphURI("GET", "planner/plans/"+id, []byte{}, "")
-				if err == nil {
-					defer r.Close()
-					var planResponse PlanGraphResponse
-					_ = json.NewDecoder(r).Decode(&planResponse)
-					p.PlanTitles[id] = planResponse.Title
-				}
-			}
-			for _, index := range members {
-				p.MyTasks[index].Title = fmt.Sprintf("[%s]: %s", p.PlanTitles[id], p.MyTasks[index].Title)
-			}
+		for _, index := range members {
+			p.MyTasks[index].Title = fmt.Sprintf("[%s]: %s", p.PlanTitles[id], p.MyTasks[index].Title)
 		}
+	}
 
-		sort.SliceStable(p.MyTasks, func(i, j int) bool {
-			if p.MyTasks[i].PriorityOverride == p.MyTasks[j].PriorityOverride {
-				return p.MyTasks[i].CreatedDateTime.Before(p.MyTasks[j].CreatedDateTime)
-			}
-			return p.MyTasks[i].PriorityOverride < p.MyTasks[j].PriorityOverride
-		})
-		taskWindowRefresh("MSPlanner")
-	}()
+	sort.SliceStable(p.MyTasks, func(i, j int) bool {
+		if p.MyTasks[i].PriorityOverride == p.MyTasks[j].PriorityOverride {
+			return p.MyTasks[i].CreatedDateTime.Before(p.MyTasks[j].CreatedDateTime)
+		}
+		return p.MyTasks[i].PriorityOverride < p.MyTasks[j].PriorityOverride
+	})
+
 }
 
 func (p *Planner) CallGraphURI(method string, path string, payload []byte, query string) (io.ReadCloser, error) {

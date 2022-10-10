@@ -50,9 +50,16 @@ type Cherwell struct {
 	MyIncidents            []TaskResponseStruct
 	LoggedIncidents        []TaskResponseStruct
 	TeamIncidents          []TaskResponseStruct
+	TeamTasks              []TaskResponseStruct
 	BaseURL                string
 	AuthURL                string
 	StatusCallback         func(bool, string)
+}
+
+func NewCherwell(baseRedirect string, statusCallback func(bool, string), accessToken string, refreshToken string, expiration time.Time) Cherwell {
+	gsm := Cherwell{}
+	gsm.Init(baseRedirect, statusCallback, accessToken, refreshToken, expiration)
+	return gsm
 }
 
 func (gsm *Cherwell) Init(baseRedirect string, statusCallback func(bool, string), accessToken string, refreshToken string, expiration time.Time) {
@@ -64,6 +71,7 @@ func (gsm *Cherwell) Init(baseRedirect string, statusCallback func(bool, string)
 		gsm.Expiration = expiration
 	}
 	gsm.BaseURL = `https://griffith.cherwellondemand.com/CherwellAPI/`
+	//gsm.BaseURL = `http://0.0.0.0:3002/`
 	gsm.AuthURL = `https://serviceportal.griffith.edu.au/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`
 	gsm.RedirectPath = "/cherwell"
 	gsm.RedirectURI, _ = url.JoinPath(baseRedirect, gsm.RedirectPath)
@@ -73,23 +81,26 @@ func (gsm *Cherwell) Init(baseRedirect string, statusCallback func(bool, string)
 }
 
 func (gsm *Cherwell) SingleThreadReturnAccessToken() {
+	yearDot, _ := time.Parse("2006-01-01", "1975-01-01")
 	go func() {
 		for {
 			_, ok := <-gsm.AccessTokenRequestChan
 			if !ok {
 				break
 			}
-			if time.Now().After(gsm.Expiration) {
-				fmt.Printf("Expired token\n")
+			if time.Now().After(gsm.Expiration) && gsm.Expiration != yearDot {
 				gsm.AccessToken = ""
+				gsm.Expiration = yearDot
 				gsm.StatusCallback(false, "G")
 			}
-			for {
-				if gsm.AccessToken != "" {
-					break
+			if gsm.Expiration != yearDot {
+				for {
+					if gsm.AccessToken != "" && len(gsm.UserTeams) != 0 {
+						break
+					}
+					fmt.Printf(".")
+					time.Sleep(1 * time.Second)
 				}
-				gsm.StatusCallback(false, "G")
-				time.Sleep(1 * time.Second)
 			}
 			gsm.AccessTokenChan <- gsm.AccessToken
 		}
@@ -121,6 +132,10 @@ func (gsm *Cherwell) Download() {
 	go func() {
 		gsm.DownloadTeam()
 		taskWindowRefresh("CWTeamIncidents")
+	}()
+	go func() {
+		gsm.DownloadTeamTasks()
+		taskWindowRefresh("CWTeamTasks")
 	}()
 }
 
@@ -296,6 +311,64 @@ func (gsm *Cherwell) DownloadTeam() {
 	}
 }
 
+func (gsm *Cherwell) DownloadTeamTasks() {
+	gsm.returnOrGetGSMAccessToken()
+	activeTaskStatusUpdate(1)
+	defer activeTaskStatusUpdate(-1)
+	gsm.TeamTasks = []TaskResponseStruct{}
+	for page := 1; page < 200; page++ {
+		tasksResponse, _ := gsm.GetMyTeamTasksFromGSMForPage(page)
+		if len(tasksResponse.BusinessObjects) > 0 {
+			for _, x := range tasksResponse.BusinessObjects {
+				row := TaskResponseStruct{
+					ID:         x.BusObPublicId,
+					BusObRecId: x.BusObRecId,
+				}
+				for _, y := range x.Fields {
+					switch y.FieldId {
+					case CWFields.Task.TaskStatus:
+						row.Status = y.Value
+					case CWFields.Task.TaskTitle:
+						row.Title = y.Value
+					case CWFields.Task.IncidentShortDesc:
+						row.ParentTitle = y.Value
+					case CWFields.Task.IncidentID:
+						row.ParentID = y.Value
+					case CWFields.Task.IncidentInternalID:
+						row.ParentIDInternal = y.Value
+					case CWFields.Task.CreatedDateTime:
+						row.CreatedDateTime, _ = time.Parse("1/2/2006 3:04:05 PM", y.Value)
+					case CWFields.Task.IncidentPriority:
+						row.Priority = y.Value
+						row.PriorityOverride = y.Value
+					case CWFields.Task.OwnerName:
+						row.Owner = y.Value
+					}
+				}
+				if val, ok := priorityOverrides.CWIncidents[row.ID]; ok {
+					row.PriorityOverride = val
+				}
+				gsm.TeamTasks = append(gsm.TeamTasks, row)
+			}
+		}
+		if len(tasksResponse.BusinessObjects) != 200 {
+			break
+		}
+	}
+	sort.SliceStable(
+		gsm.TeamTasks,
+		func(i, j int) bool {
+			var toReturn bool
+			if gsm.TeamTasks[i].PriorityOverride == gsm.TeamTasks[j].PriorityOverride {
+				toReturn = gsm.TeamTasks[i].CreatedDateTime.Before(gsm.TeamTasks[j].CreatedDateTime)
+			} else {
+				toReturn = gsm.TeamTasks[i].PriorityOverride < gsm.TeamTasks[j].PriorityOverride
+			}
+			return toReturn
+		},
+	)
+}
+
 type CWFieldIDSTask struct {
 	BusObId            string
 	BusObPubRecId      string
@@ -417,6 +490,7 @@ func (gsm *Cherwell) GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse,
 			CWFields.Task.TaskStatus,
 			CWFields.Task.TaskID,
 			CWFields.Task.IncidentPriority,
+			CWFields.Task.OwnerID,
 		},
 		Sorting: []GSMSort{
 			{FieldID: CWFields.Task.IncidentPriority, SortDirection: 1},
@@ -507,29 +581,6 @@ func (gsm *Cherwell) GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchRes
 		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "On Hold"},
 		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Pending"},
 	}
-	// Refresh my teams, just in case.
-	// Get my TeamIDs in Cherwell
-	gsm.returnOrGetGSMAccessToken()
-	var teamResponse struct {
-		Teams []struct {
-			TeamID   string `json:"teamId"`
-			TeamName string `json:"teamName"`
-		} `json:"teams"`
-	}
-	fmt.Printf("\n\nUserID %s\nUserSnumber%s\n", gsm.UserID, gsm.UserSnumber)
-	r, err := gsm.getStuffFromCherwell(
-		"GET",
-		"api/V2/getusersteams/userrecordid/"+gsm.UserID,
-		[]byte{},
-		false)
-	if err == nil {
-		defer r.Close()
-		_ = json.NewDecoder(r).Decode(&teamResponse)
-		gsm.UserTeams = []string{}
-		for _, x := range teamResponse.Teams {
-			gsm.UserTeams = append(gsm.UserTeams, x.TeamID)
-		}
-	}
 	//
 	for _, x := range gsm.UserTeams {
 		baseFilter = append(baseFilter, GSMFilter{FieldId: CWFields.Incident.TeamID, Operator: "eq", Value: x})
@@ -537,7 +588,7 @@ func (gsm *Cherwell) GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchRes
 	if len(gsm.DefaultTeam) > 0 {
 		baseFilter = append(baseFilter, GSMFilter{FieldId: CWFields.Incident.TeamID, Operator: "eq", Value: gsm.DefaultTeam})
 	}
-	r, err = gsm.SearchCherwellFor(GSMSearchQuery{
+	r, err := gsm.SearchCherwellFor(GSMSearchQuery{
 		Filters:    baseFilter,
 		BusObjId:   "6dd53665c0c24cab86870a21cf6434ae",
 		PageNumber: page,
@@ -556,6 +607,49 @@ func (gsm *Cherwell) GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchRes
 			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
 	}, false)
+	if err == nil {
+		defer r.Close()
+		_ = json.NewDecoder(r).Decode(&tasksResponse)
+	}
+	return tasksResponse, err
+}
+
+func (gsm *Cherwell) GetMyTeamTasksFromGSMForPage(page int) (CherwellSearchResponse, error) {
+	var tasksResponse CherwellSearchResponse
+	gsm.returnOrGetGSMAccessToken()
+	baseFilter := []GSMFilter{
+		{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "Acknowledged"},
+		{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "New"},
+		{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "In Progress"},
+		{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "On Hold"},
+		{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "Pending"},
+		{FieldId: CWFields.Task.OwnerName, Operator: "eq", Value: ""},
+	}
+	//
+	for _, x := range gsm.UserTeams {
+		baseFilter = append(baseFilter, GSMFilter{FieldId: CWFields.Task.TeamID, Operator: "eq", Value: x})
+	}
+	if len(gsm.DefaultTeam) > 0 {
+		baseFilter = append(baseFilter, GSMFilter{FieldId: CWFields.Task.TeamID, Operator: "eq", Value: gsm.DefaultTeam})
+	}
+	builtQuery := GSMSearchQuery{
+		Filters:    baseFilter,
+		BusObjId:   "9355d5ed41e384ff345b014b6cb1c6e748594aea5b",
+		PageNumber: page,
+		PageSize:   200,
+		Fields: []string{
+			CWFields.Task.CreatedDateTime,
+			CWFields.Task.IncidentID,
+			CWFields.Task.IncidentInternalID,
+			CWFields.Task.IncidentShortDesc,
+			CWFields.Task.TaskTitle,
+			CWFields.Task.TaskStatus,
+			CWFields.Task.TaskID,
+			CWFields.Task.IncidentPriority,
+			CWFields.Task.OwnerName,
+		},
+	}
+	r, err := gsm.SearchCherwellFor(builtQuery, false)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -733,9 +827,9 @@ func (gsm *Cherwell) SearchCherwellFor(toSend GSMSearchQuery, refreshToken bool)
 type CherwellAuthResponse struct {
 	Error            string `json:"error"`
 	ErrorDescription string `json:"error_description"`
-	Expires          string `json:"expires"`
+	Expires          string `json:".expires"`
 	ExpiresDate      time.Time
-	Issued           string `json:"issued"`
+	Issued           string `json:".issued"`
 	AccessToken      string `json:"access_token"`
 	RefreshToken     string `json:"refresh_token"`
 	TokenType        string `json:"token_type"`
@@ -866,10 +960,7 @@ func (gsm *Cherwell) AuthenticateToCherwell(w http.ResponseWriter, r *http.Reque
 				targetURL,
 				payload,
 			)
-			if err != nil {
-				log.Fatalf("Login failed %s\n", err)
-			} else {
-				fmt.Printf("Getting token active\n")
+			if err == nil {
 				json.NewDecoder(resp.Body).Decode(&CherwellToken)
 				if len(CherwellToken.Error) > 0 {
 					log.Fatalf("Failed 1 %s\n", CherwellToken.ErrorDescription)
@@ -880,7 +971,8 @@ func (gsm *Cherwell) AuthenticateToCherwell(w http.ResponseWriter, r *http.Reque
 				if CherwellToken.Expires == "" {
 					gsm.Expiration = time.Now().Add(2000 * time.Hour)
 				} else {
-					gsm.Expiration, _ = time.Parse(time.RFC1123, CherwellToken.Expires)
+					//gsm.Expiration, _ = time.Parse(time.RFC1123, CherwellToken.Expires)
+					gsm.Expiration = time.Now().Add(1 * time.Minute)
 				}
 				var decodedResponse CherwellSearchResponse
 				// Get my UserID in Cherwell
@@ -895,11 +987,21 @@ func (gsm *Cherwell) AuthenticateToCherwell(w http.ResponseWriter, r *http.Reque
 				_ = json.NewDecoder(r).Decode(&decodedResponse)
 				gsm.UserID = decodedResponse.BusinessObjects[0].BusObRecId
 				gsm.DefaultTeam = decodedResponse.BusinessObjects[0].Fields[1].Value
+				teams := gsm.GetTeamsForUser(gsm.UserID)
+				teams2 := []string{}
+				for id := range teams {
+					teams2 = append(teams2, id)
+				}
+				gsm.UserTeams = teams2
 				gsm.StatusCallback(true, "G")
 				w.Header().Add("Content-type", "text/html")
 				fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.</body></html>")
-				activeTaskStatusUpdate(-1)
+			} else {
+				w.Header().Add("Content-type", "text/html")
+				fmt.Fprintf(w, "<html><head></head><body><H1>AUTHENTICATION FAILED</h1><p>Something is sad.</p></body></html>")
+
 			}
+			activeTaskStatusUpdate(-1)
 		}
 	} else {
 		// Redirect to Cherwell AUTH

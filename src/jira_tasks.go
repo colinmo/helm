@@ -88,7 +88,6 @@ func (j *Jira) Download() {
 			}
 			return j.MyTasks[i].PriorityOverride < j.MyTasks[k].PriorityOverride
 		})
-		taskWindowRefresh("Jira")
 	}
 }
 func (j *Jira) callJiraURI(method string, path string, payload []byte, query string) (io.ReadCloser, error) {

@@ -12,42 +12,33 @@ import (
 )
 
 func TestSingleThreadReturnGSMAccessTokenActive(t *testing.T) {
-	gsm := Cherwell{}
-	gsm.SingleThreadReturnAccessToken()
-	AuthenticationTokens.GSM.access_token = "x"
-	AuthenticationTokens.GSM.expiration = time.Now().Add(200 * time.Hour)
-	val := ""
+	gsm = NewCherwell("", func(bool, string) {}, "x", "", time.Now().Add(200*time.Hour))
+	val := "l"
 	go func() { val = gsm.returnOrGetGSMAccessToken() }()
-	time.Sleep(1 * time.Second)
-	if val != AuthenticationTokens.GSM.access_token {
-		t.Fatalf("Didn't get the access token expected")
+	time.Sleep(5 * time.Second)
+	if val != gsm.AccessToken {
+		t.Fatalf("Didn't get the access token expected [%s]", val)
 	}
 }
 
 func TestSingleThreadReturnGSMAccessTokenExpired(t *testing.T) {
-	gsm := Cherwell{}
-	gsm.SingleThreadReturnAccessToken()
-	AuthenticationTokens.GSM.access_token = "y"
-	AuthenticationTokens.GSM.expiration = time.Now().Add(-200 * time.Hour)
-	connectionStatusBox = func(bool, string) {}
+	gsm = NewCherwell("", func(bool, string) {}, "y", "", time.Now().Add(-200*time.Hour))
 	val := ""
 	go func() { val = gsm.returnOrGetGSMAccessToken() }()
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 	if val != "" {
 		t.Fatalf("Didn't handle an expired token")
 	}
 }
 
 func TestGoodAccessToken(t *testing.T) {
-	gsm := Cherwell{}
+	gsm = NewCherwell("", func(bool, string) {}, "y", "", time.Now().Add(200*time.Hour))
 	AppStatus = AppStatusStruct{
 		TaskTaskStatus: binding.NewString(),
 		TaskTaskCount:  0,
 	}
 	go func() { startFakeMS("http://localhost:84/cherwell?code=ok", 301, []string{}) }()
-	connectionStatusBox = func(bool, string) {}
 	time.Sleep(5 * time.Second)
-	gsm.SingleThreadReturnAccessToken()
 	browser.OpenURL(gsm.AuthURL)
 	val := gsm.returnOrGetGSMAccessToken()
 	if val != "OKToken" {
