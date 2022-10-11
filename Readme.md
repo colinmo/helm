@@ -21,3 +21,8 @@ This is meant to be a main controller for my day-to-day work and other tasks. Cu
 * [ ] Add ability to comment on jobs
 * [ ] Add ability to see current comments/ journals for jobs
 * [ ] Change sort icons to be a filter to show/ hide backlog items
+* [ ] Change the pull-tasks to be a complete background task rather than just the access token
+  * [ ] Send to the back end agent a request for tasks rather than a request for access token
+  * [ ] If the data is less than X seconds old, just return the last data.
+  * [ ] Otherwise, do a read and return.
+  * [ ] Only one request process per backend tool at a time

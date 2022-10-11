@@ -87,7 +87,13 @@ func InitTasks() {
 
 func GetAllTasks() {
 	if appPreferences.GSMActive {
-		gsm.Download()
+		gsm.Download(
+			func() { taskWindowRefresh("CWTasks") },
+			func() { taskWindowRefresh("CWIncidents") },
+			func() { taskWindowRefresh("CWRequests") },
+			func() { taskWindowRefresh("CWTeamIncidents") },
+			func() { taskWindowRefresh("CWTeamTasks") },
+		)
 	}
 	if appPreferences.MSPlannerActive {
 		planner.Refresh()

@@ -110,10 +110,33 @@ func overrides() {
 		case "G":
 			button.OnTapped = func() {
 				if onl {
-					gsm.Download()
+					gsm.Download(
+						func() { taskWindowRefresh("CWTasks") },
+						func() { taskWindowRefresh("CWIncidents") },
+						func() { taskWindowRefresh("CWRequests") },
+						func() { taskWindowRefresh("CWTeamIncidents") },
+						func() { taskWindowRefresh("CWTeamTasks") },
+					)
 				} else {
+					taskWindowRefresh("CWTasks")
+					taskWindowRefresh("CWIncidents")
+					taskWindowRefresh("CWRequests")
+					taskWindowRefresh("CWTeamIncidents")
+					taskWindowRefresh("CWTeamTasks")
 					gsm.Login()
 				}
+			}
+			if !onl {
+				gsm.MyTasks = []TaskResponseStruct{}
+				gsm.MyIncidents = []TaskResponseStruct{}
+				gsm.LoggedIncidents = []TaskResponseStruct{}
+				gsm.TeamIncidents = []TaskResponseStruct{}
+				gsm.TeamTasks = []TaskResponseStruct{}
+				taskWindowRefresh("CWTasks")
+				taskWindowRefresh("CWIncidents")
+				taskWindowRefresh("CWRequests")
+				taskWindowRefresh("CWTeamIncidents")
+				taskWindowRefresh("CWTeamTasks")
 			}
 			gsmConnectionActive.Objects = container.NewMax(
 				button,
@@ -153,8 +176,12 @@ func overrides() {
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
-				gsm.Login()
-				gsm.Download()
+				gsm.Download(
+					func() { taskWindowRefresh("CWTasks") },
+					func() { taskWindowRefresh("CWIncidents") },
+					func() { taskWindowRefresh("CWRequests") },
+					func() { taskWindowRefresh("CWTeamIncidents") },
+					func() { taskWindowRefresh("CWTeamTasks") })
 			}
 		}()
 	}
@@ -682,10 +709,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							go func() {
-								gsm.DownloadTasks()
-								taskWindowRefresh("CWTasks")
-							}()
+							gsm.DownloadTasks(func() { taskWindowRefresh("CWTasks") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -708,10 +732,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							go func() {
-								gsm.DownloadIncidents()
-								taskWindowRefresh("CWIncidents")
-							}()
+							gsm.DownloadIncidents(func() { taskWindowRefresh("CWIncidents") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -734,8 +755,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadTeam()
-							taskWindowRefresh("CWTeamIncidents")
+							gsm.DownloadTeam(func() { taskWindowRefresh("CWRequests") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -758,10 +778,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							go func() {
-								gsm.DownloadMyRequests()
-								taskWindowRefresh("CWRequests")
-							}()
+							gsm.DownloadMyRequests(func() { taskWindowRefresh("CWTeamIncidents") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -784,10 +801,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							go func() {
-								gsm.DownloadMyRequests()
-								taskWindowRefresh("CWRequests")
-							}()
+							gsm.DownloadMyRequests(func() { taskWindowRefresh("CWTeamTasks") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -965,7 +979,7 @@ func taskWindowRefresh(specific string) {
 
 	priorityIcons := setupPriorityIcons()
 	if appPreferences.GSMActive {
-		if specific == "" || specific == "CWTasks" {
+		if _, ok := TaskTabsIndexes["CWTasks"]; ok && (specific == "" || specific == "CWTasks") {
 			if len(gsm.MyTasks) == 0 {
 				list = widget.NewLabel("No tasks")
 			} else {
@@ -1153,8 +1167,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadTasks()
-							taskWindowRefresh("CWTasks")
+							gsm.DownloadTasks(func() { taskWindowRefresh("CWTasks") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1173,7 +1186,7 @@ func taskWindowRefresh(specific string) {
 				list,
 			)
 		}
-		if specific == "" || specific == "CWIncidents" {
+		if _, ok := TaskTabsIndexes["CWIncidents"]; ok && (specific == "" || specific == "CWIncidents") {
 			var list2 fyne.CanvasObject
 			if len(gsm.MyIncidents) == 0 {
 				list2 = widget.NewLabel("No incidents")
@@ -1251,8 +1264,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadIncidents()
-							taskWindowRefresh("CWIncidents")
+							gsm.DownloadIncidents(func() { taskWindowRefresh("CWIncidents") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1271,7 +1283,7 @@ func taskWindowRefresh(specific string) {
 				list2,
 			)
 		}
-		if specific == "" || specific == "CWTeamIncidents" {
+		if _, ok := TaskTabsIndexes["CWTeamIncidents"]; ok && (specific == "" || specific == "CWTeamIncidents") {
 			var list3 fyne.CanvasObject
 			if len(gsm.TeamIncidents) == 0 {
 				list3 = widget.NewLabel("No incidents")
@@ -1318,8 +1330,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadTeam()
-							taskWindowRefresh("CWTeamIncidents")
+							gsm.DownloadTeam(func() { taskWindowRefresh("CWTeamIncidents") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1338,7 +1349,7 @@ func taskWindowRefresh(specific string) {
 				list3,
 			)
 		}
-		if specific == "" || specific == "CWTeamTasks" {
+		if _, ok := TaskTabsIndexes["CWTeamTasks"]; ok && (specific == "" || specific == "CWTeamTasks") {
 			var list fyne.CanvasObject
 			if len(gsm.TeamTasks) == 0 {
 				list = widget.NewLabel("No tasks")
@@ -1530,8 +1541,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadTeamTasks()
-							taskWindowRefresh("CWTeamTasks")
+							gsm.DownloadTeamTasks(func() { taskWindowRefresh("CWTeamTasks") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1550,7 +1560,7 @@ func taskWindowRefresh(specific string) {
 				list,
 			)
 		}
-		if specific == "" || specific == "CWRequests" {
+		if _, ok := TaskTabsIndexes["CWRequests"]; ok && (specific == "" || specific == "CWRequests") {
 			var list4 fyne.CanvasObject
 			if len(gsm.LoggedIncidents) == 0 {
 				list4 = widget.NewLabel("No requests")
@@ -1594,8 +1604,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadMyRequests()
-							taskWindowRefresh("CWRequests")
+							gsm.DownloadMyRequests(func() { taskWindowRefresh("CWRequests") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1615,7 +1624,7 @@ func taskWindowRefresh(specific string) {
 			)
 		}
 	}
-	if appPreferences.MSPlannerActive && (specific == "" || specific == "MSPlanner") {
+	if _, ok := TaskTabsIndexes["MSPlanner"]; ok && appPreferences.MSPlannerActive && (specific == "" || specific == "MSPlanner") {
 		// MY PLANNER
 		var list5 fyne.CanvasObject
 		if len(planner.MyTasks) == 0 {
@@ -1734,7 +1743,7 @@ func taskWindowRefresh(specific string) {
 			list5,
 		)
 	}
-	if appPreferences.JiraActive && (specific == "" || specific == "Jira") {
+	if _, ok := TaskTabsIndexes["Jira"]; ok && appPreferences.JiraActive && (specific == "" || specific == "Jira") {
 		var list fyne.CanvasObject
 		if len(jira.MyTasks) == 0 {
 			list = widget.NewLabel("No requests")
