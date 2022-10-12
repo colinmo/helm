@@ -103,6 +103,9 @@ func (j *Jira) callJiraURI(method string, path string, payload []byte, query str
 	req.Header.Set("Content-type", "application/json")
 
 	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
 	return resp.Body, err
 }
 func (j *Jira) jiraPriorityToGSMPriority(priority string) string {
