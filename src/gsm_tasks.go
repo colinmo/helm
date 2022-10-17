@@ -103,6 +103,7 @@ func (gsm *Cherwell) SingleThreadReturnAccessToken() {
 				gsm.AccessToken = ""
 				gsm.StatusCallback(false, "G")
 				gsm.TokenStatus = Expired
+				gsm.Refresh()
 			}
 			for {
 				if gsm.TokenStatus == Active {
@@ -518,7 +519,7 @@ func (gsm *Cherwell) GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse,
 			{FieldID: CWFields.Task.IncidentPriority, SortDirection: 1},
 			{FieldID: CWFields.Task.CreatedDateTime, SortDirection: 1},
 		},
-	}, false)
+	}, true)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -551,7 +552,7 @@ func (gsm *Cherwell) GetMyIncidentsFromGSMForPage(page int) (CherwellSearchRespo
 			{FieldID: CWFields.Incident.Priority, SortDirection: 1},
 			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
-	}, false)
+	}, true)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -584,7 +585,7 @@ func (gsm *Cherwell) GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse
 			{FieldID: CWFields.Incident.Priority, SortDirection: 1},
 			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
-	}, false)
+	}, true)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -626,7 +627,7 @@ func (gsm *Cherwell) GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchRes
 			{FieldID: CWFields.Incident.Priority, SortDirection: 1},
 			{FieldID: CWFields.Incident.CreatedDateTime, SortDirection: 1},
 		},
-	}, false)
+	}, true)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -668,7 +669,7 @@ func (gsm *Cherwell) GetMyTeamTasksFromGSMForPage(page int) (CherwellSearchRespo
 			CWFields.Task.OwnerName,
 		},
 	}
-	r, err := gsm.SearchCherwellFor(builtQuery, false)
+	r, err := gsm.SearchCherwellFor(builtQuery, true)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&tasksResponse)
@@ -697,7 +698,7 @@ func (gsm *Cherwell) FindPeopleToReasignTo(lookfor string) ([]FoundGSMPeople, er
 			{FieldID: CWFields.User.Name, SortDirection: 1},
 		},
 	}
-	r, err := gsm.SearchCherwellFor(searchingFor, false)
+	r, err := gsm.SearchCherwellFor(searchingFor, true)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&searchResponse)
@@ -737,7 +738,7 @@ func (gsm *Cherwell) FindPeopleToReasignTo(lookfor string) ([]FoundGSMPeople, er
 			{FieldID: CWFields.User.Name, SortDirection: 1},
 		},
 	}
-	r, err = gsm.SearchCherwellFor(searchingFor, false)
+	r, err = gsm.SearchCherwellFor(searchingFor, true)
 	if err == nil {
 		defer r.Close()
 		_ = json.NewDecoder(r).Decode(&searchResponse)
@@ -778,7 +779,7 @@ func (gsm *Cherwell) GetTeamsForUser(userId string) map[string]string {
 		"GET",
 		"api/V2/getusersteams/userrecordid/"+userId,
 		[]byte{},
-		false)
+		true)
 	if err == nil {
 		defer r.Close()
 		err = json.NewDecoder(r).Decode(&response)
@@ -827,7 +828,7 @@ func (gsm *Cherwell) ReassignTaskToPersonInTeam(incidentId string, userId string
 		"POST",
 		"api/V1/savebusinessobject",
 		payload,
-		false)
+		true)
 	return err
 }
 
@@ -937,7 +938,7 @@ func (gsm *Cherwell) GetJournalNotesForIncident(incident string) ([]CherwellJour
 		"POST",
 		"api/V1/getrelatedbusinessobject",
 		sendThis,
-		false)
+		true)
 	if err == nil {
 		defer result.Close()
 		_ = json.NewDecoder(result).Decode(&tasksResponse)
@@ -988,6 +989,7 @@ func (gsm *Cherwell) AuthenticateToCherwell(w http.ResponseWriter, r *http.Reque
 				gsm.RefreshToken = CherwellToken.RefreshToken
 				gsm.UserSnumber = CherwellToken.Username
 				gsm.UserID = CherwellToken.ClientID
+				fmt.Printf("A: %s\nR: %s\nS: %s\nI: %s\n", gsm.AccessToken, gsm.RefreshToken, gsm.UserSnumber, gsm.UserID)
 				if CherwellToken.Expires == "" {
 					gsm.Expiration = time.Now().Add(1 * time.Hour)
 				} else {
@@ -1001,7 +1003,7 @@ func (gsm *Cherwell) AuthenticateToCherwell(w http.ResponseWriter, r *http.Reque
 					},
 					BusObjId: "9338216b3c549b75607cf54667a4e67d1f644d9fed",
 					Fields:   []string{"933a15d131ff727ca7ed3f4e1c8f528d719b99b82d", "933a15d17f1f10297df7604b58a76734d6106ac428"},
-				}, false)
+				}, true)
 				defer r.Close()
 				_ = json.NewDecoder(r).Decode(&decodedResponse)
 				gsm.UserID = decodedResponse.BusinessObjects[0].BusObRecId
@@ -1012,6 +1014,7 @@ func (gsm *Cherwell) AuthenticateToCherwell(w http.ResponseWriter, r *http.Reque
 					teams2 = append(teams2, id)
 				}
 				gsm.UserTeams = teams2
+				gsm.Refresh()
 				gsm.StatusCallback(true, "G")
 				gsm.TokenStatus = Active
 				w.Header().Add("Content-type", "text/html")
@@ -1033,13 +1036,14 @@ func (gsm *Cherwell) AuthenticateToCherwell(w http.ResponseWriter, r *http.Reque
 // Doesn't work for SAML?
 func (gsm *Cherwell) Refresh() {
 	payload := url.Values{
-		"grant_type":    {"refresh_token"},
-		"client_id":     {"814f9a74-c86a-451e-b6bb-deea65acf72a"},
-		"refresh_token": {gsm.RefreshToken},
+		"grant_type": {"password"},
+		"client_id":  {"814f9a74-c86a-451e-b6bb-deea65acf72a"},
+		"username":   {gsmUsername},
+		"password":   {gsmPassword},
+		"auth_mode":  {"internal"},
 	}
 	fmt.Printf("Payload: %v\n", payload)
 	targetURL, _ := url.JoinPath(gsm.BaseURL, "token")
-	//	targetURL += "?auth_mode=SAML"
 	resp, err := http.PostForm(
 		targetURL,
 		payload,
@@ -1088,6 +1092,10 @@ func (gsm *Cherwell) getStuffFromCherwell(method string, path string, payload []
 	if err != nil {
 		fmt.Printf("What happened? %s\n", err)
 		return nil, err
+	}
+	if resp.StatusCode == 401 && refreshToken {
+		gsm.Refresh()
+		return gsm.getStuffFromCherwell(method, path, payload, false)
 	}
 	return resp.Body, err
 }
