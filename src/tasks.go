@@ -68,6 +68,7 @@ type TaskResponseStruct struct {
 	Status           string
 	PriorityOverride string
 	Owner            string
+	OwnerID          string
 }
 
 var planner = Planner{}

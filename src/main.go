@@ -240,8 +240,6 @@ func main() {
 			}),
 		)
 		desk.SetSystemTrayMenu(m)
-	} else {
-		fmt.Printf("Nerts")
 	}
 	thisApp.Run()
 }
@@ -1047,7 +1045,7 @@ func taskWindowRefresh(specific string) {
 											me := foundPeople[lii]
 											co.(*tappableLabel).SetText(me.Label)
 											co.(*tappableLabel).OnTapGo = func(_ *fyne.PointEvent) {
-												splits := strings.Split(me.Target, "-")
+												splits := strings.Split(me.Target, "!")
 												fmt.Printf("Target: %s|%s\n", me.Target, splits[0])
 												gsm.ReassignTaskToPersonInTeam(thisObjRecId, splits[0], splits[1])
 												fmt.Printf("Reassigning to %s|%s\n", me.Label, me.Target)
@@ -1077,13 +1075,13 @@ func taskWindowRefresh(specific string) {
 														}{}
 														if err == nil {
 															for _, c := range founds {
-																for tId, tName := range c.Teams {
+																for _, tName := range c.Teams {
 																	foundPeople = append(foundPeople, struct {
 																		Label  string
 																		Target string
 																	}{
 																		Label:  fmt.Sprintf("%s - %s", c.Name, tName),
-																		Target: fmt.Sprintf("%s-%s", c.UserID, tId),
+																		Target: fmt.Sprintf("%s!%s", c.UserID, tName),
 																	})
 																}
 															}
@@ -1125,7 +1123,7 @@ func taskWindowRefresh(specific string) {
 								widget.NewFormItem(
 									"Priority",
 									widget.NewSelect(
-										[]string{"1", "2", "3", "4", "5"},
+										[]string{"1", "2", "3", "4", "5", "6"},
 										func(changed string) {
 											tempVar = changed
 										},
@@ -1223,7 +1221,7 @@ func taskWindowRefresh(specific string) {
 								widget.NewFormItem(
 									"Priority",
 									widget.NewSelect(
-										[]string{"1", "2", "3", "4", "5"},
+										[]string{"1", "2", "3", "4", "5", "6"},
 										func(changed string) {
 											tempVar = changed
 										},
@@ -1421,7 +1419,7 @@ func taskWindowRefresh(specific string) {
 											me := foundPeople[lii]
 											co.(*tappableLabel).SetText(me.Label)
 											co.(*tappableLabel).OnTapGo = func(_ *fyne.PointEvent) {
-												splits := strings.Split(me.Target, "-")
+												splits := strings.Split(me.Target, "!")
 												fmt.Printf("Target: %s|%s\n", me.Target, splits[0])
 												gsm.ReassignTaskToPersonInTeam(thisObjRecId, splits[0], splits[1])
 												fmt.Printf("Reassigning %s to %s|%s\n", thisObjRecId, me.Label, me.Target)
@@ -1451,13 +1449,13 @@ func taskWindowRefresh(specific string) {
 														}{}
 														if err == nil {
 															for _, c := range founds {
-																for tId, tName := range c.Teams {
+																for _, tName := range c.Teams {
 																	foundPeople = append(foundPeople, struct {
 																		Label  string
 																		Target string
 																	}{
 																		Label:  fmt.Sprintf("%s - %s", c.Name, tName),
-																		Target: fmt.Sprintf("%s-%s", c.UserID, tId),
+																		Target: fmt.Sprintf("%s!%s", c.UserID, tName),
 																	})
 																}
 															}
@@ -1499,7 +1497,7 @@ func taskWindowRefresh(specific string) {
 								widget.NewFormItem(
 									"Priority",
 									widget.NewSelect(
-										[]string{"1", "2", "3", "4", "5"},
+										[]string{"1", "2", "3", "4", "5", "6"},
 										func(changed string) {
 											tempVar = changed
 										},
@@ -1670,7 +1668,7 @@ func taskWindowRefresh(specific string) {
 							widget.NewFormItem(
 								"Priority",
 								widget.NewSelect(
-									[]string{"1", "2", "3", "4", "5"},
+									[]string{"1", "2", "3", "4", "5", "6"},
 									func(changed string) {
 										tempVar = changed
 									},
@@ -1787,7 +1785,7 @@ func taskWindowRefresh(specific string) {
 							widget.NewFormItem(
 								"Priority",
 								widget.NewSelect(
-									[]string{"1", "2", "3", "4", "5"},
+									[]string{"1", "2", "3", "4", "5", "6"},
 									func(changed string) {
 										tempVar = changed
 									},

@@ -4,10 +4,8 @@ go 1.18
 
 require (
 	fyne.io/fyne/v2 v2.2.3
-	github.com/hexops/gotextdiff v1.0.3
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/yuin/goldmark v1.4.0
-	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (

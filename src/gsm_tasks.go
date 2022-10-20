@@ -52,6 +52,7 @@ type Cherwell struct {
 	UserID                 string
 	UserSnumber            string
 	UserTeams              []string
+	UserEmail              string
 	DefaultTeam            string
 	RefreshToken           string
 	Expiration             time.Time
@@ -194,8 +195,6 @@ func (gsm *Cherwell) DownloadTasks(afterFunc func()) {
 			)
 			afterFunc()
 		}()
-	} else {
-		fmt.Printf("Expired\n")
 	}
 }
 
@@ -364,12 +363,16 @@ func (gsm *Cherwell) DownloadTeamTasks(afterFunc func()) {
 								row.PriorityOverride = y.Value
 							case CWFields.Task.OwnerName:
 								row.Owner = y.Value
+							case CWFields.Task.OwnerID:
+								row.OwnerID = y.Value
 							}
 						}
 						if val, ok := priorityOverrides.CWIncidents[row.ID]; ok {
 							row.PriorityOverride = val
 						}
-						gsm.TeamTasks = append(gsm.TeamTasks, row)
+						if row.OwnerID != gsm.UserID {
+							gsm.TeamTasks = append(gsm.TeamTasks, row)
+						}
 					}
 				}
 				if len(tasksResponse.BusinessObjects) != 200 {
@@ -397,7 +400,9 @@ type CWFieldIDSTask struct {
 	BusObId            string
 	BusObPubRecId      string
 	OwnerID            string
+	OwnedBy            string
 	OwnerName          string
+	OwnedByEmail       string
 	CreatedDateTime    string
 	TaskTitle          string
 	TaskStatus         string
@@ -407,6 +412,7 @@ type CWFieldIDSTask struct {
 	IncidentShortDesc  string
 	IncidentPriority   string
 	TeamID             string
+	TeamName           string
 }
 type CWFieldIDSIncident struct {
 	OwnerID             string
@@ -443,17 +449,20 @@ type CWFieldIDs struct {
 var CWFields = CWFieldIDs{
 	Task: CWFieldIDSTask{
 		BusObId:            "9355d5ed41e384ff345b014b6cb1c6e748594aea5b",
-		OwnerID:            "93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf",
-		OwnerName:          "93cfd5a4e13f7d4a4de1914f638abebee3a982bb50",
-		CreatedDateTime:    "9355d5ed416bbc9408615c4145978ff8538a3f6eb4",
-		TaskTitle:          "93ad98a2d68a61778eda3d4d9cbb30acbfd458aea4",
-		TaskStatus:         "9368f0fb7b744108a666984c21afc932562eb7dc16",
-		TaskID:             "93d5409c4bcbf7a38ed75a47dd92671f374236fa32",
+		OwnerID:            "BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:93cfd5a4e1d0ba5d3423e247b08dfd1286cae772cf",
+		OwnedBy:            "BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:93cfd5a4e13f7d4a4de1914f638abebee3a982bb50",
+		OwnerName:          "BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:93cfd5a4e13f7d4a4de1914f638abebee3a982bb50",
+		OwnedByEmail:       "BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:93b3d14c5a6204e3ef30e94d69a4b8a6542c22a5e4",
+		CreatedDateTime:    "BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:9355d5ed416bbc9408615c4145978ff8538a3f6eb4",
+		TaskTitle:          "BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:93ad98a2d68a61778eda3d4d9cbb30acbfd458aea4",
+		TaskStatus:         "BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:9368f0fb7b744108a666984c21afc932562eb7dc16",
+		TaskID:             "BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:93d5409c4bcbf7a38ed75a47dd92671f374236fa32",
 		IncidentID:         "BO:6dd53665c0c24cab86870a21cf6434ae,FI:6ae282c55e8e4266ae66ffc070c17fa3,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
 		IncidentInternalID: "BO:6dd53665c0c24cab86870a21cf6434ae,FI:fa03d51b709e4a6eb2d52885b2ef7e04,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
 		IncidentShortDesc:  "BO:6dd53665c0c24cab86870a21cf6434ae,FI:93e8ea93ff67fd95118255419690a50ef2d56f910c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
 		IncidentPriority:   "BO:6dd53665c0c24cab86870a21cf6434ae,FI:83c36313e97b4e6b9028aff3b401b71c,RE:93694ed12e2e9bb908131846b7a9c67ec72b811676",
-		TeamID:             "93cfd5a4e15baa9882a7994995b332c30e677bdcee",
+		TeamID:             "BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:93cfd5a4e15baa9882a7994995b332c30e677bdcee",
+		TeamName:           "BO:9355d5ed41e384ff345b014b6cb1c6e748594aea5b,FI:93cfd5a4e10af4933a573444d08cbc412da491b42e",
 	},
 	Incident: CWFieldIDSIncident{
 		OwnerID:             "9339fc404e39ae705648ab43969f29262e6d167606",
@@ -667,6 +676,7 @@ func (gsm *Cherwell) GetMyTeamTasksFromGSMForPage(page int) (CherwellSearchRespo
 			CWFields.Task.TaskID,
 			CWFields.Task.IncidentPriority,
 			CWFields.Task.OwnerName,
+			CWFields.Task.OwnerID,
 		},
 	}
 	r, err := gsm.SearchCherwellFor(builtQuery, true)
@@ -806,10 +816,10 @@ type ReassignStruct struct {
 	} `json:"fields"`
 }
 
-func (gsm *Cherwell) ReassignTaskToPersonInTeam(incidentId string, userId string, teamId string) error {
+func (gsm *Cherwell) ReassignTaskToPersonInTeam(taskId string, userId string, teamName string) error {
 	payload, _ := json.Marshal(ReassignStruct{
 		BusObId:    CWFields.Task.BusObId,
-		BusObRecId: incidentId,
+		BusObRecId: taskId,
 		Fields: []struct {
 			Dirty       bool   `json:"dirty"`
 			DisplayName string `json:"displayName"`
@@ -819,11 +829,11 @@ func (gsm *Cherwell) ReassignTaskToPersonInTeam(incidentId string, userId string
 			Name        string `json:"name"`
 			Value       string `json:"value"`
 		}{
-			{FieldId: CWFields.Task.OwnerID, Name: "OwnedByID", DisplayName: "Owned By ID", Value: userId, Dirty: false},
-			{FieldId: CWFields.Task.TeamID, Name: "OwnedByTeamID", DisplayName: "Owned By Team ID", Value: teamId, Dirty: false},
+			{FieldId: CWFields.Task.OwnerID, Name: "OwnedByID", DisplayName: "Owned By ID", Value: userId, Dirty: true},
+			{FieldId: CWFields.Task.TeamName, Name: "OwnedByTeam", DisplayName: "Owned By Team", Value: teamName, Dirty: true},
 		},
 	})
-	fmt.Printf("%s\n", payload)
+	fmt.Printf("payload: %s", string(payload))
 	_, err := gsm.getStuffFromCherwell(
 		"POST",
 		"api/V1/savebusinessobject",
@@ -989,7 +999,6 @@ func (gsm *Cherwell) AuthenticateToCherwell(w http.ResponseWriter, r *http.Reque
 				gsm.RefreshToken = CherwellToken.RefreshToken
 				gsm.UserSnumber = CherwellToken.Username
 				gsm.UserID = CherwellToken.ClientID
-				fmt.Printf("A: %s\nR: %s\nS: %s\nI: %s\n", gsm.AccessToken, gsm.RefreshToken, gsm.UserSnumber, gsm.UserID)
 				if CherwellToken.Expires == "" {
 					gsm.Expiration = time.Now().Add(1 * time.Hour)
 				} else {
@@ -1002,12 +1011,13 @@ func (gsm *Cherwell) AuthenticateToCherwell(w http.ResponseWriter, r *http.Reque
 						{FieldId: "941798910e24d4b1ae3c6a408cb3f8c5eba26e2b2b", Operator: "eq", Value: gsm.UserSnumber},
 					},
 					BusObjId: "9338216b3c549b75607cf54667a4e67d1f644d9fed",
-					Fields:   []string{"933a15d131ff727ca7ed3f4e1c8f528d719b99b82d", "933a15d17f1f10297df7604b58a76734d6106ac428"},
+					Fields:   []string{"933a15d131ff727ca7ed3f4e1c8f528d719b99b82d", "933a15d17f1f10297df7604b58a76734d6106ac428", "933821793f43a638cf23e34723b907956d324ad303"},
 				}, true)
 				defer r.Close()
 				_ = json.NewDecoder(r).Decode(&decodedResponse)
 				gsm.UserID = decodedResponse.BusinessObjects[0].BusObRecId
 				gsm.DefaultTeam = decodedResponse.BusinessObjects[0].Fields[1].Value
+				gsm.UserEmail = decodedResponse.BusinessObjects[0].Fields[2].Value
 				teams := gsm.GetTeamsForUser(gsm.UserID)
 				teams2 := []string{}
 				for id := range teams {
@@ -1042,7 +1052,6 @@ func (gsm *Cherwell) Refresh() {
 		"password":   {gsmPassword},
 		"auth_mode":  {"internal"},
 	}
-	fmt.Printf("Payload: %v\n", payload)
 	targetURL, _ := url.JoinPath(gsm.BaseURL, "token")
 	resp, err := http.PostForm(
 		targetURL,
@@ -1051,7 +1060,6 @@ func (gsm *Cherwell) Refresh() {
 	if err == nil {
 		var CherwellToken CherwellAuthResponse
 		json.NewDecoder(resp.Body).Decode(&CherwellToken)
-		fmt.Printf("Token: %v\n", CherwellToken)
 		if len(CherwellToken.Error) > 0 {
 			log.Fatalf("Failed 1 %s\n", CherwellToken.ErrorDescription)
 		}
@@ -1064,7 +1072,6 @@ func (gsm *Cherwell) Refresh() {
 		}
 		gsm.StatusCallback(true, "G")
 		gsm.TokenStatus = Active
-		fmt.Printf("Active")
 	} else {
 		gsm.AccessToken = ""
 		gsm.RefreshToken = ""
@@ -1090,10 +1097,10 @@ func (gsm *Cherwell) getStuffFromCherwell(method string, path string, payload []
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Printf("What happened? %s\n", err)
 		return nil, err
 	}
 	if resp.StatusCode == 401 && refreshToken {
+		fmt.Printf("Nope.")
 		gsm.Refresh()
 		return gsm.getStuffFromCherwell(method, path, payload, false)
 	}

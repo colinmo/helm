@@ -158,8 +158,8 @@ func (p *Planner) Download(specific string) {
 	for page := 1; page < 200; page++ {
 		r, err := p.CallGraphURI("GET", urlToCall, []byte{}, "$expand=details")
 		if err == nil {
-			defer r.Close()
 			_ = json.NewDecoder(r).Decode(&teamResponse)
+			r.Close()
 
 			for _, y := range teamResponse.Value {
 				if y.PercentComplete < 100 {
@@ -239,7 +239,10 @@ func (p *Planner) CallGraphURI(method string, path string, payload []byte, query
 	req.Header.Set("Content-type", "application/json")
 
 	resp, err := client.Do(req)
-	return resp.Body, err
+	if err == nil && resp.StatusCode == 200 {
+		return resp.Body, err
+	}
+	return nil, err
 }
 
 func (p *Planner) TeamPriorityToGSMPriority(priority int) string {
