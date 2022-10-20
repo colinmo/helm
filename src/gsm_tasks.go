@@ -312,12 +312,16 @@ func (gsm *Cherwell) DownloadTeam(afterFunc func()) {
 								row.PriorityOverride = y.Value
 							case CWFields.Incident.OwnerName:
 								row.Owner = y.Value
+							case CWFields.Incident.OwnerID:
+								row.OwnerID = y.Value
 							}
 						}
 						if val, ok := priorityOverrides.CWIncidents[row.ID]; ok {
 							row.PriorityOverride = val
 						}
-						gsm.TeamIncidents = append(gsm.TeamIncidents, row)
+						if row.OwnerID == "" {
+							gsm.TeamIncidents = append(gsm.TeamIncidents, row)
+						}
 					}
 				}
 				if len(tasksResponse.BusinessObjects) != 200 {
@@ -370,7 +374,7 @@ func (gsm *Cherwell) DownloadTeamTasks(afterFunc func()) {
 						if val, ok := priorityOverrides.CWIncidents[row.ID]; ok {
 							row.PriorityOverride = val
 						}
-						if row.OwnerID != gsm.UserID {
+						if row.OwnerID == "" {
 							gsm.TeamTasks = append(gsm.TeamTasks, row)
 						}
 					}

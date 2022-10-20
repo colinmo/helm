@@ -756,7 +756,7 @@ func taskWindowSetup() {
 				nil,
 				container.NewWithoutLayout(),
 			)),
-			container.NewTabItem("My Team Incidents", container.NewBorder(
+			container.NewTabItem("Team Unass. Inc.", container.NewBorder(
 				widget.NewToolbar(
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
@@ -779,7 +779,7 @@ func taskWindowSetup() {
 				nil,
 				container.NewWithoutLayout(),
 			)),
-			container.NewTabItem("My Team Tasks", container.NewBorder(
+			container.NewTabItem("Team Unass. Tasks", container.NewBorder(
 				widget.NewToolbar(
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
