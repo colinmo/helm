@@ -577,12 +577,6 @@ func preferencesWindowSetup() {
 	// GSM/ Cherwell
 	gsmActive := widget.NewCheck("Active", func(res bool) {})
 	gsmActive.SetChecked(appPreferences.GSMActive)
-	cwAccessToken := widget.NewEntry()
-	cwAccessToken.SetText(AuthenticationTokens.GSM.access_token)
-	cwRefreshToken := widget.NewEntry()
-	cwRefreshToken.SetText(AuthenticationTokens.GSM.refresh_token)
-	cwExpiresAt := widget.NewEntry()
-	cwExpiresAt.SetText(AuthenticationTokens.GSM.expiration.Local().Format(stringDateFormat))
 	// Dynamics
 	dynamicsActive := widget.NewCheck("Active", func(res bool) {})
 	dynamicsActive.SetChecked(appPreferences.DynamicsActive)
@@ -618,9 +612,6 @@ func preferencesWindowSetup() {
 
 		appPreferences.GSMActive = gsmActive.Checked
 		thisApp.Preferences().SetBool("GSMActive", appPreferences.GSMActive)
-		AuthenticationTokens.GSM.access_token = cwAccessToken.Text
-		AuthenticationTokens.GSM.refresh_token = cwRefreshToken.Text
-		AuthenticationTokens.GSM.expiration, _ = time.Parse("20060102T15:04:05", cwExpiresAt.Text)
 	})
 	preferencesWindow.SetContent(
 		container.New(
@@ -655,12 +646,6 @@ func preferencesWindowSetup() {
 			widget.NewLabelWithStyle("GSM", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 			widget.NewLabel("GSM Active"),
 			gsmActive,
-			widget.NewLabel("Access Token"),
-			cwAccessToken,
-			widget.NewLabel("Refresh Token"),
-			cwRefreshToken,
-			widget.NewLabel("Expires At"),
-			cwExpiresAt,
 		),
 	)
 }
