@@ -123,7 +123,6 @@ func overrides() {
 					taskWindowRefresh("CWRequests")
 					taskWindowRefresh("CWTeamIncidents")
 					taskWindowRefresh("CWTeamTasks")
-					gsm.Login()
 				}
 			}
 			if !onl {
