@@ -474,7 +474,7 @@ func markdownWindowSetup() {
 				} else {
 					var mep string
 					if markdownInput.Text[0:3] == "---" {
-						mep = strings.Split(markdownInput.Text, "...")[1]
+						mep = strings.Split(markdownInput.Text[3:], "---")[1]
 					} else {
 						mep = markdownInput.Text
 					}
@@ -653,7 +653,7 @@ func preferencesWindowSetup() {
 func getFileContentsAndCreateIfMissing(filename string) string {
 	content, err := os.ReadFile(filename)
 	if errors.Is(err, os.ErrNotExist) {
-		content = []byte(fmt.Sprintf("---\nDate: %s\n...\n", AppStatus.CurrentZettleDBDate.Local().Format("2006-01-02")))
+		content = []byte(fmt.Sprintf("---\nDate: %s\ntags: [\"status\"]\n---\n", AppStatus.CurrentZettleDBDate.Local().Format("2006-01-02")))
 		os.WriteFile(filename, content, 0666)
 	}
 	return string(content)
@@ -667,7 +667,7 @@ func writeFileContents(filename string, content string) {
 }
 
 func zettleFileName(date time.Time) string {
-	return fmt.Sprintf("%s-retro.markdown", date.Local().Format("20060102"))
+	return fmt.Sprintf("%s-retro.md", date.Local().Format("20060102"))
 }
 
 func taskWindowSetup() {
