@@ -189,6 +189,7 @@ func overrides() {
 			for {
 				time.Sleep(5 * time.Minute)
 				planner.Download("")
+				taskWindowRefresh("MSPlanner")
 			}
 		}()
 	}
@@ -1705,8 +1706,10 @@ func taskWindowRefresh(specific string) {
 				widget.NewToolbarAction(
 					theme.ViewRefreshIcon(),
 					func() {
-						planner.Download("")
-						taskWindowRefresh("MSPlanner")
+						go func() {
+							planner.Download("")
+							taskWindowRefresh("MSPlanner")
+						}()
 					},
 				),
 				widget.NewToolbarSeparator(),

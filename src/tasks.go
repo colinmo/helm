@@ -78,11 +78,9 @@ var gsm = Cherwell{}
 func InitTasks() {
 	if appPreferences.JiraActive {
 		planner.Init("http://localhost:84/", connectionStatusBox, "", "", time.Now())
-		planner.Login()
 	}
 	if appPreferences.GSMActive {
 		gsm.Init("http://localhost:84/", connectionStatusBox, "", "", time.Now())
-		gsm.Login()
 	}
 }
 
@@ -103,6 +101,7 @@ func GetAllTasks() {
 	}
 	if appPreferences.JiraActive {
 		jira.Download()
+		taskWindowRefresh("Jira")
 	}
 }
 

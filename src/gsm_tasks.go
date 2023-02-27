@@ -46,28 +46,26 @@ const (
 
 type Cherwell struct {
 	Task
-	RedirectPath           string
-	RedirectURI            string
-	AccessTokenChan        chan string
-	AccessTokenRequestChan chan string
-	AccessToken            string
-	UserID                 string
-	UserSnumber            string
-	UserTeams              []string
-	UserEmail              string
-	DefaultTeam            string
-	RefreshToken           string
-	Expiration             time.Time
-	MyTasks                []TaskResponseStruct
-	MyIncidents            []TaskResponseStruct
-	LoggedIncidents        []TaskResponseStruct
-	TeamIncidents          []TaskResponseStruct
-	TeamTasks              []TaskResponseStruct
-	BaseURL                string
-	AuthURL                string
-	StatusCallback         func(bool, string)
-	TokenStatus            GSMTokenStatus
-	G                      singleflight.Group
+	RedirectPath    string
+	RedirectURI     string
+	AccessToken     string
+	UserID          string
+	UserSnumber     string
+	UserTeams       []string
+	UserEmail       string
+	DefaultTeam     string
+	RefreshToken    string
+	Expiration      time.Time
+	MyTasks         []TaskResponseStruct
+	MyIncidents     []TaskResponseStruct
+	LoggedIncidents []TaskResponseStruct
+	TeamIncidents   []TaskResponseStruct
+	TeamTasks       []TaskResponseStruct
+	BaseURL         string
+	AuthURL         string
+	StatusCallback  func(bool, string)
+	TokenStatus     GSMTokenStatus
+	G               singleflight.Group
 }
 
 func NewCherwell(baseRedirect string, statusCallback func(bool, string), accessToken string, refreshToken string, expiration time.Time) Cherwell {
@@ -77,8 +75,6 @@ func NewCherwell(baseRedirect string, statusCallback func(bool, string), accessT
 }
 
 func (gsm *Cherwell) Init(baseRedirect string, statusCallback func(bool, string), accessToken string, refreshToken string, expiration time.Time) {
-	gsm.AccessTokenChan = make(chan string)
-	gsm.AccessTokenRequestChan = make(chan string)
 	gsm.TokenStatus = Inactive
 	if accessToken != "" && time.Now().After(expiration) {
 		gsm.TokenStatus = Expired
@@ -128,12 +124,9 @@ func (gsm *Cherwell) Login() {
 			"GSMLogin",
 			func() (interface{}, error) {
 				gsm.TokenStatus = Pending
-				fmt.Printf("Login")
 				browser.OpenURL(gsm.AuthURL)
 				for {
-					fmt.Printf(".")
 					if gsm.TokenStatus == Active {
-						fmt.Printf("Login done")
 						return "", nil
 					}
 				}
@@ -593,6 +586,7 @@ func (gsm *Cherwell) GetMyTasksFromGSMForPage(page int) (CherwellSearchResponse,
 			{FieldId: CWFields.Task.OwnerID, Operator: "eq", Value: gsm.UserID},
 			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "Acknowledged"},
 			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "New"},
+			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "Assigned"},
 			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "In Progress"},
 			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "On Hold"},
 			{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "Pending"},
@@ -630,6 +624,7 @@ func (gsm *Cherwell) GetMyIncidentsFromGSMForPage(page int) (CherwellSearchRespo
 			{FieldId: CWFields.Incident.OwnerID, Operator: "eq", Value: gsm.UserID},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Acknowledged"},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "New"},
+			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Assigned"},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "In Progress"},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "On Hold"},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Pending"},
@@ -663,6 +658,7 @@ func (gsm *Cherwell) GetMyRequestsInGSMForPage(page int) (CherwellSearchResponse
 			{FieldId: CWFields.Incident.RequestorSNumber, Operator: "eq", Value: gsm.UserSnumber},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Acknowledged"},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "New"},
+			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Assigned"},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "In Progress"},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "On Hold"},
 			{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Pending"},
@@ -694,6 +690,7 @@ func (gsm *Cherwell) GetMyTeamIncidentsInGSMForPage(page int) (CherwellSearchRes
 	baseFilter := []GSMFilter{
 		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Acknowledged"},
 		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "New"},
+		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Assigned"},
 		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "In Progress"},
 		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "On Hold"},
 		{FieldId: CWFields.Incident.Status, Operator: "eq", Value: "Pending"},
@@ -736,6 +733,7 @@ func (gsm *Cherwell) GetMyTeamTasksFromGSMForPage(page int) (CherwellSearchRespo
 	baseFilter := []GSMFilter{
 		{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "Acknowledged"},
 		{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "New"},
+		{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "Assigned"},
 		{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "In Progress"},
 		{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "On Hold"},
 		{FieldId: CWFields.Task.TaskStatus, Operator: "eq", Value: "Pending"},

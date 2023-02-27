@@ -77,6 +77,9 @@ func (p *Planner) Init(baseRedirect string, statusCallback func(bool, string), a
 }
 
 func (p *Planner) SingleThreadReturnOrGetPlannerAccessToken() {
+	if p.AccessToken == "" {
+		p.Login()
+	}
 	go func() {
 		for {
 			_, ok := <-p.PlannerAccessTokenRequestsChan
@@ -132,7 +135,6 @@ func (p *Planner) Authenticate(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("Content-type", "text/html")
 			fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.</body></html>")
 			p.AccessToken = MSToken.AccessToken
-			p.Download("")
 		}
 	}
 }
@@ -156,7 +158,7 @@ func (p *Planner) Download(specific string) {
 	var teamResponse myTasksGraphResponse
 	urlToCall := "/me/planner/tasks"
 	for page := 1; page < 200; page++ {
-		r, err := p.CallGraphURI("GET", urlToCall, []byte{}, "$expand=details")
+		r, err := p.CallGraphURI("GET", urlToCall, []byte{}, "$select=id,details,planid,title,priority,percentcomplete,createdDateTime")
 		if err == nil {
 			_ = json.NewDecoder(r).Decode(&teamResponse)
 			r.Close()
@@ -176,6 +178,8 @@ func (p *Planner) Download(specific string) {
 						row.Status = "Not started (0)"
 					case 50:
 						row.Status = "In progress (50)"
+					default:
+						row.Status = fmt.Sprintf("Unknown (%d)", y.PercentComplete)
 					}
 					if val, ok := priorityOverrides.MSPlanner[row.ID]; ok {
 						row.PriorityOverride = val
