@@ -1,4 +1,4 @@
-package main
+package tasks
 
 import (
 	"bytes"
@@ -34,21 +34,21 @@ type JiraResponseType struct {
 	} `json:"issues"`
 }
 
-type Jira struct {
+type JiraStruct struct {
 	Task
 	MyTasks []TaskResponseStruct
 }
 
-func (j *Jira) Init() {
+func (j *JiraStruct) Init() {
 	//
 }
 
-func (j *Jira) Download() {
-	if appPreferences.JiraActive && appPreferences.JiraKey > "" {
-		activeTaskStatusUpdate(1)
-		defer activeTaskStatusUpdate(-1)
+func (j *JiraStruct) Download() {
+	if AppPreferences.JiraActive && AppPreferences.JiraKey > "" {
+		ActiveTaskStatusUpdate(1)
+		defer ActiveTaskStatusUpdate(-1)
 		j.MyTasks = []TaskResponseStruct{}
-		connectionStatusBox(true, "J")
+		ConnectionStatusBox(true, "J")
 		var jiraResponse JiraResponseType
 		baseQuery := `jql=assignee%3Dcurrentuser()%20AND%20status%20!%3D%20%22Done%22%20order%20by%20priority,created%20asc&fields=summary,created,priority,status`
 		queryToCall := fmt.Sprintf("%s&startAt=0", baseQuery)
@@ -90,7 +90,7 @@ func (j *Jira) Download() {
 		})
 	}
 }
-func (j *Jira) callJiraURI(method string, path string, payload []byte, query string) (io.ReadCloser, error) {
+func (j *JiraStruct) callJiraURI(method string, path string, payload []byte, query string) (io.ReadCloser, error) {
 	client := &http.Client{
 		Timeout: time.Second * 10,
 	}
@@ -99,7 +99,7 @@ func (j *Jira) callJiraURI(method string, path string, payload []byte, query str
 		newpath = newpath + "?" + query
 	}
 	req, _ := http.NewRequest(method, newpath, bytes.NewReader(payload))
-	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", appPreferences.JiraUsername, appPreferences.JiraKey)))))
+	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", AppPreferences.JiraUsername, AppPreferences.JiraKey)))))
 	req.Header.Set("Content-type", "application/json")
 
 	resp, err := client.Do(req)
@@ -108,7 +108,7 @@ func (j *Jira) callJiraURI(method string, path string, payload []byte, query str
 	}
 	return resp.Body, err
 }
-func (j *Jira) jiraPriorityToGSMPriority(priority string) string {
+func (j *JiraStruct) jiraPriorityToGSMPriority(priority string) string {
 	switch priority {
 	case "Highest":
 		return "1"

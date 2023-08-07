@@ -14,6 +14,7 @@ import (
 	"time"
 
 	icon "vonexplaino.com/m/v2/helm/icon"
+	"vonexplaino.com/m/v2/helm/tasks"
 
 	fyne "fyne.io/fyne/v2"
 	app "fyne.io/fyne/v2/app"
@@ -35,7 +36,7 @@ import (
 /**
 * This is a systray item for:
 *   - Markdown Daily status
-*   - Jira/ MS/ Cherwell job visibility
+*   - tasks.Jira/ MS/ Cherwell job visibility
 **/
 
 // @todo - Sorting or remove buttons
@@ -47,22 +48,9 @@ type AppStatusStruct struct {
 	TaskTaskStatus      binding.String
 }
 
-type AppPreferences struct {
+type AppPreferencesStruct struct {
 	ZettlekastenHome string
-	JiraProjectHome  string
-	GSMActive        bool
-	MSPlannerActive  bool
-	MSAccessToken    string
-	MSRefreshToken   string
-	MSExpiresAt      time.Time
-	MSGroups         string
-	CWActive         bool
-	PriorityOverride string
-	JiraActive       bool
-	JiraUsername     string
-	JiraKey          string
-	DynamicsActive   bool
-	DynamicsKey      string
+	TaskPreferences  tasks.TaskPreferencesStruct
 }
 
 var thisApp fyne.App
@@ -74,7 +62,7 @@ var markdownInput *widget.Entry
 var AppStatus AppStatusStruct
 var TaskTabsIndexes map[string]int
 var TaskTabs *container.AppTabs
-var appPreferences AppPreferences
+var appPreferences AppPreferencesStruct
 var gsmConnectionActive *fyne.Container
 var msConnectionActive *fyne.Container
 var jiraConnectionActive *fyne.Container
@@ -96,7 +84,7 @@ func setup() {
 
 func overrides() {
 	preferencesToLocalVar()
-	loadPriorityOverride()
+	tasks.LoadPriorityOverride(appPreferences.TaskPreferences.PriorityOverride)
 	connectionStatusBox = func(onl bool, label string) {
 		icon := CloudDisconnect
 		if onl {
@@ -108,7 +96,7 @@ func overrides() {
 		case "G":
 			button.OnTapped = func() {
 				if onl {
-					gsm.Download(
+					tasks.Gsm.Download(
 						func() { taskWindowRefresh("CWTasks") },
 						func() { taskWindowRefresh("CWIncidents") },
 						func() { taskWindowRefresh("CWRequests") },
@@ -124,11 +112,11 @@ func overrides() {
 				}
 			}
 			if !onl {
-				gsm.MyTasks = []TaskResponseStruct{}
-				gsm.MyIncidents = []TaskResponseStruct{}
-				gsm.LoggedIncidents = []TaskResponseStruct{}
-				gsm.TeamIncidents = []TaskResponseStruct{}
-				gsm.TeamTasks = []TaskResponseStruct{}
+				tasks.Gsm.MyTasks = []tasks.TaskResponseStruct{}
+				tasks.Gsm.MyIncidents = []tasks.TaskResponseStruct{}
+				tasks.Gsm.LoggedIncidents = []tasks.TaskResponseStruct{}
+				tasks.Gsm.TeamIncidents = []tasks.TaskResponseStruct{}
+				tasks.Gsm.TeamTasks = []tasks.TaskResponseStruct{}
 				taskWindowRefresh("CWTasks")
 				taskWindowRefresh("CWIncidents")
 				taskWindowRefresh("CWRequests")
@@ -143,8 +131,8 @@ func overrides() {
 		case "J":
 			button.OnTapped = func() {
 				if onl {
-					jira.Download()
-					taskWindowRefresh("Jira")
+					tasks.Jira.Download()
+					taskWindowRefresh("tasks.Jira")
 				}
 			}
 			jiraConnectionActive.Objects = container.NewMax(
@@ -154,7 +142,7 @@ func overrides() {
 			jiraConnectionActive.Refresh()
 		case "M":
 			button.OnTapped = func() {
-				planner.Download("")
+				tasks.Planner.Download("")
 			}
 			msConnectionActive.Objects = container.NewMax(
 				button,
@@ -167,36 +155,42 @@ func overrides() {
 	gsmConnectionActive = container.NewMax()
 	jiraConnectionActive = container.NewMax()
 	msConnectionActive = container.NewMax()
-	InitTasks()
-	startLocalServers()
-	if appPreferences.GSMActive {
+	tasks.InitTasks(
+		&appPreferences.TaskPreferences,
+		connectionStatusBox,
+		taskWindowRefresh,
+		activeTaskStatusUpdate,
+	)
+	tasks.StartLocalServers()
+	if appPreferences.TaskPreferences.GSMActive {
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
-				gsm.Download(
+				tasks.Gsm.Download(
 					func() { taskWindowRefresh("CWTasks") },
 					func() { taskWindowRefresh("CWIncidents") },
 					func() { taskWindowRefresh("CWRequests") },
 					func() { taskWindowRefresh("CWTeamIncidents") },
-					func() { taskWindowRefresh("CWTeamTasks") })
+					func() { taskWindowRefresh("CWTeamTasks") },
+				)
 			}
 		}()
 	}
-	if appPreferences.MSPlannerActive {
+	if appPreferences.TaskPreferences.MSPlannerActive {
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
-				planner.Download("")
+				tasks.Planner.Download("")
 				taskWindowRefresh("MSPlanner")
 			}
 		}()
 	}
-	if appPreferences.JiraActive {
+	if appPreferences.TaskPreferences.JiraActive {
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
-				jira.Download()
-				taskWindowRefresh("Jira")
+				tasks.Jira.Download()
+				taskWindowRefresh("tasks.Jira")
 			}
 		}()
 	}
@@ -214,7 +208,13 @@ func main() {
 	taskWindow = thisApp.NewWindow("Tasks")
 	taskWindowSetup()
 	go func() {
-		GetAllTasks()
+		tasks.GetAllTasks(
+			appPreferences.TaskPreferences.JiraActive,
+			appPreferences.TaskPreferences.GSMActive,
+			appPreferences.TaskPreferences.MSPlannerActive,
+			taskWindowRefresh,
+			activeTaskStatusUpdate,
+		)
 	}()
 	if desk, ok := thisApp.(desktop.App); ok {
 		m := fyne.NewMenu("MyApp",
@@ -523,17 +523,17 @@ func markdownWindowSetup() {
 }
 
 func preferencesToLocalVar() {
-	appPreferences = AppPreferences{}
+	appPreferences = AppPreferencesStruct{}
 	appPreferences.ZettlekastenHome = thisApp.Preferences().StringWithFallback("ZettlekastenHome", path.Join(os.TempDir(), "zett"))
-	appPreferences.JiraProjectHome = thisApp.Preferences().StringWithFallback("JiraProjectHome", path.Join(os.TempDir(), "project"))
-	appPreferences.GSMActive = thisApp.Preferences().BoolWithFallback("GSMActive", true)
-	appPreferences.MSPlannerActive = thisApp.Preferences().BoolWithFallback("MSPlannerActive", false)
-	appPreferences.MSGroups = thisApp.Preferences().StringWithFallback("MSGroups", "")
-	appPreferences.JiraActive = thisApp.Preferences().BoolWithFallback("JiraActive", false)
-	appPreferences.JiraKey = thisApp.Preferences().StringWithFallback("JiraKey", "")
-	appPreferences.JiraUsername = thisApp.Preferences().StringWithFallback("JiraUsername", "")
-	appPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", "")
-	if appPreferences.PriorityOverride == "" {
+	appPreferences.TaskPreferences.JiraProjectHome = thisApp.Preferences().StringWithFallback("JiraProjectHome", path.Join(os.TempDir(), "project"))
+	appPreferences.TaskPreferences.GSMActive = thisApp.Preferences().BoolWithFallback("GSMActive", true)
+	appPreferences.TaskPreferences.MSPlannerActive = thisApp.Preferences().BoolWithFallback("MSPlannerActive", false)
+	appPreferences.TaskPreferences.MSGroups = thisApp.Preferences().StringWithFallback("MSGroups", "")
+	appPreferences.TaskPreferences.JiraActive = thisApp.Preferences().BoolWithFallback("JiraActive", false)
+	appPreferences.TaskPreferences.JiraKey = thisApp.Preferences().StringWithFallback("JiraKey", "")
+	appPreferences.TaskPreferences.JiraUsername = thisApp.Preferences().StringWithFallback("JiraUsername", "")
+	appPreferences.TaskPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", "")
+	if appPreferences.TaskPreferences.PriorityOverride == "" {
 		myself, error := user.Current()
 		pribase := ""
 		if error == nil {
@@ -541,7 +541,7 @@ func preferencesToLocalVar() {
 		} else {
 			pribase = filepath.Join(os.TempDir(), "/.helm")
 		}
-		appPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", pribase)
+		appPreferences.TaskPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", pribase)
 	}
 }
 func preferencesWindowSetup() {
@@ -551,35 +551,35 @@ func preferencesWindowSetup() {
 	zettlePath := widget.NewEntry()
 	zettlePath.SetText(appPreferences.ZettlekastenHome)
 	jiraPath := widget.NewEntry()
-	jiraPath.SetText(appPreferences.JiraProjectHome)
+	jiraPath.SetText(appPreferences.TaskPreferences.JiraProjectHome)
 	// MSPlanner
 	plannerActive := widget.NewCheck("Active", func(res bool) {})
-	plannerActive.SetChecked(appPreferences.MSPlannerActive)
+	plannerActive.SetChecked(appPreferences.TaskPreferences.MSPlannerActive)
 	accessToken := widget.NewEntry()
-	accessToken.SetText(AuthenticationTokens.MS.access_token)
+	accessToken.SetText(tasks.AuthenticationTokens.MS.Access_token)
 	refreshToken := widget.NewEntry()
-	refreshToken.SetText(AuthenticationTokens.MS.refresh_token)
+	refreshToken.SetText(tasks.AuthenticationTokens.MS.Refresh_token)
 	expiresAt := widget.NewEntry()
-	expiresAt.SetText(AuthenticationTokens.MS.expiration.Local().Format(stringDateFormat))
+	expiresAt.SetText(tasks.AuthenticationTokens.MS.Expiration.Local().Format(stringDateFormat))
 	groupsList := widget.NewEntry()
-	groupsList.SetText(appPreferences.MSGroups)
+	groupsList.SetText(appPreferences.TaskPreferences.MSGroups)
 	priorityOverride := widget.NewEntry()
-	priorityOverride.SetText(appPreferences.PriorityOverride)
-	// Jira
+	priorityOverride.SetText(appPreferences.TaskPreferences.PriorityOverride)
+	// tasks.Jira
 	jiraActive := widget.NewCheck("Active", func(res bool) {})
-	jiraActive.SetChecked(appPreferences.JiraActive)
+	jiraActive.SetChecked(appPreferences.TaskPreferences.JiraActive)
 	jiraKey := widget.NewPasswordEntry()
-	jiraKey.SetText(appPreferences.JiraKey)
+	jiraKey.SetText(appPreferences.TaskPreferences.JiraKey)
 	jiraUsername := widget.NewEntry()
-	jiraUsername.SetText(appPreferences.JiraUsername)
+	jiraUsername.SetText(appPreferences.TaskPreferences.JiraUsername)
 	// GSM/ Cherwell
 	gsmActive := widget.NewCheck("Active", func(res bool) {})
-	gsmActive.SetChecked(appPreferences.GSMActive)
+	gsmActive.SetChecked(appPreferences.TaskPreferences.GSMActive)
 	// Dynamics
 	dynamicsActive := widget.NewCheck("Active", func(res bool) {})
-	dynamicsActive.SetChecked(appPreferences.DynamicsActive)
+	dynamicsActive.SetChecked(appPreferences.TaskPreferences.DynamicsActive)
 	dynamicsKey := widget.NewPasswordEntry()
-	dynamicsKey.SetText(appPreferences.DynamicsKey)
+	dynamicsKey.SetText(appPreferences.TaskPreferences.DynamicsKey)
 
 	preferencesWindow.Resize(fyne.NewSize(500, 500))
 	preferencesWindow.Hide()
@@ -588,28 +588,28 @@ func preferencesWindowSetup() {
 		// SavePreferences
 		appPreferences.ZettlekastenHome = zettlePath.Text
 		thisApp.Preferences().SetString("ZettlekastenHome", appPreferences.ZettlekastenHome)
-		appPreferences.JiraProjectHome = jiraPath.Text
-		thisApp.Preferences().SetString("JiraProjectHome", appPreferences.JiraProjectHome)
-		appPreferences.PriorityOverride = priorityOverride.Text
-		thisApp.Preferences().SetString("PriorityOverride", appPreferences.PriorityOverride)
+		appPreferences.TaskPreferences.JiraProjectHome = jiraPath.Text
+		thisApp.Preferences().SetString("JiraProjectHome", appPreferences.TaskPreferences.JiraProjectHome)
+		appPreferences.TaskPreferences.PriorityOverride = priorityOverride.Text
+		thisApp.Preferences().SetString("PriorityOverride", appPreferences.TaskPreferences.PriorityOverride)
 
-		appPreferences.MSPlannerActive = plannerActive.Checked
-		thisApp.Preferences().SetBool("MSPlannerActive", appPreferences.MSPlannerActive)
-		AuthenticationTokens.MS.access_token = accessToken.Text
-		AuthenticationTokens.MS.refresh_token = refreshToken.Text
-		AuthenticationTokens.MS.expiration, _ = time.Parse("20060102T15:04:05", expiresAt.Text)
-		appPreferences.MSGroups = groupsList.Text
-		thisApp.Preferences().SetString("MSGroups", appPreferences.MSGroups)
+		appPreferences.TaskPreferences.MSPlannerActive = plannerActive.Checked
+		thisApp.Preferences().SetBool("MSPlannerActive", appPreferences.TaskPreferences.MSPlannerActive)
+		tasks.AuthenticationTokens.MS.Access_token = accessToken.Text
+		tasks.AuthenticationTokens.MS.Refresh_token = refreshToken.Text
+		tasks.AuthenticationTokens.MS.Expiration, _ = time.Parse("20060102T15:04:05", expiresAt.Text)
+		appPreferences.TaskPreferences.MSGroups = groupsList.Text
+		thisApp.Preferences().SetString("MSGroups", appPreferences.TaskPreferences.MSGroups)
 
-		appPreferences.JiraActive = jiraActive.Checked
-		thisApp.Preferences().SetBool("JiraActive", appPreferences.JiraActive)
-		appPreferences.JiraKey = jiraKey.Text
-		thisApp.Preferences().SetString("JiraKey", appPreferences.JiraKey)
-		appPreferences.JiraUsername = jiraUsername.Text
-		thisApp.Preferences().SetString("JiraUsername", appPreferences.JiraUsername)
+		appPreferences.TaskPreferences.JiraActive = jiraActive.Checked
+		thisApp.Preferences().SetBool("JiraActive", appPreferences.TaskPreferences.JiraActive)
+		appPreferences.TaskPreferences.JiraKey = jiraKey.Text
+		thisApp.Preferences().SetString("JiraKey", appPreferences.TaskPreferences.JiraKey)
+		appPreferences.TaskPreferences.JiraUsername = jiraUsername.Text
+		thisApp.Preferences().SetString("JiraUsername", appPreferences.TaskPreferences.JiraUsername)
 
-		appPreferences.GSMActive = gsmActive.Checked
-		thisApp.Preferences().SetBool("GSMActive", appPreferences.GSMActive)
+		appPreferences.TaskPreferences.GSMActive = gsmActive.Checked
+		thisApp.Preferences().SetBool("GSMActive", appPreferences.TaskPreferences.GSMActive)
 	})
 	preferencesWindow.SetContent(
 		container.New(
@@ -620,11 +620,11 @@ func preferencesWindowSetup() {
 			zettlePath,
 			widget.NewLabel("Priority-override file"),
 			priorityOverride,
-			widget.NewLabel("Jira Project Path"),
+			widget.NewLabel("tasks.Jira Project Path"),
 			jiraPath,
 			widget.NewLabel(""),
-			widget.NewLabelWithStyle("Planner", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-			widget.NewLabel("Planner active"),
+			widget.NewLabelWithStyle("tasks.Planner", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			widget.NewLabel("tasks.Planner active"),
 			plannerActive,
 			widget.NewLabel("Access Token"),
 			accessToken,
@@ -634,7 +634,7 @@ func preferencesWindowSetup() {
 			expiresAt,
 			widget.NewLabel(""),
 			widget.NewLabelWithStyle("JIRA", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-			widget.NewLabel("Jira active"),
+			widget.NewLabel("tasks.Jira active"),
 			jiraActive,
 			widget.NewLabel("Key"),
 			jiraKey,
@@ -683,14 +683,14 @@ func taskWindowSetup() {
 	)
 	TaskTabsIndexes = map[string]int{}
 	TaskTabs = container.NewAppTabs()
-	if appPreferences.GSMActive {
+	if appPreferences.TaskPreferences.GSMActive {
 		TaskTabs = container.NewAppTabs(
 			container.NewTabItem("My Tasks", container.NewBorder(
 				widget.NewToolbar(
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadTasks(func() { taskWindowRefresh("CWTasks") })
+							tasks.Gsm.DownloadTasks(func() { taskWindowRefresh("CWTasks") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -713,7 +713,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadIncidents(func() { taskWindowRefresh("CWIncidents") })
+							tasks.Gsm.DownloadIncidents(func() { taskWindowRefresh("CWIncidents") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -736,7 +736,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadTeam(func() { taskWindowRefresh("CWRequests") })
+							tasks.Gsm.DownloadTeam(func() { taskWindowRefresh("CWRequests") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -759,7 +759,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadMyRequests(func() { taskWindowRefresh("CWTeamIncidents") })
+							tasks.Gsm.DownloadMyRequests(func() { taskWindowRefresh("CWTeamIncidents") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -782,7 +782,7 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadMyRequests(func() { taskWindowRefresh("CWTeamTasks") })
+							tasks.Gsm.DownloadMyRequests(func() { taskWindowRefresh("CWTeamTasks") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -809,16 +809,16 @@ func taskWindowSetup() {
 			"CWTeamTasks":     4,
 		}
 	}
-	if appPreferences.MSPlannerActive {
+	if appPreferences.TaskPreferences.MSPlannerActive {
 		TaskTabsIndexes["MSPlanner"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
-			container.NewTabItem("My Planner", container.NewBorder(
+			container.NewTabItem("My tasks.Planner", container.NewBorder(
 				widget.NewToolbar(
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
 							go func() {
-								planner.Download("")
+								tasks.Planner.Download("")
 								taskWindowRefresh("MSPlanner")
 							}()
 						},
@@ -840,17 +840,17 @@ func taskWindowSetup() {
 			)),
 		)
 	}
-	if appPreferences.JiraActive {
-		TaskTabsIndexes["Jira"] = len(TaskTabsIndexes)
+	if appPreferences.TaskPreferences.JiraActive {
+		TaskTabsIndexes["tasks.Jira"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
-			container.NewTabItem("My Jira", container.NewBorder(
+			container.NewTabItem("My tasks.Jira", container.NewBorder(
 				widget.NewToolbar(
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
 							go func() {
-								jira.Download()
-								taskWindowRefresh("Jira")
+								tasks.Jira.Download()
+								taskWindowRefresh("tasks.Jira")
 							}()
 						},
 					),
@@ -959,9 +959,9 @@ func taskWindowRefresh(specific string) {
 	var list fyne.CanvasObject
 
 	priorityIcons := setupPriorityIcons()
-	if appPreferences.GSMActive {
+	if appPreferences.TaskPreferences.GSMActive {
 		if _, ok := TaskTabsIndexes["CWTasks"]; ok && (specific == "" || specific == "CWTasks") {
-			if len(gsm.MyTasks) == 0 {
+			if len(tasks.Gsm.MyTasks) == 0 {
 				list = widget.NewLabel("No tasks")
 			} else {
 				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -971,7 +971,7 @@ func taskWindowRefresh(specific string) {
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 
-				for _, x := range gsm.MyTasks {
+				for _, x := range tasks.Gsm.MyTasks {
 					thisID := x.ID
 					thisObjRecId := x.BusObRecId
 					thisParent := x.ParentID
@@ -990,7 +990,7 @@ func taskWindowRefresh(specific string) {
 									browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisParent)
 								}),
 								newTappableIcon(theme.DocumentIcon(), func(_ *fyne.PointEvent) {
-									journals, err := gsm.GetJournalNotesForIncident(thisParentInternal)
+									journals, err := tasks.Gsm.GetJournalNotesForIncident(thisParentInternal)
 
 									if err == nil {
 										list := container.NewVBox()
@@ -1030,7 +1030,7 @@ func taskWindowRefresh(specific string) {
 											co.(*tappableLabel).OnTapGo = func(_ *fyne.PointEvent) {
 												splits := strings.Split(me.Target, "!")
 												fmt.Printf("Target: %s|%s\n", me.Target, splits[0])
-												gsm.ReassignTaskToPersonInTeam(thisObjRecId, splits[0], splits[1])
+												tasks.Gsm.ReassignTaskToPersonInTeam(thisObjRecId, splits[0], splits[1])
 												fmt.Printf("Reassigning to %s|%s\n", me.Label, me.Target)
 												deepdeep.Hide()
 											}
@@ -1051,7 +1051,7 @@ func taskWindowRefresh(specific string) {
 													"Search",
 													theme.SearchIcon(),
 													func() {
-														founds, err := gsm.FindPeopleToReasignTo(lookinFor.Text)
+														founds, err := tasks.Gsm.FindPeopleToReasignTo(lookinFor.Text)
 														foundPeople = []struct {
 															Label  string
 															Target string
@@ -1114,11 +1114,11 @@ func taskWindowRefresh(specific string) {
 							},
 							func(isit bool) {
 								if tempVar == x.Priority || tempVar == "" {
-									delete(priorityOverrides.CWIncidents, thisID)
+									delete(tasks.PriorityOverrides.CWIncidents, thisID)
 								} else {
-									priorityOverrides.CWIncidents[thisID] = tempVar
+									tasks.PriorityOverrides.CWIncidents[thisID] = tempVar
 								}
-								savePriorityOverride()
+								tasks.SavePriorityOverride()
 							},
 							taskWindow,
 						)
@@ -1148,7 +1148,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadTasks(func() { taskWindowRefresh("CWTasks") })
+							tasks.Gsm.DownloadTasks(func() { taskWindowRefresh("CWTasks") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1169,7 +1169,7 @@ func taskWindowRefresh(specific string) {
 		}
 		if _, ok := TaskTabsIndexes["CWIncidents"]; ok && (specific == "" || specific == "CWIncidents") {
 			var list2 fyne.CanvasObject
-			if len(gsm.MyIncidents) == 0 {
+			if len(tasks.Gsm.MyIncidents) == 0 {
 				list2 = widget.NewLabel("No incidents")
 			} else {
 				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1177,7 +1177,7 @@ func taskWindowRefresh(specific string) {
 				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-				for _, x := range gsm.MyIncidents {
+				for _, x := range tasks.Gsm.MyIncidents {
 					thisID := x.ID
 					myPriority := x.PriorityOverride
 					if x.Priority != x.PriorityOverride {
@@ -1212,11 +1212,11 @@ func taskWindowRefresh(specific string) {
 							},
 							func(isit bool) {
 								if tempVar == x.Priority || tempVar == "" {
-									delete(priorityOverrides.CWIncidents, thisID)
+									delete(tasks.PriorityOverrides.CWIncidents, thisID)
 								} else {
-									priorityOverrides.CWIncidents[thisID] = tempVar
+									tasks.PriorityOverrides.CWIncidents[thisID] = tempVar
 								}
-								savePriorityOverride()
+								tasks.SavePriorityOverride()
 							},
 							taskWindow,
 						)
@@ -1245,7 +1245,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadIncidents(func() { taskWindowRefresh("CWIncidents") })
+							tasks.Gsm.DownloadIncidents(func() { taskWindowRefresh("CWIncidents") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1266,7 +1266,7 @@ func taskWindowRefresh(specific string) {
 		}
 		if _, ok := TaskTabsIndexes["CWTeamIncidents"]; ok && (specific == "" || specific == "CWTeamIncidents") {
 			var list3 fyne.CanvasObject
-			if len(gsm.TeamIncidents) == 0 {
+			if len(tasks.Gsm.TeamIncidents) == 0 {
 				list3 = widget.NewLabel("No incidents")
 			} else {
 				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1275,7 +1275,7 @@ func taskWindowRefresh(specific string) {
 				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-				for _, x := range gsm.TeamIncidents {
+				for _, x := range tasks.Gsm.TeamIncidents {
 					thisID := x.ID
 					col0.Objects = append(
 						col0.Objects,
@@ -1311,7 +1311,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadTeam(func() { taskWindowRefresh("CWTeamIncidents") })
+							tasks.Gsm.DownloadTeam(func() { taskWindowRefresh("CWTeamIncidents") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1332,7 +1332,7 @@ func taskWindowRefresh(specific string) {
 		}
 		if _, ok := TaskTabsIndexes["CWTeamTasks"]; ok && (specific == "" || specific == "CWTeamTasks") {
 			var list fyne.CanvasObject
-			if len(gsm.TeamTasks) == 0 {
+			if len(tasks.Gsm.TeamTasks) == 0 {
 				list = widget.NewLabel("No tasks")
 			} else {
 				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1341,7 +1341,7 @@ func taskWindowRefresh(specific string) {
 				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-				for _, x := range gsm.TeamTasks {
+				for _, x := range tasks.Gsm.TeamTasks {
 					thisID := x.ID
 					thisObjRecId := x.BusObRecId
 					thisParent := x.ParentID
@@ -1360,7 +1360,7 @@ func taskWindowRefresh(specific string) {
 									browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisParent)
 								}),
 								newTappableIcon(theme.DocumentIcon(), func(_ *fyne.PointEvent) {
-									journals, err := gsm.GetJournalNotesForIncident(thisParentInternal)
+									journals, err := tasks.Gsm.GetJournalNotesForIncident(thisParentInternal)
 
 									if err == nil {
 										list := container.NewVBox()
@@ -1404,7 +1404,7 @@ func taskWindowRefresh(specific string) {
 											co.(*tappableLabel).OnTapGo = func(_ *fyne.PointEvent) {
 												splits := strings.Split(me.Target, "!")
 												fmt.Printf("Target: %s|%s\n", me.Target, splits[0])
-												gsm.ReassignTaskToPersonInTeam(thisObjRecId, splits[0], splits[1])
+												tasks.Gsm.ReassignTaskToPersonInTeam(thisObjRecId, splits[0], splits[1])
 												fmt.Printf("Reassigning %s to %s|%s\n", thisObjRecId, me.Label, me.Target)
 												deepdeep.Hide()
 											}
@@ -1425,7 +1425,7 @@ func taskWindowRefresh(specific string) {
 													"Search",
 													theme.SearchIcon(),
 													func() {
-														founds, err := gsm.FindPeopleToReasignTo(lookinFor.Text)
+														founds, err := tasks.Gsm.FindPeopleToReasignTo(lookinFor.Text)
 														foundPeople = []struct {
 															Label  string
 															Target string
@@ -1488,11 +1488,11 @@ func taskWindowRefresh(specific string) {
 							},
 							func(isit bool) {
 								if tempVar == x.Priority || tempVar == "" {
-									delete(priorityOverrides.CWIncidents, thisID)
+									delete(tasks.PriorityOverrides.CWIncidents, thisID)
 								} else {
-									priorityOverrides.CWIncidents[thisID] = tempVar
+									tasks.PriorityOverrides.CWIncidents[thisID] = tempVar
 								}
-								savePriorityOverride()
+								tasks.SavePriorityOverride()
 							},
 							taskWindow,
 						)
@@ -1522,7 +1522,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadTeamTasks(func() { taskWindowRefresh("CWTeamTasks") })
+							tasks.Gsm.DownloadTeamTasks(func() { taskWindowRefresh("CWTeamTasks") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1543,7 +1543,7 @@ func taskWindowRefresh(specific string) {
 		}
 		if _, ok := TaskTabsIndexes["CWRequests"]; ok && (specific == "" || specific == "CWRequests") {
 			var list4 fyne.CanvasObject
-			if len(gsm.LoggedIncidents) == 0 {
+			if len(tasks.Gsm.LoggedIncidents) == 0 {
 				list4 = widget.NewLabel("No requests")
 			} else {
 				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1551,7 +1551,7 @@ func taskWindowRefresh(specific string) {
 				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-				for _, x := range gsm.LoggedIncidents {
+				for _, x := range tasks.Gsm.LoggedIncidents {
 					thisID := x.ID
 					col0.Objects = append(
 						col0.Objects,
@@ -1585,7 +1585,7 @@ func taskWindowRefresh(specific string) {
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							gsm.DownloadMyRequests(func() { taskWindowRefresh("CWRequests") })
+							tasks.Gsm.DownloadMyRequests(func() { taskWindowRefresh("CWRequests") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1605,10 +1605,10 @@ func taskWindowRefresh(specific string) {
 			)
 		}
 	}
-	if _, ok := TaskTabsIndexes["MSPlanner"]; ok && appPreferences.MSPlannerActive && (specific == "" || specific == "MSPlanner") {
+	if _, ok := TaskTabsIndexes["MSPlanner"]; ok && appPreferences.TaskPreferences.MSPlannerActive && (specific == "" || specific == "MSPlanner") {
 		// MY PLANNER
 		var list5 fyne.CanvasObject
-		if len(planner.MyTasks) == 0 {
+		if len(tasks.Planner.MyTasks) == 0 {
 			list5 = widget.NewLabel("No requests")
 		} else {
 			col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1616,7 +1616,7 @@ func taskWindowRefresh(specific string) {
 			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### %`))
-			for _, x := range planner.MyTasks {
+			for _, x := range tasks.Planner.MyTasks {
 				thisID := x.ID
 				myPriority := x.PriorityOverride
 				if x.Priority != x.PriorityOverride {
@@ -1631,7 +1631,7 @@ func taskWindowRefresh(specific string) {
 							browser.OpenURL(
 								fmt.Sprintf(
 									"https://tasks.office.com/%s/Home/Task/%s",
-									msApplicationTenant,
+									tasks.MsApplicationTenant,
 									thisID,
 								),
 							)
@@ -1661,13 +1661,13 @@ func taskWindowRefresh(specific string) {
 							if isit {
 								var thisPriority string
 								if tempVar == x.Priority {
-									delete(priorityOverrides.MSPlanner, thisID)
+									delete(tasks.PriorityOverrides.MSPlanner, thisID)
 									thisPriority = tempVar
 								} else {
-									priorityOverrides.MSPlanner[thisID] = tempVar
+									tasks.PriorityOverrides.MSPlanner[thisID] = tempVar
 									thisPriority = tempVar + "(" + x.Priority + ")"
 								}
-								savePriorityOverride()
+								tasks.SavePriorityOverride()
 								iconContainer.Objects[0] = getPriorityIconFor(tempVar, priorityIcons)
 								textContainer.Label.Text = thisPriority
 								textContainer.Refresh()
@@ -1705,7 +1705,7 @@ func taskWindowRefresh(specific string) {
 					theme.ViewRefreshIcon(),
 					func() {
 						go func() {
-							planner.Download("")
+							tasks.Planner.Download("")
 							taskWindowRefresh("MSPlanner")
 						}()
 					},
@@ -1726,9 +1726,9 @@ func taskWindowRefresh(specific string) {
 			list5,
 		)
 	}
-	if _, ok := TaskTabsIndexes["Jira"]; ok && appPreferences.JiraActive && (specific == "" || specific == "Jira") {
+	if _, ok := TaskTabsIndexes["tasks.Jira"]; ok && appPreferences.TaskPreferences.JiraActive && (specific == "" || specific == "tasks.Jira") {
 		var list fyne.CanvasObject
-		if len(jira.MyTasks) == 0 {
+		if len(tasks.Jira.MyTasks) == 0 {
 			list = widget.NewLabel("No requests")
 		} else {
 			col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1736,7 +1736,7 @@ func taskWindowRefresh(specific string) {
 			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-			for _, x := range jira.MyTasks {
+			for _, x := range tasks.Jira.MyTasks {
 				thisID := x.ID
 				myPriority := x.PriorityOverride
 				if x.Priority != x.PriorityOverride {
@@ -1780,13 +1780,13 @@ func taskWindowRefresh(specific string) {
 							if isit {
 								var thisPriority string
 								if tempVar == x.Priority {
-									delete(priorityOverrides.MSPlanner, thisID)
+									delete(tasks.PriorityOverrides.MSPlanner, thisID)
 									thisPriority = tempVar
 								} else {
-									priorityOverrides.MSPlanner[thisID] = tempVar
+									tasks.PriorityOverrides.MSPlanner[thisID] = tempVar
 									thisPriority = tempVar + "(" + x.Priority + ")"
 								}
-								savePriorityOverride()
+								tasks.SavePriorityOverride()
 								iconContainer.Objects[0] = getPriorityIconFor(tempVar, priorityIcons)
 								textContainer.Label.Text = thisPriority
 								textContainer.Refresh()
@@ -1818,14 +1818,14 @@ func taskWindowRefresh(specific string) {
 			)
 		}
 
-		TaskTabs.Items[TaskTabsIndexes["Jira"]].Content = container.NewBorder(
+		TaskTabs.Items[TaskTabsIndexes["tasks.Jira"]].Content = container.NewBorder(
 			widget.NewToolbar(
 				widget.NewToolbarAction(
 					theme.ViewRefreshIcon(),
 					func() {
 						go func() {
-							jira.Download()
-							taskWindowRefresh("Jira")
+							tasks.Jira.Download()
+							taskWindowRefresh("tasks.Jira")
 						}()
 					},
 				),

@@ -1,4 +1,4 @@
-package main
+package tasks
 
 import (
 	"bytes"
@@ -44,7 +44,7 @@ type PlanGraphResponse struct {
 	Title string `json:"title"`
 }
 
-type Planner struct {
+type PlannerStruct struct {
 	Task
 	PlannerAccessTokenChan         chan string
 	PlannerAccessTokenRequestsChan chan string
@@ -59,7 +59,11 @@ type Planner struct {
 	MyTasks                        []TaskResponseStruct
 }
 
-func (p *Planner) Init(baseRedirect string, statusCallback func(bool, string), accessToken string, refreshToken string, expiration time.Time) {
+func (p *PlannerStruct) Init(
+	baseRedirect string,
+	accessToken string,
+	refreshToken string,
+	expiration time.Time) {
 	p.PlannerAccessTokenChan = make(chan string)
 	p.PlannerAccessTokenRequestsChan = make(chan string)
 	p.PlanTitles = map[string]string{}
@@ -73,10 +77,9 @@ func (p *Planner) Init(baseRedirect string, statusCallback func(bool, string), a
 	}
 	// Start the background runner
 	p.SingleThreadReturnOrGetPlannerAccessToken()
-	p.StatusCallback = statusCallback
 }
 
-func (p *Planner) SingleThreadReturnOrGetPlannerAccessToken() {
+func (p *PlannerStruct) SingleThreadReturnOrGetPlannerAccessToken() {
 	if p.AccessToken == "" {
 		p.Login()
 	}
@@ -100,7 +103,7 @@ func (p *Planner) SingleThreadReturnOrGetPlannerAccessToken() {
 	}()
 }
 
-func (p *Planner) Authenticate(w http.ResponseWriter, r *http.Request) {
+func (p *PlannerStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
 	var MSToken MSAuthResponse
 	query := r.URL.Query()
 	if query.Get("code") != "" {
@@ -116,7 +119,7 @@ func (p *Planner) Authenticate(w http.ResponseWriter, r *http.Request) {
 		resp, err := http.PostForm(
 			fmt.Sprintf(
 				`https://login.microsoftonline.com/%s/oauth2/v2.0/token`,
-				msApplicationTenant,
+				MsApplicationTenant,
 			),
 			payload,
 		)
@@ -139,19 +142,19 @@ func (p *Planner) Authenticate(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (p *Planner) Login() {
+func (p *PlannerStruct) Login() {
 	browser.OpenURL(
 		fmt.Sprintf(`https://login.microsoftonline.com/%s/oauth2/v2.0/authorize?finalUri=?code=xy&client_id=%s&response_type=code&redirect_uri=http://localhost:84/ms&response_mode=query&scope=%s`,
-			msApplicationTenant,
+			MsApplicationTenant,
 			msApplicationClientId,
 			msScopes),
 	)
 }
 
-func (p *Planner) Download(specific string) {
+func (p *PlannerStruct) Download(specific string) {
 	p.GetAccessToken()
-	activeTaskStatusUpdate(1)
-	defer activeTaskStatusUpdate(-1)
+	ActiveTaskStatusUpdate(1)
+	defer ActiveTaskStatusUpdate(-1)
 
 	p.MyTasks = []TaskResponseStruct{}
 	uniquePlans := map[string][]int{}
@@ -181,7 +184,7 @@ func (p *Planner) Download(specific string) {
 					default:
 						row.Status = fmt.Sprintf("Unknown (%d)", y.PercentComplete)
 					}
-					if val, ok := priorityOverrides.MSPlanner[row.ID]; ok {
+					if val, ok := PriorityOverrides.MSPlanner[row.ID]; ok {
 						row.PriorityOverride = val
 					}
 					p.MyTasks = append(
@@ -230,7 +233,7 @@ func (p *Planner) Download(specific string) {
 
 }
 
-func (p *Planner) CallGraphURI(method string, path string, payload []byte, query string) (io.ReadCloser, error) {
+func (p *PlannerStruct) CallGraphURI(method string, path string, payload []byte, query string) (io.ReadCloser, error) {
 	client := &http.Client{
 		Timeout: time.Second * 10,
 	}
@@ -249,7 +252,7 @@ func (p *Planner) CallGraphURI(method string, path string, payload []byte, query
 	return nil, err
 }
 
-func (p *Planner) TeamPriorityToGSMPriority(priority int) string {
+func (p *PlannerStruct) TeamPriorityToGSMPriority(priority int) string {
 	switch priority {
 	case 0, 1:
 		return "1"
@@ -266,7 +269,7 @@ func (p *Planner) TeamPriorityToGSMPriority(priority int) string {
 	}
 }
 
-func (p *Planner) Refresh() {
+func (p *PlannerStruct) Refresh() {
 	var MSToken MSAuthResponse
 	if len(p.RefreshToken) == 0 {
 		return
@@ -281,7 +284,7 @@ func (p *Planner) Refresh() {
 	}
 	resp, err := http.PostForm(
 		fmt.Sprintf(`https://login.microsoftonline.com/%s/oauth2/v2.0/token`,
-			msApplicationTenant,
+			MsApplicationTenant,
 		),
 		payload,
 	)
@@ -299,7 +302,7 @@ func (p *Planner) Refresh() {
 	}
 }
 
-func (p *Planner) GetAccessToken() string {
+func (p *PlannerStruct) GetAccessToken() string {
 	p.PlannerAccessTokenRequestsChan <- time.Now().String()
 	return <-p.PlannerAccessTokenChan
 }

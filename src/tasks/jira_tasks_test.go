@@ -1,4 +1,4 @@
-package main
+package tasks
 
 var JiraFixtures = "/Users/s457972/Dropbox/swap/golang/helm/fixtures/"
 

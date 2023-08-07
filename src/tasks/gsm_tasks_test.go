@@ -1,4 +1,4 @@
-package main
+package tasks
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 )
 
 func startFakeMS(authReturnLocation string, authReturnCode int, apiResponses []string) {
-	gsm := Cherwell{}
+	gsm := CherwellStruct{}
 	gsm.BaseURL = `http://localhost:84/CherwellAPI/`
 	gsm.AuthURL = `http://localhost:84/cherwellapi/saml/login.cshtml?finalUri=http://localhost:84/cherwell?code=xx`
 
