@@ -3,7 +3,7 @@
 This is meant to be a main controller for my day-to-day work and other tasks. Currently:
 
 1. Markdown editor for a daily-status
-2. Deactivate parental controls on my internet for a set period of time
+2. Visibility of my assigned tasks/ made requests in the various work systems.~~~~
 
 ### Todo
 

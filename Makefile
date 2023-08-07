@@ -20,20 +20,21 @@ build-osxu: build-oldosx build-newosx build-osx
 	cp helm ../src/Helm.app/Contents/MacOS && \
 	codesign -f -s - ../src/Helm.app
 
-installer: build-osxu
-	[[ -f Helm-Installer.dmg ]] && rm Helm-Installer.dmg
-	cp src/Helm.app src/dmgsource
-	create-dmg \           
-	--volname "Helm Installer" \
-	--background "../assets/big-seal-arkark.png" \
-	--window-pos 200 120 \
-	--window-size 800 400 \
-	--icon-size 100 \
-	--icon "dmgsource/Helm.app" 200 190 \
-	--hide-extension "Helm.app" \
-	--app-drop-link 600 185 \
-	"Helm-Installer.dmg" \
-	"dmgsource/"
+#installer: build-osxu
+#	cd src
+#	[[ -f Helm-Installer.dmg ]] && rm Helm-Installer.dmg
+#	mv Helm.app dmgsource
+#	create-dmg \
+#	--volname "Helm Installer" \
+#	--background "../assets/big-seal-arkark.png" \
+#	--window-pos 200 120 \
+#	--window-size 800 400 \
+#	--icon-size 100 \
+#	--icon "dmgsource/Helm.app" 200 190 \
+#	--hide-extension "Helm.app" \
+#	--app-drop-link 600 185 \
+#	"Helm-Installer.dmg" \
+#	"Helm.app"
 
 
 # export GOOS=windows

@@ -8,10 +8,7 @@ require (
 	github.com/yuin/goldmark v1.5.4
 )
 
-require (
-	github.com/benoitkugler/textlayout v0.3.0 // indirect
-	github.com/go-text/typesetting v0.0.0-20230327141846-b6333f70ed72 // indirect
-)
+require github.com/go-text/typesetting v0.0.0-20230327141846-b6333f70ed72 // indirect
 
 require (
 	fyne.io/systray v1.10.1-0.20230312215936-7f71b037e260 // indirect

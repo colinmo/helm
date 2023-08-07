@@ -50,8 +50,6 @@ type AppStatusStruct struct {
 type AppPreferences struct {
 	ZettlekastenHome string
 	JiraProjectHome  string
-	RouterUsername   string
-	RouterPassword   string
 	GSMActive        bool
 	MSPlannerActive  bool
 	MSAccessToken    string
