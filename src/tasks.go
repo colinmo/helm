@@ -71,16 +71,20 @@ type TaskResponseStruct struct {
 	OwnerID          string
 }
 
+/** If we move this into /tasks, keep these here and refer in main as tasks.* ? */
 var planner = Planner{}
 var jira = Jira{}
 var gsm = Cherwell{}
 
 func InitTasks() {
 	if appPreferences.JiraActive {
-		planner.Init("http://localhost:84/", connectionStatusBox, "", "", time.Now())
+		jira.Init()
 	}
 	if appPreferences.GSMActive {
 		gsm.Init("http://localhost:84/", connectionStatusBox, "", "", time.Now())
+	}
+	if appPreferences.MSPlannerActive {
+		planner.Init("http://localhost:84/", connectionStatusBox, "", "", time.Now())
 	}
 }
 

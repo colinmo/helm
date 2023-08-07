@@ -65,13 +65,7 @@ type Cherwell struct {
 	AuthURL         string
 	StatusCallback  func(bool, string)
 	TokenStatus     GSMTokenStatus
-	G               singleflight.Group
-}
-
-func NewCherwell(baseRedirect string, statusCallback func(bool, string), accessToken string, refreshToken string, expiration time.Time) Cherwell {
-	gsm := Cherwell{}
-	gsm.Init(baseRedirect, statusCallback, accessToken, refreshToken, expiration)
-	return gsm
+	G               *singleflight.Group
 }
 
 func (gsm *Cherwell) Init(baseRedirect string, statusCallback func(bool, string), accessToken string, refreshToken string, expiration time.Time) {
@@ -91,6 +85,7 @@ func (gsm *Cherwell) Init(baseRedirect string, statusCallback func(bool, string)
 
 	// Start the background runner
 	gsm.StatusCallback = statusCallback
+	gsm.G = &singleflight.Group{}
 }
 
 func (gsm *Cherwell) getGSMAccessToken() (bool, error) {
@@ -103,8 +98,8 @@ func (gsm *Cherwell) getGSMAccessToken() (bool, error) {
 				gsm.StatusCallback(false, "G")
 				gsm.TokenStatus = Expired
 				gsm.Refresh()
-				return "", fmt.Errorf("token expired")
-			} else if gsm.TokenStatus != Active {
+			}
+			if gsm.TokenStatus != Active {
 				// No token
 				gsm.AccessToken = ""
 				gsm.StatusCallback(false, "G")
@@ -1165,8 +1160,8 @@ func (gsm *Cherwell) Refresh() {
 		gsm.StatusCallback(true, "G")
 		gsm.TokenStatus = Active
 	} else {
-		gsm.AccessToken = ""
 		gsm.RefreshToken = ""
+		gsm.AccessToken = ""
 		gsm.Expiration.Add(-200 * time.Hour)
 		gsm.StatusCallback(false, "G")
 		gsm.TokenStatus = Expired
