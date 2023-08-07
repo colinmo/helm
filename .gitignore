@@ -14,3 +14,6 @@ src/Helm-Installer.dmg
 src/gsmsecret.go
 key
 HelmSigned.exe
+src/tasks/jira_tasks_token_test.go
+src/tasks/msplannersecret.go
+src/tasks/gsmsecret.go
