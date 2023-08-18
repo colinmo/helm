@@ -137,7 +137,6 @@ var ConnectionStatusBox func(bool, string)
 var AppPreferences TaskPreferencesStruct
 
 func StartLocalServers() {
-	fmt.Printf("%v\n", AppPreferences)
 	if AppPreferences.GSMActive {
 		http.HandleFunc(Gsm.RedirectPath, func(w http.ResponseWriter, r *http.Request) {
 			Gsm.AuthenticateToCherwell(w, r)
@@ -149,7 +148,6 @@ func StartLocalServers() {
 		})
 	}
 	go func() {
-		fmt.Printf("Starting Web Server")
 		AuthWebServer = &http.Server{Addr: ":84", Handler: nil}
 		if err := AuthWebServer.ListenAndServe(); err != nil {
 			log.Fatal(err)

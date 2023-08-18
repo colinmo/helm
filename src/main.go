@@ -132,7 +132,7 @@ func overrides() {
 			button.OnTapped = func() {
 				if onl {
 					tasks.Jira.Download()
-					taskWindowRefresh("tasks.Jira")
+					taskWindowRefresh("Jira")
 				}
 			}
 			jiraConnectionActive.Objects = container.NewMax(
@@ -181,7 +181,7 @@ func overrides() {
 			for {
 				time.Sleep(5 * time.Minute)
 				tasks.Planner.Download("")
-				taskWindowRefresh("MSPlanner")
+				taskWindowRefresh("Planner")
 			}
 		}()
 	}
@@ -190,7 +190,7 @@ func overrides() {
 			for {
 				time.Sleep(5 * time.Minute)
 				tasks.Jira.Download()
-				taskWindowRefresh("tasks.Jira")
+				taskWindowRefresh("Jira")
 			}
 		}()
 	}
@@ -620,11 +620,11 @@ func preferencesWindowSetup() {
 			zettlePath,
 			widget.NewLabel("Priority-override file"),
 			priorityOverride,
-			widget.NewLabel("tasks.Jira Project Path"),
+			widget.NewLabel("Jira Project Path"),
 			jiraPath,
 			widget.NewLabel(""),
-			widget.NewLabelWithStyle("tasks.Planner", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-			widget.NewLabel("tasks.Planner active"),
+			widget.NewLabelWithStyle("Planner", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			widget.NewLabel("Planner active"),
 			plannerActive,
 			widget.NewLabel("Access Token"),
 			accessToken,
@@ -634,7 +634,7 @@ func preferencesWindowSetup() {
 			expiresAt,
 			widget.NewLabel(""),
 			widget.NewLabelWithStyle("JIRA", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-			widget.NewLabel("tasks.Jira active"),
+			widget.NewLabel("Jira active"),
 			jiraActive,
 			widget.NewLabel("Key"),
 			jiraKey,
@@ -810,16 +810,16 @@ func taskWindowSetup() {
 		}
 	}
 	if appPreferences.TaskPreferences.MSPlannerActive {
-		TaskTabsIndexes["MSPlanner"] = len(TaskTabsIndexes)
+		TaskTabsIndexes["Planner"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
-			container.NewTabItem("My tasks.Planner", container.NewBorder(
+			container.NewTabItem("Planner", container.NewBorder(
 				widget.NewToolbar(
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
 							go func() {
 								tasks.Planner.Download("")
-								taskWindowRefresh("MSPlanner")
+								taskWindowRefresh("Planner")
 							}()
 						},
 					),
@@ -841,16 +841,16 @@ func taskWindowSetup() {
 		)
 	}
 	if appPreferences.TaskPreferences.JiraActive {
-		TaskTabsIndexes["tasks.Jira"] = len(TaskTabsIndexes)
+		TaskTabsIndexes["Jira"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
-			container.NewTabItem("My tasks.Jira", container.NewBorder(
+			container.NewTabItem("Jira", container.NewBorder(
 				widget.NewToolbar(
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
 							go func() {
 								tasks.Jira.Download()
-								taskWindowRefresh("tasks.Jira")
+								taskWindowRefresh("Jira")
 							}()
 						},
 					),
@@ -1605,7 +1605,7 @@ func taskWindowRefresh(specific string) {
 			)
 		}
 	}
-	if _, ok := TaskTabsIndexes["MSPlanner"]; ok && appPreferences.TaskPreferences.MSPlannerActive && (specific == "" || specific == "MSPlanner") {
+	if _, ok := TaskTabsIndexes["Planner"]; ok && appPreferences.TaskPreferences.MSPlannerActive && (specific == "" || specific == "Planner") {
 		// MY PLANNER
 		var list5 fyne.CanvasObject
 		if len(tasks.Planner.MyTasks) == 0 {
@@ -1699,14 +1699,14 @@ func taskWindowRefresh(specific string) {
 			)
 		}
 
-		TaskTabs.Items[TaskTabsIndexes["MSPlanner"]].Content = container.NewBorder(
+		TaskTabs.Items[TaskTabsIndexes["Planner"]].Content = container.NewBorder(
 			widget.NewToolbar(
 				widget.NewToolbarAction(
 					theme.ViewRefreshIcon(),
 					func() {
 						go func() {
 							tasks.Planner.Download("")
-							taskWindowRefresh("MSPlanner")
+							taskWindowRefresh("Planner")
 						}()
 					},
 				),
@@ -1726,7 +1726,7 @@ func taskWindowRefresh(specific string) {
 			list5,
 		)
 	}
-	if _, ok := TaskTabsIndexes["tasks.Jira"]; ok && appPreferences.TaskPreferences.JiraActive && (specific == "" || specific == "tasks.Jira") {
+	if _, ok := TaskTabsIndexes["Jira"]; ok && appPreferences.TaskPreferences.JiraActive && (specific == "" || specific == "Jira") {
 		var list fyne.CanvasObject
 		if len(tasks.Jira.MyTasks) == 0 {
 			list = widget.NewLabel("No requests")
@@ -1818,14 +1818,14 @@ func taskWindowRefresh(specific string) {
 			)
 		}
 
-		TaskTabs.Items[TaskTabsIndexes["tasks.Jira"]].Content = container.NewBorder(
+		TaskTabs.Items[TaskTabsIndexes["Jira"]].Content = container.NewBorder(
 			widget.NewToolbar(
 				widget.NewToolbarAction(
 					theme.ViewRefreshIcon(),
 					func() {
 						go func() {
 							tasks.Jira.Download()
-							taskWindowRefresh("tasks.Jira")
+							taskWindowRefresh("Jira")
 						}()
 					},
 				),

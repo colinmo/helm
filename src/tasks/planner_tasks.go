@@ -125,7 +125,7 @@ func (p *PlannerStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
 		)
 		if err != nil {
 			log.Fatalf("Login failed %s\n", err)
-			p.StatusCallback(false, "M")
+			ConnectionStatusBox(false, "M")
 		} else {
 			err := json.NewDecoder(resp.Body).Decode(&MSToken)
 			if err != nil {
@@ -134,7 +134,7 @@ func (p *PlannerStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
 			p.RefreshToken = MSToken.RefreshToken
 			seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", MSToken.ExpiresIn-10))
 			p.Expiration = time.Now().Add(seconds)
-			p.StatusCallback(true, "M")
+			ConnectionStatusBox(true, "M")
 			w.Header().Add("Content-type", "text/html")
 			fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.</body></html>")
 			p.AccessToken = MSToken.AccessToken
@@ -160,10 +160,14 @@ func (p *PlannerStruct) Download(specific string) {
 	uniquePlans := map[string][]int{}
 	var teamResponse myTasksGraphResponse
 	urlToCall := "/me/planner/tasks"
+	fmt.Printf("Downloading\n")
 	for page := 1; page < 200; page++ {
 		r, err := p.CallGraphURI("GET", urlToCall, []byte{}, "$select=id,details,planid,title,priority,percentcomplete,createdDateTime")
 		if err == nil {
-			_ = json.NewDecoder(r).Decode(&teamResponse)
+			err = json.NewDecoder(r).Decode(&teamResponse)
+			if err != nil {
+				log.Fatal("Bad decode")
+			}
 			r.Close()
 
 			for _, y := range teamResponse.Value {
@@ -289,6 +293,7 @@ func (p *PlannerStruct) Refresh() {
 		payload,
 	)
 	if err != nil {
+		ConnectionStatusBox(false, "M")
 		log.Fatalf("Login failed %s\n", err)
 	} else {
 		err := json.NewDecoder(resp.Body).Decode(&MSToken)
@@ -299,6 +304,7 @@ func (p *PlannerStruct) Refresh() {
 		seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", MSToken.ExpiresIn-10))
 		p.Expiration = time.Now().Add(seconds)
 		p.AccessToken = MSToken.AccessToken
+		ConnectionStatusBox(true, "M")
 	}
 }
 
