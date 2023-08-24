@@ -143,6 +143,7 @@ func overrides() {
 		case "M":
 			button.OnTapped = func() {
 				tasks.Planner.Download("")
+				taskWindowRefresh("Planner")
 			}
 			msConnectionActive.Objects = container.NewMax(
 				button,
@@ -1605,7 +1606,9 @@ func taskWindowRefresh(specific string) {
 			)
 		}
 	}
-	if _, ok := TaskTabsIndexes["Planner"]; ok && appPreferences.TaskPreferences.MSPlannerActive && (specific == "" || specific == "Planner") {
+	if _, ok := TaskTabsIndexes["Planner"]; ok &&
+		appPreferences.TaskPreferences.MSPlannerActive &&
+		(specific == "" || specific == "Planner") {
 		// MY PLANNER
 		var list5 fyne.CanvasObject
 		if len(tasks.Planner.MyTasks) == 0 {

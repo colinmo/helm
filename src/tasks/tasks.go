@@ -105,7 +105,7 @@ func GetAllTasks(jiraActive, gsmActive, msplannerActive bool, taskWindowRefresh 
 	if msplannerActive {
 		Planner.Refresh()
 		Planner.Download("")
-		taskWindowRefresh("MSPlanner")
+		taskWindowRefresh("Planner")
 	}
 	if jiraActive {
 		Jira.Download()
