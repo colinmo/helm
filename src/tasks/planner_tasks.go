@@ -136,7 +136,7 @@ func (p *PlannerStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
 			p.Expiration = time.Now().Add(seconds)
 			ConnectionStatusBox(true, "M")
 			w.Header().Add("Content-type", "text/html")
-			fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.</body></html>")
+			fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.<script>window.close();</script></body></html>")
 			p.AccessToken = MSToken.AccessToken
 		}
 	}
@@ -160,7 +160,6 @@ func (p *PlannerStruct) Download(specific string) {
 	uniquePlans := map[string][]int{}
 	var teamResponse myTasksGraphResponse
 	urlToCall := "/me/planner/tasks"
-	fmt.Printf("Downloading\n")
 	for page := 1; page < 200; page++ {
 		r, err := p.CallGraphURI("GET", urlToCall, []byte{}, "$select=id,details,planid,title,priority,percentcomplete,createdDateTime")
 		if err == nil {
@@ -234,7 +233,6 @@ func (p *PlannerStruct) Download(specific string) {
 		}
 		return p.MyTasks[i].PriorityOverride < p.MyTasks[j].PriorityOverride
 	})
-
 }
 
 func (p *PlannerStruct) CallGraphURI(method string, path string, payload []byte, query string) (io.ReadCloser, error) {

@@ -1107,7 +1107,7 @@ func (gsm *CherwellStruct) AuthenticateToCherwell(w http.ResponseWriter, r *http
 				ConnectionStatusBox(true, "G")
 				gsm.Refresh()
 				w.Header().Add("Content-type", "text/html")
-				fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.</body></html>")
+				fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.<script>window.close();</script></body></html>")
 				gsm.Download(
 					func() { TaskWindowRefresh("CWTasks") },
 					func() { TaskWindowRefresh("CWIncidents") },
