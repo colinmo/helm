@@ -167,13 +167,17 @@ func overrides() {
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
-				tasks.Gsm.Download(
-					func() { taskWindowRefresh("CWTasks") },
-					func() { taskWindowRefresh("CWIncidents") },
-					func() { taskWindowRefresh("CWRequests") },
-					func() { taskWindowRefresh("CWTeamIncidents") },
-					func() { taskWindowRefresh("CWTeamTasks") },
-				)
+				// Stop refresh if out of business hours
+				hour := time.Now().Hour()
+				if hour > 8 && hour < 17 {
+					tasks.Gsm.Download(
+						func() { taskWindowRefresh("CWTasks") },
+						func() { taskWindowRefresh("CWIncidents") },
+						func() { taskWindowRefresh("CWRequests") },
+						func() { taskWindowRefresh("CWTeamIncidents") },
+						func() { taskWindowRefresh("CWTeamTasks") },
+					)
+				}
 			}
 		}()
 	}
@@ -181,8 +185,11 @@ func overrides() {
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
-				tasks.Planner.Download("")
-				taskWindowRefresh("Planner")
+				hour := time.Now().Hour()
+				if hour > 8 && hour < 17 {
+					tasks.Planner.Download("")
+					taskWindowRefresh("Planner")
+				}
 			}
 		}()
 	}
@@ -190,8 +197,11 @@ func overrides() {
 		go func() {
 			for {
 				time.Sleep(5 * time.Minute)
-				tasks.Jira.Download()
-				taskWindowRefresh("Jira")
+				hour := time.Now().Hour()
+				if hour > 8 && hour < 17 {
+					tasks.Jira.Download()
+					taskWindowRefresh("Jira")
+				}
 			}
 		}()
 	}
