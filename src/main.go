@@ -83,6 +83,12 @@ func setup() {
 }
 
 func overrides() {
+	thisApp.Lifecycle().SetOnStarted(func() {
+		go func() {
+			time.Sleep(200 * time.Millisecond)
+			setActivationPolicy()
+		}()
+	})
 	preferencesToLocalVar()
 	tasks.LoadPriorityOverride(appPreferences.TaskPreferences.PriorityOverride)
 	connectionStatusBox = func(onl bool, label string) {
@@ -169,7 +175,8 @@ func overrides() {
 				time.Sleep(5 * time.Minute)
 				// Stop refresh if out of business hours
 				hour := time.Now().Hour()
-				if hour > 8 && hour < 17 {
+				weekday := time.Now().Weekday()
+				if hour > 8 && hour < 17 && weekday > 0 && weekday < 6 {
 					tasks.Gsm.Download(
 						func() { taskWindowRefresh("CWTasks") },
 						func() { taskWindowRefresh("CWIncidents") },
@@ -186,7 +193,8 @@ func overrides() {
 			for {
 				time.Sleep(5 * time.Minute)
 				hour := time.Now().Hour()
-				if hour > 8 && hour < 17 {
+				weekday := time.Now().Weekday()
+				if hour > 8 && hour < 17 && weekday > 0 && weekday < 6 {
 					tasks.Planner.Download("")
 					taskWindowRefresh("Planner")
 				}
@@ -198,7 +206,8 @@ func overrides() {
 			for {
 				time.Sleep(5 * time.Minute)
 				hour := time.Now().Hour()
-				if hour > 8 && hour < 17 {
+				weekday := time.Now().Weekday()
+				if hour > 8 && hour < 17 && weekday > 0 && weekday < 6 {
 					tasks.Jira.Download()
 					taskWindowRefresh("Jira")
 				}
