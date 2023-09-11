@@ -83,12 +83,6 @@ func setup() {
 }
 
 func overrides() {
-	thisApp.Lifecycle().SetOnStarted(func() {
-		go func() {
-			time.Sleep(200 * time.Millisecond)
-			setActivationPolicy()
-		}()
-	})
 	preferencesToLocalVar()
 	tasks.LoadPriorityOverride(appPreferences.TaskPreferences.PriorityOverride)
 	connectionStatusBox = func(onl bool, label string) {
