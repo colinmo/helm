@@ -551,9 +551,9 @@ func preferencesToLocalVar() {
 		myself, error := user.Current()
 		pribase := ""
 		if error == nil {
-			pribase = filepath.Join(myself.HomeDir, "/.helm")
+			pribase = filepath.Join(myself.HomeDir, "/.hq")
 		} else {
-			pribase = filepath.Join(os.TempDir(), "/.helm")
+			pribase = filepath.Join(os.TempDir(), "/.hq")
 		}
 		appPreferences.TaskPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", pribase)
 	}

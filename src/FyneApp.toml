@@ -1,8 +1,8 @@
 Website = "https://vonexplaino.com"
 
 [Details]
-  Icon = "../assets/Icon.png"
-  Name = "Helm"
-  ID = "com.vonexplaino.helm"
+  Icon = "Icon.png"
+  Name = "HQ"
+  ID = "com.vonexplaino.hq"
   Version = "1.0.0"
-  Build = 141
+  Build = 143
