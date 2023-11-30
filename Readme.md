@@ -1,4 +1,4 @@
-# HELM
+# HQ
 
 This is meant to be a main controller for my day-to-day work and other tasks. Currently:
 
