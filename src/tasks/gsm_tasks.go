@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -67,6 +68,8 @@ type CherwellStruct struct {
 	TokenStatus     GSMTokenStatus
 	G               *singleflight.Group
 }
+
+var gsmTokenLock sync.Mutex
 
 func (gsm *CherwellStruct) Init(baseRedirect string, accessToken string, refreshToken string, expiration time.Time) {
 	gsm.TokenStatus = Inactive
@@ -1129,8 +1132,9 @@ func (gsm *CherwellStruct) AuthenticateToCherwell(w http.ResponseWriter, r *http
 	}
 }
 
-// Doesn't work for SAML?
+// Reconnect to GSM via username/password
 func (gsm *CherwellStruct) Refresh() {
+	gsmTokenLock.Lock()
 	payload := url.Values{
 		"grant_type": {"password"},
 		"client_id":  {"814f9a74-c86a-451e-b6bb-deea65acf72a"},
@@ -1165,6 +1169,7 @@ func (gsm *CherwellStruct) Refresh() {
 		ConnectionStatusBox(false, "G")
 		gsm.TokenStatus = Expired
 	}
+	gsmTokenLock.Unlock()
 }
 
 func (gsm *CherwellStruct) getStuffFromCherwell(method string, path string, payload []byte, refreshToken bool) (io.ReadCloser, error) {

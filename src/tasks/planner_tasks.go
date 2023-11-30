@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/pkg/browser"
@@ -58,6 +59,8 @@ type PlannerStruct struct {
 	StatusCallback                 func(bool, string)
 	MyTasks                        []TaskResponseStruct
 }
+
+var msTokenLock sync.Mutex
 
 func (p *PlannerStruct) Init(
 	baseRedirect string,
