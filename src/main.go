@@ -1779,6 +1779,7 @@ func taskWindowRefresh(specific string) {
 							getJiraTypeIconFor(x.Type, taskIcons),
 							widget.NewLabelWithStyle(x.Type[0:1], fyne.TextAlignCenter, fyne.TextStyle{Bold: true})),
 						widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", thisID, x.Title), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+						widget.NewLabel(x.Blockers),
 					))
 				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
 				iconContainer := container.NewMax(getPriorityIconFor(x.PriorityOverride, priorityIcons))
@@ -1802,10 +1803,10 @@ func taskWindowRefresh(specific string) {
 							if isit {
 								var thisPriority string
 								if tempVar == x.Priority {
-									delete(tasks.PriorityOverrides.MSPlanner, thisID)
+									delete(tasks.PriorityOverrides.Jira, thisID)
 									thisPriority = tempVar
 								} else {
-									tasks.PriorityOverrides.MSPlanner[thisID] = tempVar
+									tasks.PriorityOverrides.Jira[thisID] = tempVar
 									thisPriority = tempVar + "(" + x.Priority + ")"
 								}
 								tasks.SavePriorityOverride()

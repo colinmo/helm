@@ -70,6 +70,7 @@ type TaskResponseStruct struct {
 	Owner            string
 	OwnerID          string
 	Type             string
+	Blockers         string
 }
 
 /** If we move this into /tasks, keep these here and refer in main as tasks.* ? */
@@ -160,6 +161,7 @@ type PriorityOverridesStruct struct {
 	CWTasks     map[string]string `json:"cwtasks"`
 	CWIncidents map[string]string `json:"cwincidents"`
 	MSPlanner   map[string]string `json:"msplanner"`
+	Jira        map[string]string `json:"jira"`
 }
 
 var PriorityOverrides PriorityOverridesStruct
@@ -175,6 +177,9 @@ func LoadPriorityOverride(preferences string) {
 				"x": "y",
 			},
 			MSPlanner: map[string]string{
+				"x": "y",
+			},
+			Jira: map[string]string{
 				"x": "y",
 			},
 		}
