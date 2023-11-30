@@ -69,6 +69,7 @@ type TaskResponseStruct struct {
 	PriorityOverride string
 	Owner            string
 	OwnerID          string
+	Type             string
 }
 
 /** If we move this into /tasks, keep these here and refer in main as tasks.* ? */
