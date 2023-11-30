@@ -70,7 +70,7 @@ type TaskResponseStruct struct {
 	Owner            string
 	OwnerID          string
 	Type             string
-	Blockers         string
+	Blocked          bool
 }
 
 /** If we move this into /tasks, keep these here and refer in main as tasks.* ? */

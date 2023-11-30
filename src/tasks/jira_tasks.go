@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -53,10 +52,10 @@ func (j *JiraStruct) Download() {
 		ActiveTaskStatusUpdate(1)
 		defer ActiveTaskStatusUpdate(-1)
 		j.MyTasks = []TaskResponseStruct{}
+		indexedTasks := map[string]TaskResponseStruct{}
 		ConnectionStatusBox(true, "J")
 		var jiraResponse JiraResponseType
-		baseQuery := `jql=assignee%3Dcurrentuser()%20AND%20status%20!%3D%20%22Done%22%20order%20by%20priority,created%20asc&fields=summary,created,priority,status,issuetype`
-		blockersQuery := `jql=status%%20!%%3D%%20%%22Done%%22%%20AND%%20issue%%20in%%20linkedIssues(%s,%%22is%%20blocked%%20by%%22)%%20order%%20by%%20priority,created%%20asc&fields=id,status`
+		baseQuery := `jql=assignee%3Dcurrentuser()%20AND%20status%20!%3D%20%22Done%22&fields=summary,created,priority,status,issuetype`
 		queryToCall := fmt.Sprintf("%s&startAt=0", baseQuery)
 		for page := 1; page < 200; page++ {
 			r, err := j.callJiraURI("GET", "search", []byte{}, queryToCall)
@@ -66,24 +65,11 @@ func (j *JiraStruct) Download() {
 
 				for _, y := range jiraResponse.Issues {
 					dt, _ := time.Parse("2006-01-02T15:04:05.999-0700", y.Fields.CreatedDateTime)
-					s, err := j.callJiraURI("GET", "search", []byte{}, fmt.Sprintf(blockersQuery, y.Key))
-					blockedBy := []string{}
-					if err == nil {
-						defer r.Close()
-						jiraResponse2 := jiraResponse
-						_ = json.NewDecoder(s).Decode(&jiraResponse2)
-						for _, z := range jiraResponse2.Issues {
-							blockedBy = append(blockedBy, z.Key)
-						}
-					} else {
-						err = nil
-					}
 					myOverride := j.jiraPriorityToGSMPriority(y.Fields.Priority.Name)
 					if val, ok := PriorityOverrides.Jira[y.Key]; ok {
 						myOverride = val
 					}
-					j.MyTasks = append(
-						j.MyTasks,
+					indexedTasks[y.Key] =
 						TaskResponseStruct{
 							ID:               y.Key,
 							Title:            TruncateShort(y.Fields.Summary, 60),
@@ -92,9 +78,8 @@ func (j *JiraStruct) Download() {
 							Status:           y.Fields.Status.Name,
 							PriorityOverride: myOverride,
 							Type:             y.Fields.IssueType.Name,
-							Blockers:         strings.Join(blockedBy, ", "),
-						},
-					)
+							Blocked:          false,
+						}
 				}
 				if len(jiraResponse.Issues) == 0 {
 					break
@@ -104,6 +89,33 @@ func (j *JiraStruct) Download() {
 			} else {
 				fmt.Printf("Failed to get Jira Tasks %s\n", err)
 			}
+		}
+		baseQuery = `jql=assignee%3Dcurrentuser()%20AND%20status%20!%3D%20%22Done%22%20%20AND%20issuelinktype%20%3D%20%22is%20blocked%20by%22&fields=key`
+		queryToCall = fmt.Sprintf("%s&startAt=0", baseQuery)
+		for page := 1; page < 200; page++ {
+			r, err := j.callJiraURI("GET", "search", []byte{}, queryToCall)
+			fmt.Printf("%s\n", baseQuery)
+			if err == nil {
+				defer r.Close()
+				_ = json.NewDecoder(r).Decode(&jiraResponse)
+
+				for _, y := range jiraResponse.Issues {
+					mike := indexedTasks[y.Key]
+					mike.Blocked = true
+					indexedTasks[y.Key] = mike
+				}
+				if len(jiraResponse.Issues) == 0 {
+					break
+				} else {
+					queryToCall = fmt.Sprintf("%s&startAt=%d", baseQuery, jiraResponse.MaxResults*page)
+				}
+			} else {
+				fmt.Printf("Failed to get Jira Tasks %s\n", err)
+			}
+		}
+		for _, v := range indexedTasks {
+			fmt.Printf("%s: %v\n", v.ID, v.Blocked)
+			j.MyTasks = append(j.MyTasks, v)
 		}
 		// sort
 		sort.SliceStable(j.MyTasks, func(i, k int) bool {

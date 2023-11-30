@@ -1773,13 +1773,17 @@ func taskWindowRefresh(specific string) {
 							)
 						}),
 					))
+				blocked := widget.NewIcon(theme.MediaPlayIcon())
+				if x.Blocked {
+					blocked = widget.NewIcon(theme.MediaPauseIcon())
+				}
 				col1.Objects = append(col1.Objects,
 					container.NewHBox(
 						container.NewMax(
 							getJiraTypeIconFor(x.Type, taskIcons),
 							widget.NewLabelWithStyle(x.Type[0:1], fyne.TextAlignCenter, fyne.TextStyle{Bold: true})),
+						blocked,
 						widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", thisID, x.Title), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-						widget.NewLabel(x.Blockers),
 					))
 				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
 				iconContainer := container.NewMax(getPriorityIconFor(x.PriorityOverride, priorityIcons))
