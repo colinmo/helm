@@ -231,6 +231,7 @@ func main() {
 		)
 	}()
 	if desk, ok := thisApp.(desktop.App); ok {
+		desk.SetSystemTrayIcon(fyne.NewStaticResource("Systray", icon.IconWhite))
 		m := fyne.NewMenu("MyApp",
 			fyne.NewMenuItem("Todays Notes", func() {
 				mainWindow.Show()

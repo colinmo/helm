@@ -94,7 +94,6 @@ func (j *JiraStruct) Download() {
 		queryToCall = fmt.Sprintf("%s&startAt=0", baseQuery)
 		for page := 1; page < 200; page++ {
 			r, err := j.callJiraURI("GET", "search", []byte{}, queryToCall)
-			fmt.Printf("%s\n", baseQuery)
 			if err == nil {
 				defer r.Close()
 				_ = json.NewDecoder(r).Decode(&jiraResponse)
@@ -114,7 +113,6 @@ func (j *JiraStruct) Download() {
 			}
 		}
 		for _, v := range indexedTasks {
-			fmt.Printf("%s: %v\n", v.ID, v.Blocked)
 			j.MyTasks = append(j.MyTasks, v)
 		}
 		// sort
