@@ -26,3 +26,17 @@ This is meant to be a main controller for my day-to-day work and other tasks. Cu
   * [ ] If the data is less than X seconds old, just return the last data.
   * [ ] Otherwise, do a read and return.
   * [ ] Only one request process per backend tool at a time
+* [ ] Create a new Jira ticket
+  * [ ] Default Team and Project
+  * [ ] Force picking of parent Initiative from list
+  * [ ] Fields: 
+    * [ ] Project
+    * [ ] Issue type (Epic or Story)
+    * [ ] Status
+    * [ ] Summary
+    * [ ] Description
+    * [ ] Assignee
+    * [ ] Reporter
+    * [ ] Team
+    * [ ] Parent (Epic has an Initiative parent, Story has an Epic parent)
+    * [ ] If Epic, Epic Name
