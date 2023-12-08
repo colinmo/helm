@@ -158,3 +158,105 @@ func (j *JiraStruct) jiraPriorityToGSMPriority(priority string) string {
 		return "5"
 	}
 }
+
+/*
+func (j *JiraStruct) Lookup(search string, field string) []interface{} {
+	ActiveTaskStatusUpdate(1)
+	defer ActiveTaskStatusUpdate(-1)
+	foundThings := map[string]string{}
+	ConnectionStatusBox(true, "J")
+	var jiraResponse JiraResponseType
+	baseQuery := `jql=assignee%3Dcurrentuser()%20AND%20status%20!%3D%20%22Done%22&fields=summary,created,priority,status,issuetype`
+	queryToCall := fmt.Sprintf("%s&startAt=0", baseQuery)
+	for page := 1; page < 200; page++ {
+		r, err := j.callJiraURI("GET", "search", []byte{}, queryToCall)
+		if err == nil {
+			defer r.Close()
+			_ = json.NewDecoder(r).Decode(&jiraResponse)
+
+			for _, y := range jiraResponse.Issues {
+				dt, _ := time.Parse("2006-01-02T15:04:05.999-0700", y.Fields.CreatedDateTime)
+				myOverride := j.jiraPriorityToGSMPriority(y.Fields.Priority.Name)
+				if val, ok := PriorityOverrides.Jira[y.Key]; ok {
+					myOverride = val
+				}
+				indexedTasks[y.Key] =
+					TaskResponseStruct{
+						ID:               y.Key,
+						Title:            TruncateShort(y.Fields.Summary, 60),
+						CreatedDateTime:  dt,
+						Priority:         j.jiraPriorityToGSMPriority(y.Fields.Priority.Name),
+						Status:           y.Fields.Status.Name,
+						PriorityOverride: myOverride,
+						Type:             y.Fields.IssueType.Name,
+						Blocked:          false,
+					}
+			}
+			if len(jiraResponse.Issues) == 0 {
+				break
+			} else {
+				queryToCall = fmt.Sprintf("%s&startAt=%d", baseQuery, jiraResponse.MaxResults*page)
+			}
+		} else {
+			fmt.Printf("Failed to get Jira Tasks %s\n", err)
+		}
+	}
+	return []interface{}
+}
+*/
+
+type TeamsSearchResponse struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName"`
+	State       string `json:"state"`
+}
+
+func (j *JiraStruct) TeamsLookup() (map[string]string, []string) {
+	ActiveTaskStatusUpdate(1)
+	defer ActiveTaskStatusUpdate(-1)
+	ConnectionStatusBox(true, "J")
+	baseQuery := `organizationId=j084dc2b-38b8-1dj7-j0bj-kb330a12d358`
+	queryToCall := fmt.Sprintf("%s&startAt=0", baseQuery)
+	foundTeams := []TeamsSearchResponse{}
+	bigFoundTeams := map[string]string{}
+	values := []string{}
+	r, err := j.callJiraURI("GET", "../../../gateway/api/v3/teams/search", []byte{}, queryToCall)
+	if err == nil {
+		defer r.Close()
+		_ = json.NewDecoder(r).Decode(&foundTeams)
+	}
+	for _, x := range foundTeams {
+		if x.State == "ACTIVE" {
+			bigFoundTeams[x.DisplayName] = x.ID
+			values = append(values, x.DisplayName)
+		}
+	}
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+	return bigFoundTeams, values
+}
+
+type PersonSearchResponse struct {
+	ID          string `json:"accountId"`
+	DisplayName string `json:"displayName"`
+}
+
+func (j *JiraStruct) PersonLookup(searchstring string) (map[string]string, []string) {
+	ActiveTaskStatusUpdate(1)
+	defer ActiveTaskStatusUpdate(-1)
+	ConnectionStatusBox(true, "J")
+	baseQuery := `query=` + searchstring
+	found := []PersonSearchResponse{}
+	bigFound := map[string]string{}
+	values := []string{}
+	r, err := j.callJiraURI("GET", "/user/search", []byte{}, baseQuery)
+	if err == nil {
+		defer r.Close()
+		_ = json.NewDecoder(r).Decode(&found)
+	}
+	for _, x := range found {
+		bigFound[x.DisplayName] = x.ID
+		values = append(values, x.DisplayName)
+	}
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+	return bigFound, values
+}
