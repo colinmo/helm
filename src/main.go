@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image/color"
@@ -234,7 +235,7 @@ func main() {
 		)
 	}()
 	if desk, ok := thisApp.(desktop.App); ok {
-		desk.SetSystemTrayIcon(fyne.NewStaticResource("Systray", icon.IconWhite))
+		// desk.SetSystemTrayIcon(fyne.NewStaticResource("Systray", icon.IconWhite))
 		m := fyne.NewMenu("MyApp",
 			fyne.NewMenuItem("Todays Notes", func() {
 				mainWindow.Show()
@@ -2095,36 +2096,54 @@ func createNewJiraTicket() {
 		newJiraTicket.Hide()
 		// SavePreferences
 	})
-	/*
-			  * [ ] Fields:
-		    * [ ] Project
-		    * [ ] Issue type (Epic or Story)
-		    * [ ] Status
-		    * [ ] Summary
-		    * [ ] Description
-		    * [ ] Assignee
-		    * [ ] Reporter
-		    * [ ] Team
-		    * [ ] Parent (Epic has an Initiative parent, Story has an Epic parent)
-		    * [ ] If Epic, Epic Name
-	*/
-
 	// Fields
+	type AtlassianContentType struct {
+		Type    string                 `json:"type"`
+		Text    string                 `json:"text,omitempty"`
+		Content []AtlassianContentType `json:"content,omitempty"`
+	}
+	type AtlassianDocumentType struct {
+		Type    string                 `json:"type"`
+		Version int                    `json:"version"`
+		Content []AtlassianContentType `json:"content"`
+	}
+	type IssueObject struct {
+		Fields struct {
+			Assignee struct {
+				ID string `json:"id"`
+			} `json:"assignee"`
+			Team        string                `json:"customfield_10001"`
+			Summary     string                `json:"summary"`
+			Description AtlassianDocumentType `json:"description"`
+			Issuetype   struct {
+				Name string `json:"name"`
+			} `json:"issuetype"`
+			Project struct {
+				ID string `json:"id"`
+			} `json:"project"`
+			Reporter struct {
+				ID string `json:"id"`
+			} `json:"reporter"`
+			Parent struct {
+				Key string `json:"key,omitempty"`
+			} `json:"parent,omitempty"`
+			EpicName string `json:"customfield_10011,omitempty"`
+		} `json:"fields"`
+	}
 	projectEntry := widget.NewSelectEntry(
-		[]string{"RSDF Domain (RSD)"},
+		[]string{},
 	)
-	issueTypeEntry := widget.NewSelect(
-		[]string{
-			"Story", "Epic", "Initiative",
-		},
-		func(chosen string) {},
-	)
-	statusEntry := widget.NewSelect(
-		[]string{
-			"Backlog", "Selected for Development", "To do", "In progress", "In review", "Done",
-		},
-		func(chosen string) {},
-	)
+	allProjects := map[string]string{}
+	go func() {
+		find, projectOrder := tasks.Jira.ProjectLookup(projectEntry.SelectedText())
+		projectEntry.SetOptions(projectOrder)
+		for k, v := range find {
+			allProjects[k] = v
+		}
+		if len(projectOrder) == 1 {
+			projectEntry.SetText(projectOrder[0])
+		}
+	}()
 	summaryEntry := widget.NewEntry()
 	descriptionEntry := widget.NewMultiLineEntry()
 	assigneeSelect := widget.NewSelectEntry(
@@ -2132,6 +2151,7 @@ func createNewJiraTicket() {
 			"Me", "Other",
 		},
 	)
+	assigneeSelect.SetText("Me")
 	reporterSelect := widget.NewSelectEntry(
 		[]string{
 			"Me", "Other",
@@ -2144,10 +2164,30 @@ func createNewJiraTicket() {
 			fmt.Printf("Selected: %s %s\n", thisString, allAvailableTeams[thisString])
 		},
 	)
+	parentOptions := map[string]string{}
+	selectableParentOptions := []string{}
 	parentSelect := widget.NewSelectEntry(
 		[]string{},
 	)
 	epicNameEntry := widget.NewEntry()
+	issueTypeEntry := widget.NewSelect(
+		[]string{
+			"Story", "Epic", "Initiative",
+		},
+		func(chosen string) {
+			switch chosen {
+			case "Initiative":
+				parentSelect.Disable()
+				epicNameEntry.Disable()
+			case "Epic":
+				parentSelect.Enable()
+				epicNameEntry.Enable()
+			default:
+				parentSelect.Enable()
+				epicNameEntry.Disable()
+			}
+		},
+	)
 	foundPeople := map[string]string{}
 
 	newJiraTicket.SetContent(
@@ -2159,7 +2199,72 @@ func createNewJiraTicket() {
 						go func() {
 							// Validate
 							// Save
-							// Handle result
+							saveMe := IssueObject{}
+							saveMe.Fields.Team = allAvailableTeams[teamSelect.Selected]
+							saveMe.Fields.Summary = summaryEntry.Text
+							saveMe.Fields.Description = AtlassianDocumentType{
+								Type:    "doc",
+								Version: 1,
+								Content: []AtlassianContentType{{
+									Type:    "paragraph",
+									Content: []AtlassianContentType{},
+								}},
+							}
+							paras := strings.Split(descriptionEntry.Text, "\n")
+							for _, p := range paras {
+								saveMe.Fields.Description.Content[0].Content = append(saveMe.Fields.Description.Content[0].Content, AtlassianContentType{
+									Text: p + "\n",
+									Type: "text",
+								})
+							}
+							saveMe.Fields.Issuetype.Name = issueTypeEntry.Selected
+							saveMe.Fields.Project.ID = allProjects[projectEntry.Entry.Text]
+							if issueTypeEntry.Selected == "Initiative" {
+								saveMe.Fields.Parent = struct {
+									Key string "json:\"key,omitempty\""
+								}{}
+							} else {
+								saveMe.Fields.Parent.Key = parentOptions[parentSelect.Entry.Text]
+							}
+							if len(epicNameEntry.Text) > 0 && issueTypeEntry.Selected == "Epic" {
+								saveMe.Fields.EpicName = epicNameEntry.Text
+							}
+							if assigneeSelect.Entry.Text == "Me" {
+								saveMe.Fields.Assignee.ID = tasks.Jira.GetMyId()
+							} else {
+								saveMe.Fields.Assignee.ID = foundPeople[assigneeSelect.Entry.Text]
+							}
+							if reporterSelect.Entry.Text == "Me" {
+								saveMe.Fields.Reporter.ID = tasks.Jira.GetMyId()
+							} else {
+								saveMe.Fields.Reporter.ID = foundPeople[reporterSelect.Entry.Text]
+							}
+
+							objectToSend, _ := json.MarshalIndent(saveMe, "", " ")
+							id, self, err := tasks.Jira.CreateTask(objectToSend)
+							var deepdeep dialog.Dialog
+							if err != nil {
+								deepdeep = dialog.NewCustom(
+									"Could not save",
+									"Well biscuits",
+									widget.NewLabel(fmt.Sprintf("%s", err)),
+									newJiraTicket,
+								)
+							} else {
+								deepdeep = dialog.NewCustom(
+									"Saved",
+									"Woohoo!",
+									newTappableLabel(
+										fmt.Sprintf("Issue %s has been created. Click here to see it.", id),
+										func(_ *fyne.PointEvent) {
+											browser.OpenURL(self)
+										},
+									),
+									newJiraTicket,
+								)
+
+							}
+							deepdeep.Show()
 						}()
 					},
 				),
@@ -2168,7 +2273,6 @@ func createNewJiraTicket() {
 				layout.NewFormLayout(),
 				container.NewHBox(widget.NewLabel("Project"), layout.NewSpacer(), widget.NewButtonWithIcon("", theme.SearchIcon(), func() {})), projectEntry,
 				widget.NewLabel("Issue type"), issueTypeEntry,
-				widget.NewLabel("Status"), statusEntry,
 				widget.NewLabel("Summary"), summaryEntry,
 				widget.NewLabel("Description"), descriptionEntry,
 				container.NewHBox(widget.NewLabel("Assignee"), layout.NewSpacer(), widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
@@ -2185,25 +2289,38 @@ func createNewJiraTicket() {
 				})), assigneeSelect,
 				container.NewHBox(widget.NewLabel("Reporter"), layout.NewSpacer(), widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
 					go func() {
-						find, order := tasks.Jira.PersonLookup(assigneeSelect.Text)
-						assigneeSelect.SetOptions(order)
+						find, order := tasks.Jira.PersonLookup(reporterSelect.Text)
+						reporterSelect.SetOptions(order)
 						for k, v := range find {
 							foundPeople[k] = v
 						}
 						if len(order) == 1 {
-							assigneeSelect.SetText(order[0])
+							reporterSelect.SetText(order[0])
 						}
 					}()
 				})), reporterSelect,
 				container.NewHBox(widget.NewLabel("Team")), teamSelect,
-				container.NewHBox(widget.NewLabel("Parent"), layout.NewSpacer(), widget.NewButtonWithIcon("", theme.SearchIcon(), func() {})), parentSelect,
+				container.NewHBox(widget.NewLabel("Parent"), layout.NewSpacer(), widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
+					issueType := issueTypeEntry.Selected
+					parentOptions = map[string]string{}
+					selectableParentOptions = []string{}
+					founds := []tasks.TaskResponseStruct{}
+					switch issueType {
+					case "Story":
+						founds = tasks.Jira.RelatedIssuesLookupByType("Epic", parentSelect.Text)
+					case "Epic":
+						founds = tasks.Jira.RelatedIssuesLookupByType("Initiative", parentSelect.Text)
+					}
+					for _, x := range founds {
+						parentOptions[x.Title] = x.ID
+						selectableParentOptions = append(selectableParentOptions, x.Title)
+					}
+					parentSelect.SetOptions(selectableParentOptions)
+				})), parentSelect,
 				widget.NewLabel("Epic name"), epicNameEntry,
 			),
 		),
 	)
-	// Handle cancel
-	// Handle save
-	// show it
 
 	newJiraTicket.Show()
 }
