@@ -116,20 +116,21 @@ func GetAllTasks(jiraActive, gsmActive, msplannerActive bool, taskWindowRefresh 
 }
 
 type TaskPreferencesStruct struct {
-	GSMActive        bool
-	MSPlannerActive  bool
-	MSAccessToken    string
-	MSRefreshToken   string
-	MSExpiresAt      time.Time
-	MSGroups         string
-	CWActive         bool
-	PriorityOverride string
-	JiraProjectHome  string
-	JiraActive       bool
-	JiraUsername     string
-	JiraKey          string
-	DynamicsActive   bool
-	DynamicsKey      string
+	GSMActive          bool
+	MSPlannerActive    bool
+	MSAccessToken      string
+	MSRefreshToken     string
+	MSExpiresAt        time.Time
+	MSGroups           string
+	CWActive           bool
+	PriorityOverride   string
+	JiraProjectHome    string
+	JiraActive         bool
+	JiraUsername       string
+	JiraKey            string
+	JiraDefaultProject string
+	DynamicsActive     bool
+	DynamicsKey        string
 }
 
 var AuthWebServer *http.Server

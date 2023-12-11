@@ -551,6 +551,7 @@ func preferencesToLocalVar() {
 	appPreferences.TaskPreferences.JiraActive = thisApp.Preferences().BoolWithFallback("JiraActive", false)
 	appPreferences.TaskPreferences.JiraKey = thisApp.Preferences().StringWithFallback("JiraKey", "")
 	appPreferences.TaskPreferences.JiraUsername = thisApp.Preferences().StringWithFallback("JiraUsername", "")
+	appPreferences.TaskPreferences.JiraDefaultProject = thisApp.Preferences().StringWithFallback("JiraDefaultProject", "")
 	appPreferences.TaskPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", "")
 	if appPreferences.TaskPreferences.PriorityOverride == "" {
 		myself, error := user.Current()
@@ -589,6 +590,8 @@ func preferencesWindowSetup() {
 	jiraKey.SetText(appPreferences.TaskPreferences.JiraKey)
 	jiraUsername := widget.NewEntry()
 	jiraUsername.SetText(appPreferences.TaskPreferences.JiraUsername)
+	jiraDefaultProject := widget.NewEntry()
+	jiraDefaultProject.SetText(appPreferences.TaskPreferences.JiraDefaultProject)
 	// GSM/ Cherwell
 	gsmActive := widget.NewCheck("Active", func(res bool) {})
 	gsmActive.SetChecked(appPreferences.TaskPreferences.GSMActive)
@@ -607,6 +610,8 @@ func preferencesWindowSetup() {
 		thisApp.Preferences().SetString("ZettlekastenHome", appPreferences.ZettlekastenHome)
 		appPreferences.TaskPreferences.JiraProjectHome = jiraPath.Text
 		thisApp.Preferences().SetString("JiraProjectHome", appPreferences.TaskPreferences.JiraProjectHome)
+		appPreferences.TaskPreferences.JiraDefaultProject = jiraDefaultProject.Text
+		thisApp.Preferences().SetString("JiraDefaultProject", appPreferences.TaskPreferences.JiraDefaultProject)
 		appPreferences.TaskPreferences.PriorityOverride = priorityOverride.Text
 		thisApp.Preferences().SetString("PriorityOverride", appPreferences.TaskPreferences.PriorityOverride)
 
@@ -657,6 +662,8 @@ func preferencesWindowSetup() {
 			jiraKey,
 			widget.NewLabel("Username"),
 			jiraUsername,
+			widget.NewLabel("Default project"),
+			jiraDefaultProject,
 			widget.NewLabel(""),
 			widget.NewLabelWithStyle("GSM", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 			widget.NewLabel("GSM Active"),
@@ -2118,6 +2125,9 @@ func createNewJiraTicket() {
 			Issuetype   struct {
 				Name string `json:"name"`
 			} `json:"issuetype"`
+			Priority struct {
+				Name string `json:"name"`
+			} `json:"priority"`
 			Project struct {
 				ID string `json:"id"`
 			} `json:"project"`
@@ -2140,12 +2150,17 @@ func createNewJiraTicket() {
 		for k, v := range find {
 			allProjects[k] = v
 		}
+		if appPreferences.TaskPreferences.JiraDefaultProject > "" {
+			projectEntry.SetText(appPreferences.TaskPreferences.JiraDefaultProject)
+		}
 		if len(projectOrder) == 1 {
 			projectEntry.SetText(projectOrder[0])
 		}
 	}()
 	summaryEntry := widget.NewEntry()
 	descriptionEntry := widget.NewMultiLineEntry()
+	prioritySelect := widget.NewSelect([]string{"Highest", "High", "Medium", "Low", "Lowest"}, func(c string) {})
+	prioritySelect.SetSelected("Medium")
 	assigneeSelect := widget.NewSelectEntry(
 		[]string{
 			"Me", "Other",
@@ -2218,6 +2233,7 @@ func createNewJiraTicket() {
 								})
 							}
 							saveMe.Fields.Issuetype.Name = issueTypeEntry.Selected
+							saveMe.Fields.Priority.Name = prioritySelect.Selected
 							saveMe.Fields.Project.ID = allProjects[projectEntry.Entry.Text]
 							if issueTypeEntry.Selected == "Initiative" {
 								saveMe.Fields.Parent = struct {
@@ -2273,6 +2289,7 @@ func createNewJiraTicket() {
 				layout.NewFormLayout(),
 				container.NewHBox(widget.NewLabel("Project"), layout.NewSpacer(), widget.NewButtonWithIcon("", theme.SearchIcon(), func() {})), projectEntry,
 				widget.NewLabel("Issue type"), issueTypeEntry,
+				widget.NewLabel("Priority"), prioritySelect,
 				widget.NewLabel("Summary"), summaryEntry,
 				widget.NewLabel("Description"), descriptionEntry,
 				container.NewHBox(widget.NewLabel("Assignee"), layout.NewSpacer(), widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
