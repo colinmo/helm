@@ -2287,12 +2287,12 @@ func createNewJiraTicket() {
 			), nil, nil, nil,
 			container.New(
 				layout.NewFormLayout(),
-				container.NewHBox(widget.NewLabel("Project"), layout.NewSpacer(), widget.NewButtonWithIcon("", theme.SearchIcon(), func() {})), projectEntry,
+				widget.NewLabel("Project"), container.NewBorder(nil, nil, nil, nil, projectEntry), // widget.NewButtonWithIcon("", theme.SearchIcon(), func() {})
 				widget.NewLabel("Issue type"), issueTypeEntry,
 				widget.NewLabel("Priority"), prioritySelect,
 				widget.NewLabel("Summary"), summaryEntry,
 				widget.NewLabel("Description"), descriptionEntry,
-				container.NewHBox(widget.NewLabel("Assignee"), layout.NewSpacer(), widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
+				widget.NewLabel("Assignee"), container.NewBorder(nil, nil, nil, widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
 					go func() {
 						find, order := tasks.Jira.PersonLookup(assigneeSelect.Text)
 						assigneeSelect.SetOptions(order)
@@ -2303,8 +2303,8 @@ func createNewJiraTicket() {
 							assigneeSelect.SetText(order[0])
 						}
 					}()
-				})), assigneeSelect,
-				container.NewHBox(widget.NewLabel("Reporter"), layout.NewSpacer(), widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
+				}), assigneeSelect),
+				widget.NewLabel("Reporter"), container.NewBorder(nil, nil, nil, widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
 					go func() {
 						find, order := tasks.Jira.PersonLookup(reporterSelect.Text)
 						reporterSelect.SetOptions(order)
@@ -2315,9 +2315,9 @@ func createNewJiraTicket() {
 							reporterSelect.SetText(order[0])
 						}
 					}()
-				})), reporterSelect,
-				container.NewHBox(widget.NewLabel("Team")), teamSelect,
-				container.NewHBox(widget.NewLabel("Parent"), layout.NewSpacer(), widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
+				}), reporterSelect),
+				widget.NewLabel("Team"), teamSelect,
+				widget.NewLabel("Parent"), container.NewBorder(nil, nil, nil, widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
 					issueType := issueTypeEntry.Selected
 					parentOptions = map[string]string{}
 					selectableParentOptions = []string{}
@@ -2333,7 +2333,7 @@ func createNewJiraTicket() {
 						selectableParentOptions = append(selectableParentOptions, x.Title)
 					}
 					parentSelect.SetOptions(selectableParentOptions)
-				})), parentSelect,
+				}), parentSelect),
 				widget.NewLabel("Epic name"), epicNameEntry,
 			),
 		),
