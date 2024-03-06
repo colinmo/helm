@@ -65,6 +65,7 @@ var TaskTabsIndexes map[string]int
 var TaskTabs *container.AppTabs
 var appPreferences AppPreferencesStruct
 var gsmConnectionActive *fyne.Container
+var snowConnectionActive *fyne.Container
 var msConnectionActive *fyne.Container
 var jiraConnectionActive *fyne.Container
 var connectionStatusContainer *fyne.Container
@@ -126,11 +127,23 @@ func overrides() {
 				taskWindowRefresh("CWTeamIncidents")
 				taskWindowRefresh("CWTeamTasks")
 			}
-			gsmConnectionActive.Objects = container.NewMax(
+			gsmConnectionActive.Objects = container.NewStack(
 				button,
 				icon,
 			).Objects
 			gsmConnectionActive.Refresh()
+		case "S":
+			button.OnTapped = func() {
+				if onl {
+					//tasks.Snow.Download()
+					taskWindowRefresh("Snow")
+				}
+			}
+			snowConnectionActive.Objects = container.NewStack(
+				button,
+				icon,
+			).Objects
+			snowConnectionActive.Refresh()
 		case "J":
 			button.OnTapped = func() {
 				if onl {
@@ -138,7 +151,7 @@ func overrides() {
 					taskWindowRefresh("Jira")
 				}
 			}
-			jiraConnectionActive.Objects = container.NewMax(
+			jiraConnectionActive.Objects = container.NewStack(
 				button,
 				icon,
 			).Objects
@@ -148,7 +161,7 @@ func overrides() {
 				tasks.Planner.Download("")
 				taskWindowRefresh("Planner")
 			}
-			msConnectionActive.Objects = container.NewMax(
+			msConnectionActive.Objects = container.NewStack(
 				button,
 				icon,
 			).Objects
@@ -156,9 +169,10 @@ func overrides() {
 		}
 		taskWindow.Content().Refresh()
 	}
-	gsmConnectionActive = container.NewMax()
-	jiraConnectionActive = container.NewMax()
-	msConnectionActive = container.NewMax()
+	gsmConnectionActive = container.NewStack()
+	jiraConnectionActive = container.NewStack()
+	msConnectionActive = container.NewStack()
+	snowConnectionActive = container.NewStack()
 	tasks.InitTasks(
 		&appPreferences.TaskPreferences,
 		connectionStatusBox,
@@ -230,6 +244,7 @@ func main() {
 			appPreferences.TaskPreferences.JiraActive,
 			appPreferences.TaskPreferences.GSMActive,
 			appPreferences.TaskPreferences.MSPlannerActive,
+			appPreferences.TaskPreferences.SnowActive,
 			taskWindowRefresh,
 			activeTaskStatusUpdate,
 		)
@@ -553,6 +568,7 @@ func preferencesToLocalVar() {
 	appPreferences.TaskPreferences.JiraUsername = thisApp.Preferences().StringWithFallback("JiraUsername", "")
 	appPreferences.TaskPreferences.JiraDefaultProject = thisApp.Preferences().StringWithFallback("JiraDefaultProject", "")
 	appPreferences.TaskPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", "")
+	appPreferences.TaskPreferences.SnowActive = thisApp.Preferences().BoolWithFallback("SnowActive", false)
 	if appPreferences.TaskPreferences.PriorityOverride == "" {
 		myself, error := user.Current()
 		pribase := ""
@@ -600,6 +616,11 @@ func preferencesWindowSetup() {
 	dynamicsActive.SetChecked(appPreferences.TaskPreferences.DynamicsActive)
 	dynamicsKey := widget.NewPasswordEntry()
 	dynamicsKey.SetText(appPreferences.TaskPreferences.DynamicsKey)
+	// Service Now
+	snowActive := widget.NewCheck("Active", func(res bool) {})
+	snowActive.SetChecked(appPreferences.TaskPreferences.SnowActive)
+	snowUser := widget.NewEntry()
+	snowUser.SetText(appPreferences.TaskPreferences.SnowUser)
 
 	preferencesWindow.Resize(fyne.NewSize(500, 500))
 	preferencesWindow.Hide()
@@ -632,6 +653,11 @@ func preferencesWindowSetup() {
 
 		appPreferences.TaskPreferences.GSMActive = gsmActive.Checked
 		thisApp.Preferences().SetBool("GSMActive", appPreferences.TaskPreferences.GSMActive)
+
+		appPreferences.TaskPreferences.SnowActive = snowActive.Checked
+		thisApp.Preferences().SetBool("SnowActive", appPreferences.TaskPreferences.SnowActive)
+		appPreferences.TaskPreferences.SnowUser = snowUser.Text
+		thisApp.Preferences().SetString("SnowUser", appPreferences.TaskPreferences.SnowUser)
 	})
 	preferencesWindow.SetContent(
 		container.New(
@@ -668,6 +694,12 @@ func preferencesWindowSetup() {
 			widget.NewLabelWithStyle("GSM", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 			widget.NewLabel("GSM Active"),
 			gsmActive,
+			widget.NewLabel(""),
+			widget.NewLabelWithStyle("Service Now", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			widget.NewLabel("Active"),
+			snowActive,
+			widget.NewLabel("UserID"),
+			snowUser,
 		),
 	)
 }
@@ -696,14 +728,16 @@ func taskWindowSetup() {
 	taskWindow.Resize(fyne.NewSize(430, 550))
 	taskWindow.Hide()
 	taskStatusWidget := widget.NewLabelWithData(AppStatus.TaskTaskStatus)
-	connectionStatusContainer = container.NewGridWithColumns(3)
+	connectionStatusContainer = container.NewGridWithColumns(4)
 	connectionStatusBox(false, "G")
 	connectionStatusBox(false, "M")
 	connectionStatusBox(false, "J")
-	connectionStatusContainer = container.NewGridWithColumns(3,
+	connectionStatusBox(false, "S")
+	connectionStatusContainer = container.NewGridWithColumns(4,
 		gsmConnectionActive,
 		msConnectionActive,
 		jiraConnectionActive,
+		snowConnectionActive,
 	)
 	TaskTabsIndexes = map[string]int{}
 	TaskTabs = container.NewAppTabs()
@@ -875,6 +909,35 @@ func taskWindowSetup() {
 							go func() {
 								tasks.Jira.Download()
 								taskWindowRefresh("Jira")
+							}()
+						},
+					),
+					widget.NewToolbarSeparator(),
+					widget.NewToolbarAction(
+						theme.DocumentCreateIcon(),
+						func() {
+							createNewJiraTicket()
+						},
+					),
+				),
+				nil,
+				nil,
+				nil,
+				container.NewWithoutLayout(),
+			)),
+		)
+	}
+	if appPreferences.TaskPreferences.SnowActive {
+		TaskTabsIndexes["Snow"] = len(TaskTabsIndexes)
+		TaskTabs.Append(
+			container.NewTabItem("ServiceNow", container.NewBorder(
+				widget.NewToolbar(
+					widget.NewToolbarAction(
+						theme.ViewRefreshIcon(),
+						func() {
+							go func() {
+								// tasks.Jira.Download()
+								taskWindowRefresh("Snow")
 							}()
 						},
 					),

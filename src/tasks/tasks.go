@@ -77,6 +77,7 @@ type TaskResponseStruct struct {
 var Planner = &PlannerStruct{}
 var Jira = &JiraStruct{}
 var Gsm = &CherwellStruct{}
+var Snow = &SNOWStruct{}
 
 func InitTasks(appPreferences *TaskPreferencesStruct, connectionStatusBoxRef func(bool, string), taskWindowRefreshRef func(string), activeTaskStatusUpdateRef func(int)) {
 	TaskWindowRefresh = taskWindowRefreshRef
@@ -92,9 +93,12 @@ func InitTasks(appPreferences *TaskPreferencesStruct, connectionStatusBoxRef fun
 	if AppPreferences.MSPlannerActive {
 		Planner.Init("http://localhost:84/", "", "", time.Now())
 	}
+	if appPreferences.SnowActive {
+		Snow.Init("http://localhost:84/", "", "", time.Now())
+	}
 }
 
-func GetAllTasks(jiraActive, gsmActive, msplannerActive bool, taskWindowRefresh func(string), updateFunc func(int)) {
+func GetAllTasks(jiraActive, gsmActive, msplannerActive, snowActive bool, taskWindowRefresh func(string), updateFunc func(int)) {
 	if gsmActive {
 		Gsm.Download(
 			func() { taskWindowRefresh("CWTasks") },
@@ -112,6 +116,14 @@ func GetAllTasks(jiraActive, gsmActive, msplannerActive bool, taskWindowRefresh 
 	if jiraActive {
 		Jira.Download()
 		taskWindowRefresh("Jira")
+	}
+	if snowActive {
+		Snow.Download(
+			func() { taskWindowRefresh("SNIncidents") },
+			func() { taskWindowRefresh("SNRequests") },
+			func() { taskWindowRefresh("SNTeamIncidents") },
+		)
+		taskWindowRefresh("Snow")
 	}
 }
 
@@ -131,6 +143,11 @@ type TaskPreferencesStruct struct {
 	JiraDefaultProject string
 	DynamicsActive     bool
 	DynamicsKey        string
+	SnowActive         bool
+	SnowAccessToken    string
+	SnowSRefreshToken  string
+	SnowExpiresAt      time.Time
+	SnowUser           string // 7fcaa702933002009c8579b4f47ffbde
 }
 
 var AuthWebServer *http.Server
@@ -148,6 +165,12 @@ func StartLocalServers() {
 	if AppPreferences.MSPlannerActive {
 		http.HandleFunc(Planner.RedirectPath, func(w http.ResponseWriter, r *http.Request) {
 			Planner.Authenticate(w, r)
+		})
+	}
+	if AppPreferences.SnowActive {
+		fmt.Printf("Snow redirect %s\n", Snow.RedirectPath)
+		http.HandleFunc(Snow.RedirectPath, func(w http.ResponseWriter, r *http.Request) {
+			Snow.Authenticate(w, r)
 		})
 	}
 	go func() {
