@@ -64,7 +64,6 @@ var AppStatus AppStatusStruct
 var TaskTabsIndexes map[string]int
 var TaskTabs *container.AppTabs
 var appPreferences AppPreferencesStruct
-var gsmConnectionActive *fyne.Container
 var snowConnectionActive *fyne.Container
 var msConnectionActive *fyne.Container
 var jiraConnectionActive *fyne.Container
@@ -97,46 +96,12 @@ func overrides() {
 		button := widget.NewButton(label, func() {})
 		button.Importance = widget.LowImportance
 		switch label[0:1] {
-		case "G":
-			button.OnTapped = func() {
-				if onl {
-					tasks.Gsm.Download(
-						func() { taskWindowRefresh("CWTasks") },
-						func() { taskWindowRefresh("CWIncidents") },
-						func() { taskWindowRefresh("CWRequests") },
-						func() { taskWindowRefresh("CWTeamIncidents") },
-						func() { taskWindowRefresh("CWTeamTasks") },
-					)
-				} else {
-					taskWindowRefresh("CWTasks")
-					taskWindowRefresh("CWIncidents")
-					taskWindowRefresh("CWRequests")
-					taskWindowRefresh("CWTeamIncidents")
-					taskWindowRefresh("CWTeamTasks")
-				}
-			}
-			if !onl {
-				tasks.Gsm.MyTasks = []tasks.TaskResponseStruct{}
-				tasks.Gsm.MyIncidents = []tasks.TaskResponseStruct{}
-				tasks.Gsm.LoggedIncidents = []tasks.TaskResponseStruct{}
-				tasks.Gsm.TeamIncidents = []tasks.TaskResponseStruct{}
-				tasks.Gsm.TeamTasks = []tasks.TaskResponseStruct{}
-				taskWindowRefresh("CWTasks")
-				taskWindowRefresh("CWIncidents")
-				taskWindowRefresh("CWRequests")
-				taskWindowRefresh("CWTeamIncidents")
-				taskWindowRefresh("CWTeamTasks")
-			}
-			gsmConnectionActive.Objects = container.NewStack(
-				button,
-				icon,
-			).Objects
-			gsmConnectionActive.Refresh()
 		case "S":
 			button.OnTapped = func() {
 				if onl {
-					//tasks.Snow.Download()
-					taskWindowRefresh("Snow")
+					tasks.Snow.DownloadIncidents(func() { taskWindowRefresh("SNIncidents") })
+					tasks.Snow.DownloadTeamIncidents(func() { taskWindowRefresh("SNTeamIncidents") })
+					tasks.Snow.DownloadMyRequests(func() { taskWindowRefresh("SNRequests") })
 				}
 			}
 			snowConnectionActive.Objects = container.NewStack(
@@ -169,7 +134,6 @@ func overrides() {
 		}
 		taskWindow.Content().Refresh()
 	}
-	gsmConnectionActive = container.NewStack()
 	jiraConnectionActive = container.NewStack()
 	msConnectionActive = container.NewStack()
 	snowConnectionActive = container.NewStack()
@@ -180,25 +144,6 @@ func overrides() {
 		activeTaskStatusUpdate,
 	)
 	tasks.StartLocalServers()
-	if appPreferences.TaskPreferences.GSMActive {
-		go func() {
-			for {
-				time.Sleep(5 * time.Minute)
-				// Stop refresh if out of business hours
-				hour := time.Now().Hour()
-				weekday := time.Now().Weekday()
-				if hour > 8 && hour < 17 && weekday > 0 && weekday < 6 {
-					tasks.Gsm.Download(
-						func() { taskWindowRefresh("CWTasks") },
-						func() { taskWindowRefresh("CWIncidents") },
-						func() { taskWindowRefresh("CWRequests") },
-						func() { taskWindowRefresh("CWTeamIncidents") },
-						func() { taskWindowRefresh("CWTeamTasks") },
-					)
-				}
-			}
-		}()
-	}
 	if appPreferences.TaskPreferences.MSPlannerActive {
 		go func() {
 			for {
@@ -226,6 +171,23 @@ func overrides() {
 			}
 		}()
 	}
+	if appPreferences.TaskPreferences.SnowActive {
+		// Regular task refresh
+		go func() {
+			for {
+				time.Sleep(5 * time.Minute)
+				hour := time.Now().Hour()
+				weekday := time.Now().Weekday()
+				if hour > 8 && hour < 17 && weekday > 0 && weekday < 6 {
+					tasks.Snow.Download(
+						func() { taskWindowRefresh("SNIncidents") },
+						func() { taskWindowRefresh("SNRequests") },
+						func() { taskWindowRefresh("SNTeamIncidents") },
+					)
+				}
+			}
+		}()
+	}
 }
 
 func main() {
@@ -242,7 +204,6 @@ func main() {
 	go func() {
 		tasks.GetAllTasks(
 			appPreferences.TaskPreferences.JiraActive,
-			appPreferences.TaskPreferences.GSMActive,
 			appPreferences.TaskPreferences.MSPlannerActive,
 			appPreferences.TaskPreferences.SnowActive,
 			taskWindowRefresh,
@@ -560,7 +521,6 @@ func preferencesToLocalVar() {
 	appPreferences = AppPreferencesStruct{}
 	appPreferences.ZettlekastenHome = thisApp.Preferences().StringWithFallback("ZettlekastenHome", path.Join(os.TempDir(), "zett"))
 	appPreferences.TaskPreferences.JiraProjectHome = thisApp.Preferences().StringWithFallback("JiraProjectHome", path.Join(os.TempDir(), "project"))
-	appPreferences.TaskPreferences.GSMActive = thisApp.Preferences().BoolWithFallback("GSMActive", true)
 	appPreferences.TaskPreferences.MSPlannerActive = thisApp.Preferences().BoolWithFallback("MSPlannerActive", false)
 	appPreferences.TaskPreferences.MSGroups = thisApp.Preferences().StringWithFallback("MSGroups", "")
 	appPreferences.TaskPreferences.JiraActive = thisApp.Preferences().BoolWithFallback("JiraActive", false)
@@ -569,6 +529,8 @@ func preferencesToLocalVar() {
 	appPreferences.TaskPreferences.JiraDefaultProject = thisApp.Preferences().StringWithFallback("JiraDefaultProject", "")
 	appPreferences.TaskPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", "")
 	appPreferences.TaskPreferences.SnowActive = thisApp.Preferences().BoolWithFallback("SnowActive", false)
+	appPreferences.TaskPreferences.SnowUser = thisApp.Preferences().StringWithFallback("SnowUser", "")
+	appPreferences.TaskPreferences.SnowGroup = thisApp.Preferences().StringWithFallback("SnowGroup", "")
 	if appPreferences.TaskPreferences.PriorityOverride == "" {
 		myself, error := user.Current()
 		pribase := ""
@@ -608,9 +570,6 @@ func preferencesWindowSetup() {
 	jiraUsername.SetText(appPreferences.TaskPreferences.JiraUsername)
 	jiraDefaultProject := widget.NewEntry()
 	jiraDefaultProject.SetText(appPreferences.TaskPreferences.JiraDefaultProject)
-	// GSM/ Cherwell
-	gsmActive := widget.NewCheck("Active", func(res bool) {})
-	gsmActive.SetChecked(appPreferences.TaskPreferences.GSMActive)
 	// Dynamics
 	dynamicsActive := widget.NewCheck("Active", func(res bool) {})
 	dynamicsActive.SetChecked(appPreferences.TaskPreferences.DynamicsActive)
@@ -621,6 +580,8 @@ func preferencesWindowSetup() {
 	snowActive.SetChecked(appPreferences.TaskPreferences.SnowActive)
 	snowUser := widget.NewEntry()
 	snowUser.SetText(appPreferences.TaskPreferences.SnowUser)
+	snowGroup := widget.NewEntry()
+	snowGroup.SetText(appPreferences.TaskPreferences.SnowGroup)
 
 	preferencesWindow.Resize(fyne.NewSize(500, 500))
 	preferencesWindow.Hide()
@@ -651,13 +612,12 @@ func preferencesWindowSetup() {
 		appPreferences.TaskPreferences.JiraUsername = jiraUsername.Text
 		thisApp.Preferences().SetString("JiraUsername", appPreferences.TaskPreferences.JiraUsername)
 
-		appPreferences.TaskPreferences.GSMActive = gsmActive.Checked
-		thisApp.Preferences().SetBool("GSMActive", appPreferences.TaskPreferences.GSMActive)
-
 		appPreferences.TaskPreferences.SnowActive = snowActive.Checked
 		thisApp.Preferences().SetBool("SnowActive", appPreferences.TaskPreferences.SnowActive)
 		appPreferences.TaskPreferences.SnowUser = snowUser.Text
 		thisApp.Preferences().SetString("SnowUser", appPreferences.TaskPreferences.SnowUser)
+		appPreferences.TaskPreferences.SnowGroup = snowGroup.Text
+		thisApp.Preferences().SetString("SnowGroup", appPreferences.TaskPreferences.SnowGroup)
 	})
 	preferencesWindow.SetContent(
 		container.New(
@@ -691,15 +651,13 @@ func preferencesWindowSetup() {
 			widget.NewLabel("Default project"),
 			jiraDefaultProject,
 			widget.NewLabel(""),
-			widget.NewLabelWithStyle("GSM", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-			widget.NewLabel("GSM Active"),
-			gsmActive,
-			widget.NewLabel(""),
 			widget.NewLabelWithStyle("Service Now", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 			widget.NewLabel("Active"),
 			snowActive,
 			widget.NewLabel("UserID"),
 			snowUser,
+			widget.NewLabel("GroupID"),
+			snowGroup,
 		),
 	)
 }
@@ -728,145 +686,17 @@ func taskWindowSetup() {
 	taskWindow.Resize(fyne.NewSize(430, 550))
 	taskWindow.Hide()
 	taskStatusWidget := widget.NewLabelWithData(AppStatus.TaskTaskStatus)
-	connectionStatusContainer = container.NewGridWithColumns(4)
-	connectionStatusBox(false, "G")
+	connectionStatusContainer = container.NewGridWithColumns(3)
 	connectionStatusBox(false, "M")
 	connectionStatusBox(false, "J")
 	connectionStatusBox(false, "S")
-	connectionStatusContainer = container.NewGridWithColumns(4,
-		gsmConnectionActive,
+	connectionStatusContainer = container.NewGridWithColumns(3,
 		msConnectionActive,
 		jiraConnectionActive,
 		snowConnectionActive,
 	)
 	TaskTabsIndexes = map[string]int{}
 	TaskTabs = container.NewAppTabs()
-	if appPreferences.TaskPreferences.GSMActive {
-		TaskTabs = container.NewAppTabs(
-			container.NewTabItem("My Tasks", container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							tasks.Gsm.DownloadTasks(func() { taskWindowRefresh("CWTasks") })
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.HistoryIcon(),
-						func() {},
-					),
-					widget.NewToolbarAction(
-						theme.ErrorIcon(),
-						func() {},
-					),
-				),
-				nil,
-				nil,
-				nil,
-				container.NewWithoutLayout(),
-			)),
-			container.NewTabItem("My Incidents", container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							tasks.Gsm.DownloadIncidents(func() { taskWindowRefresh("CWIncidents") })
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.HistoryIcon(),
-						func() {},
-					),
-					widget.NewToolbarAction(
-						theme.ErrorIcon(),
-						func() {},
-					),
-				),
-				nil,
-				nil,
-				nil,
-				container.NewWithoutLayout(),
-			)),
-			container.NewTabItem("My Requests", container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							tasks.Gsm.DownloadTeam(func() { taskWindowRefresh("CWRequests") })
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.HistoryIcon(),
-						func() {},
-					),
-					widget.NewToolbarAction(
-						theme.ErrorIcon(),
-						func() {},
-					),
-				),
-				nil,
-				nil,
-				nil,
-				container.NewWithoutLayout(),
-			)),
-			container.NewTabItem("Team Unass. Inc.", container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							tasks.Gsm.DownloadMyRequests(func() { taskWindowRefresh("CWTeamIncidents") })
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.HistoryIcon(),
-						func() {},
-					),
-					widget.NewToolbarAction(
-						theme.ErrorIcon(),
-						func() {},
-					),
-				),
-				nil,
-				nil,
-				nil,
-				container.NewWithoutLayout(),
-			)),
-			container.NewTabItem("Team Unass. Tasks", container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							tasks.Gsm.DownloadMyRequests(func() { taskWindowRefresh("CWTeamTasks") })
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.HistoryIcon(),
-						func() {},
-					),
-					widget.NewToolbarAction(
-						theme.ErrorIcon(),
-						func() {},
-					),
-				),
-				nil,
-				nil,
-				nil,
-				container.NewWithoutLayout(),
-			)),
-		)
-		TaskTabsIndexes = map[string]int{
-			"CWTasks":         0,
-			"CWIncidents":     1,
-			"CWRequests":      2,
-			"CWTeamIncidents": 3,
-			"CWTeamTasks":     4,
-		}
-	}
 	if appPreferences.TaskPreferences.MSPlannerActive {
 		TaskTabsIndexes["Planner"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
@@ -928,16 +758,15 @@ func taskWindowSetup() {
 		)
 	}
 	if appPreferences.TaskPreferences.SnowActive {
-		TaskTabsIndexes["Snow"] = len(TaskTabsIndexes)
+		TaskTabsIndexes["SNIncidents"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
-			container.NewTabItem("ServiceNow", container.NewBorder(
+			container.NewTabItem("Incidents", container.NewBorder(
 				widget.NewToolbar(
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
 							go func() {
-								// tasks.Jira.Download()
-								taskWindowRefresh("Snow")
+								tasks.Snow.DownloadIncidents(func() { tasks.TaskWindowRefresh("SNIncidents") })
 							}()
 						},
 					),
@@ -945,7 +774,59 @@ func taskWindowSetup() {
 					widget.NewToolbarAction(
 						theme.DocumentCreateIcon(),
 						func() {
-							createNewJiraTicket()
+
+						},
+					),
+				),
+				nil,
+				nil,
+				nil,
+				container.NewWithoutLayout(),
+			)),
+		)
+		TaskTabsIndexes["SNTeamIncidents"] = len(TaskTabsIndexes)
+		TaskTabs.Append(
+			container.NewTabItem("Team Incidents", container.NewBorder(
+				widget.NewToolbar(
+					widget.NewToolbarAction(
+						theme.ViewRefreshIcon(),
+						func() {
+							go func() {
+								tasks.Snow.DownloadTeamIncidents(func() { tasks.TaskWindowRefresh("SNTeamIncidents") })
+							}()
+						},
+					),
+					widget.NewToolbarSeparator(),
+					widget.NewToolbarAction(
+						theme.DocumentCreateIcon(),
+						func() {
+
+						},
+					),
+				),
+				nil,
+				nil,
+				nil,
+				container.NewWithoutLayout(),
+			)),
+		)
+		TaskTabsIndexes["SNRequests"] = len(TaskTabsIndexes)
+		TaskTabs.Append(
+			container.NewTabItem("My Requests", container.NewBorder(
+				widget.NewToolbar(
+					widget.NewToolbarAction(
+						theme.ViewRefreshIcon(),
+						func() {
+							go func() {
+								tasks.Snow.DownloadMyRequests(func() { tasks.TaskWindowRefresh("SNRequests") })
+							}()
+						},
+					),
+					widget.NewToolbarSeparator(),
+					widget.NewToolbarAction(
+						theme.DocumentCreateIcon(),
+						func() {
+
 						},
 					),
 				),
@@ -1042,221 +923,13 @@ func activeTaskStatusUpdate(by int) {
 }
 
 func taskWindowRefresh(specific string) {
-	var list fyne.CanvasObject
-
 	priorityIcons := setupPriorityIcons()
 	taskIcons := setupJiraTaskTypeIcons()
-	if appPreferences.TaskPreferences.GSMActive {
-		if _, ok := TaskTabsIndexes["CWTasks"]; ok && (specific == "" || specific == "CWTasks") {
-			if len(tasks.Gsm.MyTasks) == 0 {
-				list = widget.NewLabel("No tasks")
-			} else {
-				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
-				col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Incident`))
-				col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Task`))
-				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
-				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
-				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 
-				for _, x := range tasks.Gsm.MyTasks {
-					thisID := x.ID
-					thisObjRecId := x.BusObRecId
-					thisParent := x.ParentID
-					thisParentInternal := x.ParentIDInternal
-					myPriority := x.PriorityOverride
-					if x.Priority != x.PriorityOverride {
-						myPriority = fmt.Sprintf("%s(%s)", x.PriorityOverride, x.Priority)
-					}
-					tempVar := ""
-					col0.Objects = append(
-						col0.Objects,
-						container.NewMax(
-							widget.NewLabel(""),
-							container.NewHBox(
-								newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-									browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisParent)
-								}),
-								newTappableIcon(theme.DocumentIcon(), func(_ *fyne.PointEvent) {
-									journals, err := tasks.Gsm.GetJournalNotesForIncident(thisParentInternal)
-
-									if err == nil {
-										list := container.NewVBox()
-										for _, x := range journals {
-											deets := widget.NewLabel(x.Details)
-											deets.Wrapping = fyne.TextWrapBreak
-											list.Add(container.NewVBox(
-												container.NewHBox(
-													widget.NewLabel(x.Date.Format("2006-01-02 15:04:05")),
-													layout.NewSpacer(),
-													widget.NewLabel(x.Class),
-												),
-												deets,
-											))
-										}
-
-										deepdeep := thisApp.NewWindow("Journals for " + thisParent)
-										deepdeep.SetContent(container.NewVScroll(list))
-										deepdeep.Resize(fyne.NewSize(400, 500))
-										deepdeep.Show()
-									} else {
-										fmt.Printf("FAILED %v\n", err)
-									}
-								}),
-								newTappableIcon(theme.AccountIcon(), func(_ *fyne.PointEvent) {
-									var deepdeep dialog.Dialog
-									var foundPeople []struct {
-										Label  string
-										Target string
-									}
-									foundsList := widget.NewList(
-										func() int { return len(foundPeople) },
-										func() fyne.CanvasObject { return newTappableLabel("x", func(_ *fyne.PointEvent) {}) },
-										func(lii widget.ListItemID, co fyne.CanvasObject) {
-											me := foundPeople[lii]
-											co.(*tappableLabel).SetText(me.Label)
-											co.(*tappableLabel).OnTapGo = func(_ *fyne.PointEvent) {
-												splits := strings.Split(me.Target, "!")
-												fmt.Printf("Target: %s|%s\n", me.Target, splits[0])
-												tasks.Gsm.ReassignTaskToPersonInTeam(thisObjRecId, splits[0], splits[1])
-												fmt.Printf("Reassigning to %s|%s\n", me.Label, me.Target)
-												deepdeep.Hide()
-											}
-										},
-									)
-									foundsList.Resize(fyne.NewSize(300, 500))
-									foundsContainer := container.NewMax(foundsList)
-									lookinFor := widget.NewEntry()
-									deepdeep = dialog.NewCustom("Reassign task",
-										"Actually, no",
-										container.NewBorder(
-											container.NewVBox(
-												container.New(layout.NewFormLayout(),
-													widget.NewLabel("Reassign to"),
-													lookinFor,
-												),
-												widget.NewButtonWithIcon(
-													"Search",
-													theme.SearchIcon(),
-													func() {
-														founds, err := tasks.Gsm.FindPeopleToReasignTo(lookinFor.Text)
-														foundPeople = []struct {
-															Label  string
-															Target string
-														}{}
-														if err == nil {
-															for _, c := range founds {
-																for _, tName := range c.Teams {
-																	foundPeople = append(foundPeople, struct {
-																		Label  string
-																		Target string
-																	}{
-																		Label:  fmt.Sprintf("%s - %s", c.Name, tName),
-																		Target: fmt.Sprintf("%s!%s", c.UserID, tName),
-																	})
-																}
-															}
-															foundsList.Refresh()
-															foundsContainer.Refresh()
-														} else {
-															fmt.Printf("Failed %v\n", err)
-														}
-													},
-												),
-											), nil, nil, nil,
-											foundsContainer,
-										),
-										taskWindow,
-									)
-									deepdeep.Resize(fyne.NewSize(300, 500))
-									deepdeep.Show()
-									//
-								})),
-						))
-					col1.Objects = append(col1.Objects,
-						widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x.ParentID, x.ParentTitle), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-					col2.Objects = append(
-						col2.Objects,
-						newTappableLabel(
-							fmt.Sprintf("[%s] %s", x.ID, x.Title),
-							func(_ *fyne.PointEvent) {
-								browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/task/" + thisID)
-							},
-						),
-					)
-					col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
-					tempFunc := func(_ *fyne.PointEvent) {
-						dialog.ShowForm(
-							"Priority override "+thisID,
-							"Override",
-							"Cancel",
-							[]*widget.FormItem{
-								widget.NewFormItem(
-									"Priority",
-									widget.NewSelect(
-										[]string{"1", "2", "3", "4", "5", "6"},
-										func(changed string) {
-											tempVar = changed
-										},
-									)),
-							},
-							func(isit bool) {
-								if tempVar == x.Priority || tempVar == "" {
-									delete(tasks.PriorityOverrides.CWIncidents, thisID)
-								} else {
-									tasks.PriorityOverrides.CWIncidents[thisID] = tempVar
-								}
-								tasks.SavePriorityOverride()
-							},
-							taskWindow,
-						)
-					}
-					col4.Objects = append(col4.Objects, container.NewMax(
-						getPriorityIconFor(x.PriorityOverride, priorityIcons),
-						newTappableLabelWithStyle(
-							myPriority,
-							fyne.TextAlignCenter,
-							fyne.TextStyle{},
-							tempFunc)))
-					col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
-				}
-				list = container.NewVScroll(
-					container.NewHBox(
-						col0,
-						col1,
-						col2,
-						col3,
-						col4,
-						col5,
-					),
-				)
-			}
-			TaskTabs.Items[TaskTabsIndexes["CWTasks"]].Content = container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							tasks.Gsm.DownloadTasks(func() { taskWindowRefresh("CWTasks") })
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.HistoryIcon(),
-						func() {},
-					),
-					widget.NewToolbarAction(
-						theme.ErrorIcon(),
-						func() {},
-					),
-				),
-				nil,
-				nil,
-				nil,
-				list,
-			)
-		}
-		if _, ok := TaskTabsIndexes["CWIncidents"]; ok && (specific == "" || specific == "CWIncidents") {
+	if appPreferences.TaskPreferences.SnowActive {
+		if _, ok := TaskTabsIndexes["SNIncidents"]; ok && (specific == "" || specific == "SNIncidents") {
 			var list2 fyne.CanvasObject
-			if len(tasks.Gsm.MyIncidents) == 0 {
+			if len(tasks.Snow.MyIncidents) == 0 {
 				list2 = widget.NewLabel("No incidents")
 			} else {
 				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1264,7 +937,7 @@ func taskWindowRefresh(specific string) {
 				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-				for _, x := range tasks.Gsm.MyIncidents {
+				for _, x := range tasks.Snow.MyIncidents {
 					thisID := x.ID
 					myPriority := x.PriorityOverride
 					if x.Priority != x.PriorityOverride {
@@ -1273,10 +946,10 @@ func taskWindowRefresh(specific string) {
 					tempVar := ""
 					col0.Objects = append(
 						col0.Objects,
-						container.NewMax(
+						container.NewStack(
 							widget.NewLabel(""),
 							newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-								browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
+								browser.OpenURL(tasks.Snow.BaseURL + "/now/sow/record/incident/" + thisID)
 							}),
 						))
 					col1.Objects = append(col1.Objects,
@@ -1299,23 +972,23 @@ func taskWindowRefresh(specific string) {
 							},
 							func(isit bool) {
 								if tempVar == x.Priority || tempVar == "" {
-									delete(tasks.PriorityOverrides.CWIncidents, thisID)
+									delete(tasks.PriorityOverrides.SNow, thisID)
 								} else {
-									tasks.PriorityOverrides.CWIncidents[thisID] = tempVar
+									tasks.PriorityOverrides.SNow[thisID] = tempVar
 								}
 								tasks.SavePriorityOverride()
 							},
 							taskWindow,
 						)
 					}
-					col4.Objects = append(col4.Objects, container.NewMax(
+					col4.Objects = append(col4.Objects, container.NewStack(
 						getPriorityIconFor(x.PriorityOverride, priorityIcons),
 						newTappableLabelWithStyle(
 							myPriority,
 							fyne.TextAlignCenter,
 							fyne.TextStyle{},
 							tempFunc)))
-					col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
+					col5.Objects = append(col5.Objects, widget.NewLabel(tasks.SnowStatuses[x.Status]))
 				}
 				list2 = container.NewVScroll(
 					container.NewHBox(
@@ -1327,12 +1000,12 @@ func taskWindowRefresh(specific string) {
 					),
 				)
 			}
-			TaskTabs.Items[TaskTabsIndexes["CWIncidents"]].Content = container.NewBorder(
+			TaskTabs.Items[TaskTabsIndexes["SNIncidents"]].Content = container.NewBorder(
 				widget.NewToolbar(
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							tasks.Gsm.DownloadIncidents(func() { taskWindowRefresh("CWIncidents") })
+							tasks.Snow.DownloadIncidents(func() { taskWindowRefresh("SNIncidents") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1351,9 +1024,9 @@ func taskWindowRefresh(specific string) {
 				list2,
 			)
 		}
-		if _, ok := TaskTabsIndexes["CWTeamIncidents"]; ok && (specific == "" || specific == "CWTeamIncidents") {
+		if _, ok := TaskTabsIndexes["SNTeamIncidents"]; ok && (specific == "" || specific == "SNTeamIncidents") {
 			var list3 fyne.CanvasObject
-			if len(tasks.Gsm.TeamIncidents) == 0 {
+			if len(tasks.Snow.TeamIncidents) == 0 {
 				list3 = widget.NewLabel("No incidents")
 			} else {
 				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1362,24 +1035,24 @@ func taskWindowRefresh(specific string) {
 				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-				for _, x := range tasks.Gsm.TeamIncidents {
-					thisID := x.ID
+				for _, x := range tasks.Snow.TeamIncidents {
+					thisID := x.BusObRecId
 					col0.Objects = append(
 						col0.Objects,
-						container.NewMax(
+						container.NewStack(
 							widget.NewLabel(""),
 							newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-								browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
+								browser.OpenURL(tasks.Snow.BaseURL + "/now/sow/record/incident/" + thisID)
 							}),
 						))
 					col2.Objects = append(col2.Objects, widget.NewLabel(x.Owner))
 					col1.Objects = append(col1.Objects,
 						widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x.ID, x.Title), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 					col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
-					col4.Objects = append(col4.Objects, container.NewMax(
+					col4.Objects = append(col4.Objects, container.NewStack(
 						getPriorityIconFor(x.PriorityOverride, priorityIcons),
 						widget.NewLabelWithStyle(x.PriorityOverride, fyne.TextAlignCenter, fyne.TextStyle{})))
-					col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
+					col5.Objects = append(col5.Objects, widget.NewLabel(tasks.SnowStatuses[x.Status]))
 				}
 				list3 = container.NewVScroll(
 					container.NewHBox(
@@ -1393,12 +1066,12 @@ func taskWindowRefresh(specific string) {
 				)
 			}
 
-			TaskTabs.Items[TaskTabsIndexes["CWTeamIncidents"]].Content = container.NewBorder(
+			TaskTabs.Items[TaskTabsIndexes["SNTeamIncidents"]].Content = container.NewBorder(
 				widget.NewToolbar(
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							tasks.Gsm.DownloadTeam(func() { taskWindowRefresh("CWTeamIncidents") })
+							tasks.Snow.DownloadTeamIncidents(func() { taskWindowRefresh("SNTeamIncidents") })
 						},
 					),
 					widget.NewToolbarSeparator(),
@@ -1417,220 +1090,9 @@ func taskWindowRefresh(specific string) {
 				list3,
 			)
 		}
-		if _, ok := TaskTabsIndexes["CWTeamTasks"]; ok && (specific == "" || specific == "CWTeamTasks") {
-			var list fyne.CanvasObject
-			if len(tasks.Gsm.TeamTasks) == 0 {
-				list = widget.NewLabel("No tasks")
-			} else {
-				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
-				col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Incident`))
-				col2 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Task`))
-				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
-				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
-				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-				for _, x := range tasks.Gsm.TeamTasks {
-					thisID := x.ID
-					thisObjRecId := x.BusObRecId
-					thisParent := x.ParentID
-					thisParentInternal := x.ParentIDInternal
-					myPriority := x.PriorityOverride
-					if x.Priority != x.PriorityOverride {
-						myPriority = fmt.Sprintf("%s(%s)", x.PriorityOverride, x.Priority)
-					}
-					tempVar := ""
-					col0.Objects = append(
-						col0.Objects,
-						container.NewMax(
-							widget.NewLabel(""),
-							container.NewHBox(
-								newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-									browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisParent)
-								}),
-								newTappableIcon(theme.DocumentIcon(), func(_ *fyne.PointEvent) {
-									journals, err := tasks.Gsm.GetJournalNotesForIncident(thisParentInternal)
-
-									if err == nil {
-										list := container.NewVBox()
-										for _, x := range journals {
-											deets := widget.NewLabel(x.Details)
-											deets.Wrapping = fyne.TextWrapBreak
-											list.Add(container.NewVBox(
-												container.NewHBox(
-													widget.NewLabel(x.Date.Format("2006-01-02 15:04:05")),
-													layout.NewSpacer(),
-													widget.NewLabel(x.Class),
-												),
-												deets,
-											))
-										}
-
-										deepdeep := thisApp.NewWindow("Journals for " + thisParent)
-										deepdeep.SetContent(container.NewVScroll(list))
-										deepdeep.Resize(fyne.NewSize(400, 500))
-										deepdeep.Show()
-									} else {
-										fmt.Printf("FAILED %v\n", err)
-									}
-								}),
-								newTappableIcon(theme.AccountIcon(), func(_ *fyne.PointEvent) {
-									var deepdeep dialog.Dialog
-									var foundPeople []struct {
-										Label  string
-										Target string
-									}
-									foundsList := widget.NewList(
-										func() int {
-											return len(foundPeople)
-										},
-										func() fyne.CanvasObject {
-											return newTappableLabel("x", func(_ *fyne.PointEvent) {})
-										},
-										func(lii widget.ListItemID, co fyne.CanvasObject) {
-											me := foundPeople[lii]
-											co.(*tappableLabel).SetText(me.Label)
-											co.(*tappableLabel).OnTapGo = func(_ *fyne.PointEvent) {
-												splits := strings.Split(me.Target, "!")
-												fmt.Printf("Target: %s|%s\n", me.Target, splits[0])
-												tasks.Gsm.ReassignTaskToPersonInTeam(thisObjRecId, splits[0], splits[1])
-												fmt.Printf("Reassigning %s to %s|%s\n", thisObjRecId, me.Label, me.Target)
-												deepdeep.Hide()
-											}
-										},
-									)
-									foundsList.Resize(fyne.NewSize(300, 500))
-									foundsContainer := container.NewMax(foundsList)
-									lookinFor := widget.NewEntry()
-									deepdeep = dialog.NewCustom("Reassign task",
-										"Actually, no",
-										container.NewBorder(
-											container.NewVBox(
-												container.New(layout.NewFormLayout(),
-													widget.NewLabel("Reassign to"),
-													lookinFor,
-												),
-												widget.NewButtonWithIcon(
-													"Search",
-													theme.SearchIcon(),
-													func() {
-														founds, err := tasks.Gsm.FindPeopleToReasignTo(lookinFor.Text)
-														foundPeople = []struct {
-															Label  string
-															Target string
-														}{}
-														if err == nil {
-															for _, c := range founds {
-																for _, tName := range c.Teams {
-																	foundPeople = append(foundPeople, struct {
-																		Label  string
-																		Target string
-																	}{
-																		Label:  fmt.Sprintf("%s - %s", c.Name, tName),
-																		Target: fmt.Sprintf("%s!%s", c.UserID, tName),
-																	})
-																}
-															}
-															foundsList.Refresh()
-															foundsContainer.Refresh()
-														} else {
-															fmt.Printf("Failed %v\n", err)
-														}
-													},
-												),
-											), nil, nil, nil,
-											foundsContainer,
-										),
-										taskWindow,
-									)
-									deepdeep.Resize(fyne.NewSize(300, 500))
-									deepdeep.Show()
-									//
-								})),
-						))
-					col1.Objects = append(col1.Objects,
-						widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x.ParentID, x.ParentTitle), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-					col2.Objects = append(
-						col2.Objects,
-						newTappableLabel(
-							fmt.Sprintf("[%s] %s", x.ID, x.Title),
-							func(_ *fyne.PointEvent) {
-								browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/task/" + thisID)
-							},
-						),
-					)
-					col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
-					tempFunc := func(_ *fyne.PointEvent) {
-						dialog.ShowForm(
-							"Priority override "+thisID,
-							"Override",
-							"Cancel",
-							[]*widget.FormItem{
-								widget.NewFormItem(
-									"Priority",
-									widget.NewSelect(
-										[]string{"1", "2", "3", "4", "5", "6"},
-										func(changed string) {
-											tempVar = changed
-										},
-									)),
-							},
-							func(isit bool) {
-								if tempVar == x.Priority || tempVar == "" {
-									delete(tasks.PriorityOverrides.CWIncidents, thisID)
-								} else {
-									tasks.PriorityOverrides.CWIncidents[thisID] = tempVar
-								}
-								tasks.SavePriorityOverride()
-							},
-							taskWindow,
-						)
-					}
-					col4.Objects = append(col4.Objects, container.NewMax(
-						getPriorityIconFor(x.PriorityOverride, priorityIcons),
-						newTappableLabelWithStyle(
-							myPriority,
-							fyne.TextAlignCenter,
-							fyne.TextStyle{},
-							tempFunc)))
-					col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
-				}
-				list = container.NewVScroll(
-					container.NewHBox(
-						col0,
-						col1,
-						col2,
-						col3,
-						col4,
-						col5,
-					),
-				)
-			}
-			TaskTabs.Items[TaskTabsIndexes["CWTeamTasks"]].Content = container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							tasks.Gsm.DownloadTeamTasks(func() { taskWindowRefresh("CWTeamTasks") })
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.HistoryIcon(),
-						func() {},
-					),
-					widget.NewToolbarAction(
-						theme.ErrorIcon(),
-						func() {},
-					),
-				),
-				nil,
-				nil,
-				nil,
-				list,
-			)
-		}
-		if _, ok := TaskTabsIndexes["CWRequests"]; ok && (specific == "" || specific == "CWRequests") {
+		if _, ok := TaskTabsIndexes["SNRequests"]; ok && (specific == "" || specific == "SNRequests") {
 			var list4 fyne.CanvasObject
-			if len(tasks.Gsm.LoggedIncidents) == 0 {
+			if len(tasks.Snow.LoggedIncidents) == 0 {
 				list4 = widget.NewLabel("No requests")
 			} else {
 				col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
@@ -1638,23 +1100,23 @@ func taskWindowRefresh(specific string) {
 				col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
-				for _, x := range tasks.Gsm.LoggedIncidents {
-					thisID := x.ID
+				for _, x := range tasks.Snow.LoggedIncidents {
+					thisID := x.BusObRecId
 					col0.Objects = append(
 						col0.Objects,
-						container.NewMax(
+						container.NewStack(
 							widget.NewLabel(""),
 							newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-								browser.OpenURL("https://griffith.cherwellondemand.com/CherwellClient/Access/incident/" + thisID)
+								browser.OpenURL(tasks.Snow.BaseURL + "/now/sow/record/incident/" + thisID)
 							}),
 						))
 					col1.Objects = append(col1.Objects,
 						widget.NewLabelWithStyle(fmt.Sprintf("[%s] %s", x.ID, x.Title), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 					col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
-					col4.Objects = append(col4.Objects, container.NewMax(
+					col4.Objects = append(col4.Objects, container.NewStack(
 						getPriorityIconFor(x.PriorityOverride, priorityIcons),
 						widget.NewLabelWithStyle(x.PriorityOverride, fyne.TextAlignCenter, fyne.TextStyle{})))
-					col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
+					col5.Objects = append(col5.Objects, widget.NewLabel(tasks.SnowStatuses[x.Status]))
 				}
 				list4 = container.NewVScroll(
 					container.NewHBox(
@@ -1667,12 +1129,12 @@ func taskWindowRefresh(specific string) {
 				)
 			}
 
-			TaskTabs.Items[TaskTabsIndexes["CWRequests"]].Content = container.NewBorder(
+			TaskTabs.Items[TaskTabsIndexes["SNRequests"]].Content = container.NewBorder(
 				widget.NewToolbar(
 					widget.NewToolbarAction(
 						theme.ViewRefreshIcon(),
 						func() {
-							tasks.Gsm.DownloadMyRequests(func() { taskWindowRefresh("CWRequests") })
+							tasks.Snow.DownloadMyRequests(func() { taskWindowRefresh("SNRequests") })
 						},
 					),
 					widget.NewToolbarSeparator(),

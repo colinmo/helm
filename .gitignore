@@ -21,3 +21,5 @@ HQSigned.exe
 src/tasks/jira_tasks_token_test.go
 src/tasks/msplannersecret.go
 src/tasks/gsmsecret.go
+*.exe
+snowsecret.go

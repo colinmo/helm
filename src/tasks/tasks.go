@@ -20,35 +20,16 @@ import (
 //        OR have a message based process for handling requests for information from the remote client that handles all the authentication etc. by itself
 //        So requests for refresh are sent to this parallel process via a message queue, and it processes them individually and in order.
 
-type GSMTokens struct {
-	Access_token  string
-	Refresh_token string
-	Userid        string
-	Expiration    time.Time
-	Cherwelluser  string
-	Allteams      []string
-	Myteam        string
-}
 type MSTokens struct {
 	Access_token  string
 	Refresh_token string
 	Expiration    time.Time
 }
 type Tokens struct {
-	GSM GSMTokens
-	MS  MSTokens
+	MS MSTokens
 }
 
 var AuthenticationTokens = Tokens{
-	GSM: GSMTokens{
-		Access_token:  "",
-		Refresh_token: "",
-		Userid:        "",
-		Expiration:    time.Now(),
-		Cherwelluser:  "",
-		Allteams:      []string{},
-		Myteam:        "",
-	},
 	MS: MSTokens{
 		Access_token:  "",
 		Refresh_token: "",
@@ -76,7 +57,6 @@ type TaskResponseStruct struct {
 /** If we move this into /tasks, keep these here and refer in main as tasks.* ? */
 var Planner = &PlannerStruct{}
 var Jira = &JiraStruct{}
-var Gsm = &CherwellStruct{}
 var Snow = &SNOWStruct{}
 
 func InitTasks(appPreferences *TaskPreferencesStruct, connectionStatusBoxRef func(bool, string), taskWindowRefreshRef func(string), activeTaskStatusUpdateRef func(int)) {
@@ -87,27 +67,19 @@ func InitTasks(appPreferences *TaskPreferencesStruct, connectionStatusBoxRef fun
 	if AppPreferences.JiraActive {
 		Jira.Init()
 	}
-	if AppPreferences.GSMActive {
-		Gsm.Init("http://localhost:84/", "", "", time.Now())
-	}
 	if AppPreferences.MSPlannerActive {
 		Planner.Init("http://localhost:84/", "", "", time.Now())
 	}
 	if appPreferences.SnowActive {
-		Snow.Init("http://localhost:84/", "", "", time.Now())
+		Snow.Init(
+			"http://localhost:84/",
+			"",
+			"",
+			time.Now())
 	}
 }
 
-func GetAllTasks(jiraActive, gsmActive, msplannerActive, snowActive bool, taskWindowRefresh func(string), updateFunc func(int)) {
-	if gsmActive {
-		Gsm.Download(
-			func() { taskWindowRefresh("CWTasks") },
-			func() { taskWindowRefresh("CWIncidents") },
-			func() { taskWindowRefresh("CWRequests") },
-			func() { taskWindowRefresh("CWTeamIncidents") },
-			func() { taskWindowRefresh("CWTeamTasks") },
-		)
-	}
+func GetAllTasks(jiraActive, msplannerActive, snowActive bool, taskWindowRefresh func(string), updateFunc func(int)) {
 	if msplannerActive {
 		Planner.Refresh()
 		Planner.Download("")
@@ -128,7 +100,6 @@ func GetAllTasks(jiraActive, gsmActive, msplannerActive, snowActive bool, taskWi
 }
 
 type TaskPreferencesStruct struct {
-	GSMActive          bool
 	MSPlannerActive    bool
 	MSAccessToken      string
 	MSRefreshToken     string
@@ -148,6 +119,7 @@ type TaskPreferencesStruct struct {
 	SnowSRefreshToken  string
 	SnowExpiresAt      time.Time
 	SnowUser           string // 7fcaa702933002009c8579b4f47ffbde
+	SnowGroup          string
 }
 
 var AuthWebServer *http.Server
@@ -157,18 +129,12 @@ var ConnectionStatusBox func(bool, string)
 var AppPreferences TaskPreferencesStruct
 
 func StartLocalServers() {
-	if AppPreferences.GSMActive {
-		http.HandleFunc(Gsm.RedirectPath, func(w http.ResponseWriter, r *http.Request) {
-			Gsm.AuthenticateToCherwell(w, r)
-		})
-	}
 	if AppPreferences.MSPlannerActive {
 		http.HandleFunc(Planner.RedirectPath, func(w http.ResponseWriter, r *http.Request) {
 			Planner.Authenticate(w, r)
 		})
 	}
 	if AppPreferences.SnowActive {
-		fmt.Printf("Snow redirect %s\n", Snow.RedirectPath)
 		http.HandleFunc(Snow.RedirectPath, func(w http.ResponseWriter, r *http.Request) {
 			Snow.Authenticate(w, r)
 		})
@@ -182,10 +148,9 @@ func StartLocalServers() {
 }
 
 type PriorityOverridesStruct struct {
-	CWTasks     map[string]string `json:"cwtasks"`
-	CWIncidents map[string]string `json:"cwincidents"`
-	MSPlanner   map[string]string `json:"msplanner"`
-	Jira        map[string]string `json:"jira"`
+	MSPlanner map[string]string `json:"msplanner"`
+	Jira      map[string]string `json:"jira"`
+	SNow      map[string]string `json:"snow"`
 }
 
 var PriorityOverrides PriorityOverridesStruct
@@ -194,18 +159,13 @@ func LoadPriorityOverride(preferences string) {
 	r, e := os.Open(preferences)
 	if errors.Is(e, os.ErrNotExist) {
 		PriorityOverrides = PriorityOverridesStruct{
-			CWTasks: map[string]string{
-				"x": "y",
-			},
-			CWIncidents: map[string]string{
-				"x": "y",
-			},
 			MSPlanner: map[string]string{
 				"x": "y",
 			},
 			Jira: map[string]string{
 				"x": "y",
 			},
+			SNow: map[string]string{"x": "y"},
 		}
 		SavePriorityOverride()
 		r, e = os.Open(AppPreferences.PriorityOverride)

@@ -182,9 +182,9 @@ func (gsm *CherwellStruct) DownloadTasks(afterFunc func()) {
 										row.PriorityOverride = y.Value
 									}
 								}
-								if val, ok := PriorityOverrides.CWIncidents[row.ID]; ok {
-									row.PriorityOverride = val
-								}
+								//if val, ok := PriorityOverrides.CWIncidents[row.ID]; ok {
+								//	row.PriorityOverride = val
+								//}
 								gsm.MyTasks = append(gsm.MyTasks, row)
 							}
 						}
@@ -242,9 +242,9 @@ func (gsm *CherwellStruct) DownloadIncidents(afterFunc func()) {
 										row.PriorityOverride = y.Value
 									}
 								}
-								if val, ok := PriorityOverrides.CWIncidents[row.ID]; ok {
-									row.PriorityOverride = val
-								}
+								//if val, ok := PriorityOverrides.CWIncidents[row.ID]; ok {
+								//	row.PriorityOverride = val
+								//}
 								gsm.MyIncidents = append(gsm.MyIncidents, row)
 							}
 						}
@@ -302,9 +302,9 @@ func (gsm *CherwellStruct) DownloadMyRequests(afterFunc func()) {
 										row.PriorityOverride = y.Value
 									}
 								}
-								if val, ok := PriorityOverrides.CWIncidents[row.ID]; ok {
-									row.PriorityOverride = val
-								}
+								//if val, ok := PriorityOverrides.CWIncidents[row.ID]; ok {
+								//	row.PriorityOverride = val
+								//}
 								gsm.LoggedIncidents = append(gsm.LoggedIncidents, row)
 							}
 						}
@@ -369,9 +369,9 @@ func (gsm *CherwellStruct) DownloadTeam(afterFunc func()) {
 										row.OwnerID = y.Value
 									}
 								}
-								if val, ok := PriorityOverrides.CWIncidents[row.ID]; ok {
-									row.PriorityOverride = val
-								}
+								//if val, ok := PriorityOverrides.CWIncidents[row.ID]; ok {
+								//	row.PriorityOverride = val
+								//}
 								if row.OwnerID == "" {
 									gsm.TeamIncidents = append(gsm.TeamIncidents, row)
 								}
@@ -442,9 +442,9 @@ func (gsm *CherwellStruct) DownloadTeamTasks(afterFunc func()) {
 										row.OwnerID = y.Value
 									}
 								}
-								if val, ok := PriorityOverrides.CWIncidents[row.ID]; ok {
-									row.PriorityOverride = val
-								}
+								//if val, ok := PriorityOverrides.CWIncidents[row.ID]; ok {
+								//	row.PriorityOverride = val
+								//}
 								if row.OwnerID == "" {
 									gsm.TeamTasks = append(gsm.TeamTasks, row)
 								}
