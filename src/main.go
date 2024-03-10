@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"log"
 	"math"
 	"os"
 	"os/user"
@@ -22,6 +23,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/data/validation"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
@@ -701,26 +703,7 @@ func taskWindowSetup() {
 		TaskTabsIndexes["Planner"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
 			container.NewTabItem("Planner", container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							go func() {
-								tasks.Planner.Download("")
-								taskWindowRefresh("Planner")
-							}()
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.HistoryIcon(),
-						func() {},
-					),
-					widget.NewToolbarAction(
-						theme.ErrorIcon(),
-						func() {},
-					),
-				),
+				nil,
 				nil,
 				nil,
 				nil,
@@ -732,24 +715,7 @@ func taskWindowSetup() {
 		TaskTabsIndexes["Jira"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
 			container.NewTabItem("Jira", container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							go func() {
-								tasks.Jira.Download()
-								taskWindowRefresh("Jira")
-							}()
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.DocumentCreateIcon(),
-						func() {
-							createNewJiraTicket()
-						},
-					),
-				),
+				nil,
 				nil,
 				nil,
 				nil,
@@ -761,23 +727,7 @@ func taskWindowSetup() {
 		TaskTabsIndexes["SNIncidents"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
 			container.NewTabItem("Incidents", container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							go func() {
-								tasks.Snow.DownloadIncidents(func() { tasks.TaskWindowRefresh("SNIncidents") })
-							}()
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.DocumentCreateIcon(),
-						func() {
-
-						},
-					),
-				),
+				nil,
 				nil,
 				nil,
 				nil,
@@ -787,23 +737,7 @@ func taskWindowSetup() {
 		TaskTabsIndexes["SNTeamIncidents"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
 			container.NewTabItem("Team Incidents", container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							go func() {
-								tasks.Snow.DownloadTeamIncidents(func() { tasks.TaskWindowRefresh("SNTeamIncidents") })
-							}()
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.DocumentCreateIcon(),
-						func() {
-
-						},
-					),
-				),
+				nil,
 				nil,
 				nil,
 				nil,
@@ -813,23 +747,7 @@ func taskWindowSetup() {
 		TaskTabsIndexes["SNRequests"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
 			container.NewTabItem("My Requests", container.NewBorder(
-				widget.NewToolbar(
-					widget.NewToolbarAction(
-						theme.ViewRefreshIcon(),
-						func() {
-							go func() {
-								tasks.Snow.DownloadMyRequests(func() { tasks.TaskWindowRefresh("SNRequests") })
-							}()
-						},
-					),
-					widget.NewToolbarSeparator(),
-					widget.NewToolbarAction(
-						theme.DocumentCreateIcon(),
-						func() {
-
-						},
-					),
-				),
+				nil,
 				nil,
 				nil,
 				nil,
@@ -1006,6 +924,395 @@ func taskWindowRefresh(specific string) {
 						theme.ViewRefreshIcon(),
 						func() {
 							tasks.Snow.DownloadIncidents(func() { taskWindowRefresh("SNIncidents") })
+						},
+					),
+					widget.NewToolbarAction(
+						theme.DocumentCreateIcon(),
+						func() {
+							items := tasks.SnowIncidentCreate{
+								AffectedUser:     "me",
+								Service:          "",
+								ServiceOffering:  "",
+								ShortDescription: "",
+								ContactType:      "Self-service",
+								Impact:           "3 - Individual",
+								Urgency:          "3 - Low",
+								AssignmentGroup:  "",
+								AssignedTo:       "",
+								Description:      "",
+							}
+							saving := tasks.SnowIncidentCreate{
+								AffectedUser:     appPreferences.TaskPreferences.SnowUser[1:],
+								Service:          "",
+								ServiceOffering:  "",
+								OpenedBy:         appPreferences.TaskPreferences.SnowUser[1:],
+								ShortDescription: "",
+								ContactType:      "",
+								Impact:           "",
+								Urgency:          "",
+								AssignmentGroup:  "",
+								AssignedTo:       "",
+								Description:      "",
+							}
+							descWidget := widget.NewEntryWithData(binding.BindString(&items.Description))
+							descWidget.MultiLine = true
+							foundAffects := map[string]string{}
+							foundServices := map[string]string{}
+							foundAffectsOfferings := map[string]string{}
+							foundAssignmentGroups := map[string]string{}
+							foundAssignedTo := map[string]string{}
+
+							var widgets map[string]fyne.CanvasObject
+							widgets = map[string]fyne.CanvasObject{
+								"AffectedUser": container.NewBorder(
+									nil, nil, nil,
+									newTappableIcon(theme.SearchIcon(), func(_ *fyne.PointEvent) {
+										var r struct {
+											Result []struct {
+												ID    string `json:"sys_id"`
+												Name  string `json:"name"`
+												Email string `json:"email"`
+											} `json:"result"`
+										}
+										// sys_user
+										result, err := tasks.Snow.GetAnyTable(
+											"sys_user",
+											[]string{"sys_id", "name", "email"},
+											map[string]string{"name": "CONTAINS" + items.AffectedUser},
+											"ORDERBYname",
+											0,
+										)
+										if err == nil {
+											results := []string{}
+											foundAffects = map[string]string{}
+											json.Unmarshal(result, &r)
+											for _, e := range r.Result {
+												results = append(results, e.Name+" ("+e.Email+")")
+												foundAffects[e.Name] = e.ID
+											}
+											widgets["AffectedUser"].(*fyne.Container).Objects[0].(*widget.SelectEntry).SetOptions(results)
+										} else {
+											log.Fatal(err)
+										}
+									}),
+									widget.NewSelectEntry([]string{})),
+								"Service": container.NewBorder(
+									nil, nil, nil,
+									newTappableIcon(theme.SearchIcon(), func(_ *fyne.PointEvent) {
+										// cmdb_ci_service
+										var r struct {
+											Result []struct {
+												ID   string `json:"sys_id"`
+												Name string `json:"name"`
+											} `json:"result"`
+										}
+										// sys_user
+										result, err := tasks.Snow.GetAnyTable(
+											"cmdb_ci_service",
+											[]string{"sys_id", "name"},
+											map[string]string{
+												"name": "CONTAINS" + items.Service},
+											"ORDERBYname",
+											0,
+										)
+										if err == nil {
+											results := []string{}
+											foundServices = map[string]string{}
+											json.Unmarshal(result, &r)
+											for _, e := range r.Result {
+												results = append(results, e.Name)
+												foundServices[e.Name] = e.ID
+											}
+											widgets["Service"].(*fyne.Container).Objects[0].(*widget.SelectEntry).SetOptions(results)
+										} else {
+											log.Fatal(err)
+										}
+									}),
+									widget.NewSelectEntry([]string{})),
+								"ServiceOffering": container.NewBorder(
+									nil, nil, nil,
+									newTappableIcon(theme.SearchIcon(), func(_ *fyne.PointEvent) {
+										// service_offering
+										var r struct {
+											Result []struct {
+												ID   string `json:"sys_id"`
+												Name string `json:"name"`
+											} `json:"result"`
+										}
+										criteria := map[string]string{}
+										if len(items.ServiceOffering) > 0 {
+											criteria["name"] = "CONTAINS" + items.ServiceOffering
+										}
+										if len(foundServices[items.Service]) > 0 {
+											criteria["parent"] = "=" + foundServices[items.Service]
+										}
+										result, err := tasks.Snow.GetAnyTable(
+											"service_offering",
+											[]string{"sys_id", "name"},
+											criteria,
+											"ORDERBYparent^ORDERBYname",
+											0,
+										)
+										fmt.Printf("Found: %v\n", foundServices)
+										if err == nil {
+											results := []string{}
+											foundAffectsOfferings = map[string]string{}
+											json.Unmarshal(result, &r)
+											for _, e := range r.Result {
+												results = append(results, e.Name)
+												foundAffectsOfferings[e.Name] = e.ID
+											}
+											widgets["ServiceOffering"].(*fyne.Container).Objects[0].(*widget.SelectEntry).SetOptions(results)
+										} else {
+											log.Fatal(err)
+										}
+									}),
+									widget.NewSelectEntry([]string{})),
+								"ShortDescription": container.NewBorder(
+									nil, nil, nil, nil,
+									widget.NewEntryWithData(binding.BindString(&items.ShortDescription))),
+								"ContactType": container.NewBorder(
+									nil, nil, nil, nil,
+									widget.NewSelect(tasks.SNContactTypeLabels, func(s string) { items.ContactType = tasks.SNContactTypes[s] })),
+								"Impact": container.NewBorder(
+									nil, nil, nil, nil,
+									widget.NewSelect(tasks.SNImpactLabels, func(s string) { items.Impact = tasks.SNImpact[s] })),
+								"Urgency": container.NewBorder(
+									nil, nil, nil, nil,
+									widget.NewSelect(tasks.SNUrgencyLabels, func(s string) { items.Urgency = tasks.SNUrgency[s] })),
+								"AssignmentGroup": container.NewBorder(
+									nil, nil, nil,
+									newTappableIcon(theme.SearchIcon(), func(_ *fyne.PointEvent) {
+										// sys_user_group
+										var r struct {
+											Result []struct {
+												ID   string `json:"sys_id"`
+												Name string `json:"name"`
+											} `json:"result"`
+										}
+										criteria := map[string]string{}
+										if len(items.AssignmentGroup) > 0 {
+											criteria["name"] = "CONTAINS" + items.AssignmentGroup
+										}
+										result, err := tasks.Snow.GetAnyTable(
+											"sys_user_group",
+											[]string{"sys_id", "name"},
+											criteria,
+											"ORDERBYname",
+											0,
+										)
+										if err == nil {
+											results := []string{}
+											foundAssignmentGroups = map[string]string{}
+											json.Unmarshal(result, &r)
+											for _, e := range r.Result {
+												results = append(results, e.Name)
+												foundAssignmentGroups[e.Name] = e.ID
+											}
+											widgets["AssignmentGroup"].(*fyne.Container).Objects[0].(*widget.SelectEntry).SetOptions(results)
+										} else {
+											log.Fatal(err)
+										}
+									}),
+									widget.NewSelectEntry([]string{})),
+								"AssignedTo": container.NewBorder(
+									nil, nil, nil,
+									newTappableIcon(theme.SearchIcon(), func(_ *fyne.PointEvent) {
+										// sys_user_grmember
+										var r struct {
+											Result []struct {
+												ID   string `json:"user.sys_id"`
+												Name string `json:"user.name"`
+											} `json:"result"`
+										}
+										criteria := map[string]string{}
+										if len(items.AssignedTo) > 0 {
+											criteria["user.name"] = "LIKE" + items.AssignedTo
+										}
+										if len(foundAssignmentGroups[items.AssignmentGroup]) > 0 {
+											criteria["group.sys_id"] = "=" + foundAssignmentGroups[items.AssignmentGroup]
+										}
+										result, err := tasks.Snow.GetAnyTable(
+											"sys_user_grmember",
+											[]string{"user.sys_id", "user.name", "group.name"},
+											criteria,
+											"ORDERBYuser.name",
+											0,
+										)
+										if err == nil {
+											results := []string{}
+											foundAssignedTo = map[string]string{}
+											json.Unmarshal(result, &r)
+											for _, e := range r.Result {
+												results = append(results, e.Name)
+												foundAssignedTo[e.Name] = e.ID
+											}
+											widgets["AssignedTo"].(*fyne.Container).Objects[0].(*widget.SelectEntry).SetOptions(results)
+										} else {
+											log.Fatal(err)
+										}
+									}),
+									widget.NewSelectEntry([]string{})),
+								"Description": container.NewBorder(
+									nil, nil, nil, nil,
+									descWidget),
+							}
+							widgets["AffectedUser"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.SetText(items.AffectedUser)
+							widgets["AffectedUser"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.Validator = validation.NewRegexp(".+", "Field is required")
+							widgets["AffectedUser"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.OnChanged = func(x string) {
+								items.AffectedUser = x
+							}
+							widgets["Service"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.SetText(items.Service)
+							widgets["Service"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.Validator = validation.NewRegexp(".+", "Field is required")
+							widgets["Service"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.OnChanged = func(x string) {
+								items.Service = x
+							}
+							widgets["ServiceOffering"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.SetText(items.ServiceOffering)
+							widgets["ServiceOffering"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.Validator = validation.NewRegexp(".+", "Field is required")
+							widgets["ServiceOffering"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.OnChanged = func(x string) {
+								items.ServiceOffering = x
+							}
+							widgets["AssignmentGroup"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.SetText(items.AssignmentGroup)
+							widgets["AssignmentGroup"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.Validator = validation.NewRegexp(".+", "Field is required")
+							widgets["AssignmentGroup"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.OnChanged = func(x string) {
+								items.AssignmentGroup = x
+							}
+							widgets["AssignedTo"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.SetText(items.AssignedTo)
+							widgets["AssignedTo"].(*fyne.Container).Objects[0].(*widget.SelectEntry).Entry.OnChanged = func(x string) {
+								items.AssignedTo = x
+							}
+							widgets["ContactType"].(*fyne.Container).Objects[0].(*widget.Select).SetSelected(items.ContactType)
+							widgets["Impact"].(*fyne.Container).Objects[0].(*widget.Select).Selected = items.Impact
+							widgets["Urgency"].(*fyne.Container).Objects[0].(*widget.Select).Selected = items.Urgency
+							widgets["ShortDescription"].(*fyne.Container).Objects[0].(*widget.Entry).Validator = validation.NewRegexp(".+", "Field is required")
+							widgets["Description"].(*fyne.Container).Objects[0].(*widget.Entry).Validator = validation.NewRegexp(".+", "Field is required")
+							incidentWindow := thisApp.NewWindow("New Incident")
+							incidentWindow.SetContent(
+								container.NewBorder(
+									widget.NewToolbar(
+										widget.NewToolbarAction(
+											theme.DocumentSaveIcon(),
+											func() {
+												// Validate form
+
+												// Convert Items to Saving
+												if items.AffectedUser == "me" {
+													saving.AffectedUser = appPreferences.TaskPreferences.SnowUser[1:]
+												}
+												saving.Service = foundServices[items.Service]
+												saving.ServiceOffering = foundServices[items.ServiceOffering]
+												saving.ShortDescription = items.ShortDescription
+												saving.ContactType = tasks.SNContactTypes[items.ContactType]
+												saving.Impact = tasks.SNImpact[items.Impact]
+												saving.Urgency = tasks.SNUrgency[items.Urgency]
+												saving.AssignmentGroup = foundAssignmentGroups[items.AssignmentGroup]
+												if x, ok := foundAssignedTo[items.AssignedTo]; ok {
+													saving.AssignedTo = x
+												}
+												missing := []string{}
+												for name, value := range map[string]string{
+													"Affected User":     items.AffectedUser,
+													"Service":           items.Service,
+													"Service Offering":  items.ServiceOffering,
+													"Short Description": items.ShortDescription,
+													"Contact Type":      items.ContactType,
+													"Impact":            items.Impact,
+													"Urgency":           items.Urgency,
+													"Assignment Group":  items.AssignmentGroup,
+													"Description":       items.Description} {
+													if value == "" {
+														missing = append(missing, name)
+													}
+												}
+												if len(missing) > 0 {
+													dialog.ShowError(
+														fmt.Errorf("you must fill values for %s", strings.Join(missing, ", ")),
+														incidentWindow,
+													)
+												} else {
+													// Save
+													number, url, err := tasks.Snow.CreateNewIncident(saving)
+													if err == nil && url > "" {
+														me := dialog.NewCustom(
+															"Saved incident as "+number,
+															"Ok",
+															container.NewVBox(
+																widget.NewLabel("Created incident successfully"),
+																container.NewHBox(
+																	widget.NewButton("Visit", func() {
+																		browser.OpenURL(url)
+																	}),
+																),
+															),
+															incidentWindow,
+														)
+														me.SetOnClosed(func() {
+															incidentWindow.Close()
+														})
+														me.Show()
+													} else {
+														dialog.ShowError(
+															err,
+															incidentWindow,
+														)
+													}
+												}
+											},
+										),
+									),
+									nil,
+									nil,
+									nil,
+									widget.NewForm(
+										widget.NewFormItem(
+											"Affected User",
+											widgets["AffectedUser"],
+										),
+										widget.NewFormItem(
+											"Service",
+											widgets["Service"],
+										),
+										widget.NewFormItem(
+											"Service Offering",
+											widgets["ServiceOffering"],
+										),
+										widget.NewFormItem(
+											"Short Description",
+											widgets["ShortDescription"],
+										),
+										widget.NewFormItem(
+											"Contact Type",
+											widgets["ContactType"],
+										),
+										widget.NewFormItem(
+											"Impact",
+											widgets["Impact"],
+										),
+										widget.NewFormItem(
+											"Urgency",
+											widgets["Urgency"],
+										),
+										widget.NewFormItem(
+											"Assignment Group",
+											widgets["AssignmentGroup"],
+										),
+										widget.NewFormItem(
+											"Assigned To",
+											widgets["AssignedTo"],
+										),
+										widget.NewFormItem(
+											"Description",
+											widgets["Description"],
+										),
+									),
+								),
+							)
+							incidentWindow.SetCloseIntercept(func() {
+								incidentWindow.Hide()
+							})
+							incidentWindow.Content().Refresh()
+							incidentWindow.Resize(fyne.Size{Width: 500, Height: 600})
+							incidentWindow.Show()
 						},
 					),
 					widget.NewToolbarSeparator(),

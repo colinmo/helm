@@ -45,6 +45,56 @@ type SNOWStruct struct {
 var SnowStatuses = map[string]string{
 	"1": "New", "2": "In Progress", "3": "On Hold", "6": "Resolved", "8": "Cancelled",
 }
+var SNContactTypes = map[string]string{
+	"-- None --":           "-- None --",
+	"chat":                 "Chat",
+	"messaging":            "Messaging",
+	"phone":                "Phone",
+	"video":                "Video",
+	"microsoft_teams_chat": "Microsoft Teams Chat",
+	"email":                "Email",
+	"event":                "Event",
+	"walk-in":              "Walk-in",
+	"incident_creation":    "Incident creation by employee",
+	"self-service":         "Self-service",
+}
+
+var SNContactTypeLabels = []string{
+	"-- None --",
+	"Chat",
+	"Messaging",
+	"Phone",
+	"Video",
+	"Microsoft Teams Chat",
+	"Email",
+	"Event",
+	"Walk-in",
+	"Incident creation by employee",
+	"Self-service",
+}
+
+var SNImpact = map[string]string{
+	"1": "1 - Organisation",
+	"2": "2 - Group",
+	"3": "3 - Individual",
+}
+
+var SNImpactLabels = []string{
+	"1 - Organisation",
+	"2 - Group",
+	"3 - Individual",
+}
+
+var SNUrgency = map[string]string{
+	"1": "1 - High",
+	"2": "2 - Medium",
+	"3": "3 - Low",
+}
+var SNUrgencyLabels = []string{
+	"1 - High",
+	"2 - Medium",
+	"3 - Low",
+}
 
 // var snowTokenLock sync.Mutex
 
@@ -62,8 +112,8 @@ func (snow *SNOWStruct) Init(
 		snow.Expiration = expiration
 		snow.TokenStatus = Active
 	}
-	snow.BaseURL = `https://griffithdev.service-now.com/`
-	snow.AuthURL = `https://griffithdev.service-now.com/oauth_auth.do?response_type=code&client_id=d6f39a303ab48610e2fd1ea7144278e0&state=1111`
+	snow.BaseURL = snBaseUrl
+	snow.AuthURL = snAuthUrl
 	snow.RedirectPath = "/snow"
 	snow.RedirectURI, _ = url.JoinPath(baseRedirect, snow.RedirectPath)
 
@@ -411,6 +461,58 @@ func (snow *SNOWStruct) GetMyTeamIncidentsForPage(page int) ([]SnowIncident, err
 	return r, err
 }
 
+type SnowIncidentCreate struct {
+	AffectedUser     string `json:"caller_id"`
+	Service          string `json:"business_service"`
+	ServiceOffering  string `json:"service_offering"`
+	OpenedBy         string `json:"opened_by"`
+	ShortDescription string `json:"short_description"`
+	ContactType      string `json:"contact_type"`
+	Impact           string `json:"impact"`
+	Urgency          string `json:"urgency"`
+	AssignmentGroup  string `json:"assignment_group"`
+	AssignedTo       string `json:"assigned_to"`
+	Description      string `json:"description"`
+}
+type CreateIncidentResponse struct {
+	Result struct {
+		Error  string `json:"error"`
+		Number string `json:"number"`
+	} `json:"result"`
+}
+
+func (snow *SNOWStruct) CreateNewIncident(newIncident SnowIncidentCreate) (string, string, error) {
+	newIncidentNumber := ""
+	urlForIncident := ""
+	bob, err := json.Marshal(newIncident)
+	if err == nil {
+		body, respCode, headers, err := snow.getStuffAndHeadersFromURL(
+			"POST",
+			"/api/now/table/incident",
+			"",
+			bob,
+			true,
+		)
+		if err == nil {
+			if respCode == 201 {
+				urlForIncident = strings.Replace(headers["Location"][0], "api/now/table/incident", "now/sow/record/incident", 1)
+				// Process r
+				var incidentsResponse CreateIncidentResponse
+				err = json.NewDecoder(body).Decode(&incidentsResponse)
+				if err == nil {
+					newIncidentNumber = incidentsResponse.Result.Number
+					if incidentsResponse.Result.Error != "" {
+						return newIncidentNumber, urlForIncident, fmt.Errorf("failed to save incident %s", incidentsResponse.Result.Error)
+					}
+				}
+			} else {
+				return newIncidentNumber, urlForIncident, fmt.Errorf("failed to create, got %d", respCode)
+			}
+		}
+	}
+	return newIncidentNumber, urlForIncident, err
+}
+
 type SnowIncident struct {
 	ID          string
 	Number      string
@@ -432,6 +534,35 @@ type SnowResponse struct {
 	Results []SnowResponseIncidents `json:"result"`
 }
 
+func (snow *SNOWStruct) GetAnyTable(table string, fields []string, filter map[string]string, sort string, page int) ([]byte, error) {
+	if sort != "" {
+		sort = "^" + sort
+	}
+	filter["active"] = "=true"
+	result, err := snow.getStuffFromURL(
+		"GET",
+		"/api/now/table/"+table,
+		fmt.Sprintf(
+			"sysparm_limit=20&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d",
+			strings.Join(fields, ","),
+			createKeyValuePairsForQuery(filter)+sort,
+			page),
+		[]byte{},
+		true,
+	)
+	fmt.Printf("P: %s\n, Q: %s\n", "/api/now/table/"+table, fmt.Sprintf(
+		"sysparm_limit=20&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d",
+		strings.Join(fields, ","),
+		createKeyValuePairsForQuery(filter)+sort,
+		page))
+	var toReturn []byte
+	if err == nil {
+		defer result.Close()
+		toReturn, err = io.ReadAll(result)
+	}
+	return toReturn, err
+}
+
 func (snow *SNOWStruct) SearchSnowFor(table string, fields []string, filter map[string]string, page int) ([]SnowIncident, error) {
 	var incidentsResponse SnowResponse
 	result, err := snow.getStuffFromURL(
@@ -440,7 +571,7 @@ func (snow *SNOWStruct) SearchSnowFor(table string, fields []string, filter map[
 		fmt.Sprintf(
 			"sysparm_limit=10&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d",
 			strings.Join(fields, ","),
-			createKeyValuePairs(filter),
+			createKeyValuePairsForQuery(filter),
 			page),
 		[]byte{},
 		true,
@@ -471,10 +602,10 @@ func (snow *SNOWStruct) SearchSnowFor(table string, fields []string, filter map[
 	return toReturn, err
 }
 
-func createKeyValuePairs(m map[string]string) string {
+func createKeyValuePairsForQuery(m map[string]string) string {
 	b := new(bytes.Buffer)
 	for key, value := range m {
-		fmt.Fprintf(b, "%s%s^", key, value)
+		fmt.Fprintf(b, "%s%s^", key, url.QueryEscape(value))
 	}
 	toReturn := b.String()
 	return toReturn[0 : len(toReturn)-1]
@@ -509,4 +640,35 @@ func (snow *SNOWStruct) getStuffFromURL(method string, path string, query string
 		return snow.getStuffFromURL(method, path, query, payload, false)
 	}
 	return resp.Body, err
+}
+
+func (snow *SNOWStruct) getStuffAndHeadersFromURL(method string, path string, query string, payload []byte, refreshToken bool) (io.ReadCloser, int, map[string][]string, error) {
+	client := &http.Client{
+		Timeout: time.Second * 10,
+	}
+	newpath, _ := url.JoinPath(snow.BaseURL, path)
+	req, e := http.NewRequest(method, newpath, bytes.NewReader(payload))
+	req.URL.RawQuery = query
+
+	if e != nil {
+		log.Fatal(e)
+	}
+
+	if snow.AccessToken == "" || time.Now().After(snow.Expiration) {
+		snow.Refresh()
+		return snow.getStuffAndHeadersFromURL(method, path, query, payload, false)
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", snow.AccessToken))
+	req.Header.Set("Content-type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+		return nil, 0, map[string][]string{}, err
+	}
+	if resp.StatusCode == 401 && refreshToken {
+		snow.Refresh()
+		return snow.getStuffAndHeadersFromURL(method, path, query, payload, false)
+	}
+	return resp.Body, resp.StatusCode, resp.Header, err
 }
