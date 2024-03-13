@@ -52,12 +52,14 @@ type TaskResponseStruct struct {
 	OwnerID          string
 	Type             string
 	Blocked          bool
+	Links            []string
 }
 
 /** If we move this into /tasks, keep these here and refer in main as tasks.* ? */
 var Planner = &PlannerStruct{}
 var Jira = &JiraStruct{}
 var Snow = &SNOWStruct{}
+var Zettle = &ZettleStruct{}
 
 func InitTasks(appPreferences *TaskPreferencesStruct, connectionStatusBoxRef func(bool, string), taskWindowRefreshRef func(string), activeTaskStatusUpdateRef func(int)) {
 	TaskWindowRefresh = taskWindowRefreshRef
@@ -77,26 +79,41 @@ func InitTasks(appPreferences *TaskPreferencesStruct, connectionStatusBoxRef fun
 			"",
 			time.Now())
 	}
+	Zettle.Init()
 }
 
-func GetAllTasks(jiraActive, msplannerActive, snowActive bool, taskWindowRefresh func(string), updateFunc func(int)) {
+func GetAllTasks(
+	jiraActive,
+	msplannerActive,
+	snowActive bool,
+	taskWindowRefresh func(string),
+	updateFunc func(int),
+	zettleHome string) {
 	if msplannerActive {
-		Planner.Refresh()
-		Planner.Download("")
-		taskWindowRefresh("Planner")
+		go func() {
+			Planner.Refresh()
+			Planner.Download("")
+			taskWindowRefresh("Planner")
+		}()
 	}
 	if jiraActive {
-		Jira.Download()
-		taskWindowRefresh("Jira")
+		go func() {
+			Jira.Download()
+			taskWindowRefresh("Jira")
+		}()
 	}
 	if snowActive {
-		Snow.Download(
-			func() { taskWindowRefresh("SNIncidents") },
-			func() { taskWindowRefresh("SNRequests") },
-			func() { taskWindowRefresh("SNTeamIncidents") },
-		)
-		taskWindowRefresh("Snow")
+		go func() {
+			Snow.Download(
+				func() { taskWindowRefresh("SNIncidents") },
+				func() { taskWindowRefresh("SNRequests") },
+				func() { taskWindowRefresh("SNTeamIncidents") },
+			)
+			taskWindowRefresh("Snow")
+		}()
 	}
+	Zettle.Download(zettleHome)
+	taskWindowRefresh("Zettle")
 }
 
 type TaskPreferencesStruct struct {

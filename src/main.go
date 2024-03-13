@@ -19,7 +19,7 @@ import (
 	"vonexplaino.com/m/v2/helm/tasks"
 
 	fyne "fyne.io/fyne/v2"
-	app "fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
@@ -69,6 +69,7 @@ var appPreferences AppPreferencesStruct
 var snowConnectionActive *fyne.Container
 var msConnectionActive *fyne.Container
 var jiraConnectionActive *fyne.Container
+var ztConnectionActive *fyne.Container
 var connectionStatusContainer *fyne.Container
 var connectionStatusBox = func(bool, string) {}
 var stringDateFormat = "20060102T15:04:05"
@@ -133,12 +134,23 @@ func overrides() {
 				icon,
 			).Objects
 			msConnectionActive.Refresh()
+		case "Z":
+			button.OnTapped = func() {
+				tasks.Zettle.Download(filepath.Dir(appPreferences.ZettlekastenHome))
+				taskWindowRefresh("Zettle")
+			}
+			ztConnectionActive.Objects = container.NewStack(
+				button,
+				icon,
+			).Objects
+			ztConnectionActive.Refresh()
 		}
 		taskWindow.Content().Refresh()
 	}
 	jiraConnectionActive = container.NewStack()
 	msConnectionActive = container.NewStack()
 	snowConnectionActive = container.NewStack()
+	ztConnectionActive = container.NewStack()
 	tasks.InitTasks(
 		&appPreferences.TaskPreferences,
 		connectionStatusBox,
@@ -190,6 +202,17 @@ func overrides() {
 			}
 		}()
 	}
+	go func() {
+		for {
+			time.Sleep(5 * time.Minute)
+			hour := time.Now().Hour()
+			weekday := time.Now().Weekday()
+			if hour > 8 && hour < 17 && weekday > 0 && weekday < 6 {
+				tasks.Zettle.Download(filepath.Dir(appPreferences.ZettlekastenHome))
+				taskWindowRefresh("Zettle")
+			}
+		}
+	}()
 }
 
 func main() {
@@ -210,6 +233,7 @@ func main() {
 			appPreferences.TaskPreferences.SnowActive,
 			taskWindowRefresh,
 			activeTaskStatusUpdate,
+			filepath.Dir(appPreferences.ZettlekastenHome),
 		)
 	}()
 	if desk, ok := thisApp.(desktop.App); ok {
@@ -688,14 +712,16 @@ func taskWindowSetup() {
 	taskWindow.Resize(fyne.NewSize(430, 550))
 	taskWindow.Hide()
 	taskStatusWidget := widget.NewLabelWithData(AppStatus.TaskTaskStatus)
-	connectionStatusContainer = container.NewGridWithColumns(3)
+	connectionStatusContainer = container.NewGridWithColumns(4)
 	connectionStatusBox(false, "M")
 	connectionStatusBox(false, "J")
 	connectionStatusBox(false, "S")
-	connectionStatusContainer = container.NewGridWithColumns(3,
+	connectionStatusBox(true, "Z")
+	connectionStatusContainer = container.NewGridWithColumns(4,
 		msConnectionActive,
 		jiraConnectionActive,
 		snowConnectionActive,
+		ztConnectionActive,
 	)
 	TaskTabsIndexes = map[string]int{}
 	TaskTabs = container.NewAppTabs()
@@ -755,6 +781,14 @@ func taskWindowSetup() {
 			)),
 		)
 	}
+	// Zet tasks
+	TaskTabsIndexes["Zettle"] = len(TaskTabsIndexes)
+	TaskTabs.Append(
+		container.NewTabItem("Zettlekasten", container.NewBorder(
+			nil, nil, nil, nil,
+			container.NewWithoutLayout(),
+		)),
+	)
 	taskWindow.SetContent(
 		container.NewBorder(
 			nil,
@@ -1713,6 +1747,113 @@ func taskWindowRefresh(specific string) {
 			nil,
 			nil,
 			list,
+		)
+	}
+	if _, ok := TaskTabsIndexes["Zettle"]; ok && (specific == "" || specific == "Zettle") {
+		// MY PLANNER
+		var list5 fyne.CanvasObject
+		if len(tasks.Zettle.MyTasks) == 0 {
+			list5 = widget.NewLabel("No requests")
+		} else {
+			col0 := container.NewVBox(widget.NewRichTextFromMarkdown(`### `))
+			col1 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Title`))
+			col3 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Age`))
+			col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
+			col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
+			for _, x := range tasks.Zettle.MyTasks {
+				thisID := x.ID
+				myPriority := x.PriorityOverride
+				if x.Priority != x.PriorityOverride {
+					myPriority = fmt.Sprintf("%s(%s)", x.PriorityOverride, x.Priority)
+				}
+				tempVar := ""
+				col0.Objects = append(
+					col0.Objects,
+					container.NewStack(
+						widget.NewLabel(""),
+						newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
+							fmt.Printf("%s\n", thisID)
+							browser.OpenFile(thisID)
+						}),
+					))
+				col1.Objects = append(col1.Objects,
+					widget.NewLabelWithStyle(x.Title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+				col3.Objects = append(col3.Objects, widget.NewLabel(dateSinceNowInString(x.CreatedDateTime)))
+				iconContainer := container.NewStack(getPriorityIconFor(x.PriorityOverride, priorityIcons))
+				textContainer := newTappableLabel(myPriority, func(_ *fyne.PointEvent) {})
+				tempFunc := func(_ *fyne.PointEvent) {
+					dialog.ShowForm(
+						"Priority override",
+						"Override",
+						"Cancel",
+						[]*widget.FormItem{
+							widget.NewFormItem(
+								"Priority",
+								widget.NewSelect(
+									[]string{"1", "2", "3", "4", "5", "6"},
+									func(changed string) {
+										tempVar = changed
+									},
+								)),
+						},
+						func(isit bool) {
+							if isit {
+								var thisPriority string
+								if tempVar == x.Priority {
+									delete(tasks.PriorityOverrides.MSPlanner, thisID)
+									thisPriority = tempVar
+								} else {
+									tasks.PriorityOverrides.MSPlanner[thisID] = tempVar
+									thisPriority = tempVar + "(" + x.Priority + ")"
+								}
+								tasks.SavePriorityOverride()
+								iconContainer.Objects[0] = getPriorityIconFor(tempVar, priorityIcons)
+								textContainer.Label.Text = thisPriority
+								textContainer.Refresh()
+								iconContainer.Refresh()
+							}
+						},
+						taskWindow,
+					)
+				}
+				textContainer = newTappableLabelWithStyle(
+					myPriority,
+					fyne.TextAlignCenter,
+					fyne.TextStyle{},
+					tempFunc)
+				col4.Objects = append(col4.Objects, container.NewMax(
+					iconContainer,
+					textContainer,
+				))
+				col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
+			}
+			list5 = container.NewVScroll(
+				container.NewHBox(
+					col0,
+					col1,
+					col3,
+					col4,
+					col5,
+				),
+			)
+		}
+
+		TaskTabs.Items[TaskTabsIndexes["Zettle"]].Content = container.NewBorder(
+			widget.NewToolbar(
+				widget.NewToolbarAction(
+					theme.ViewRefreshIcon(),
+					func() {
+						go func() {
+							tasks.Zettle.Download(filepath.Dir(appPreferences.ZettlekastenHome))
+							taskWindowRefresh("Zettle")
+						}()
+					},
+				),
+			),
+			nil,
+			nil,
+			nil,
+			list5,
 		)
 	}
 	taskWindow.Content().Refresh()
