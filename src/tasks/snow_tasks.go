@@ -385,7 +385,6 @@ func (snow *SNOWStruct) CreateNewIncident(newIncident SnowIncidentCreate) (strin
 			"/api/now/table/incident",
 			"",
 			bob,
-			true,
 		)
 		if err == nil {
 			if respCode == 201 {
@@ -442,7 +441,6 @@ func (snow *SNOWStruct) GetAnyTable(table string, fields []string, filter map[st
 			createKeyValuePairsForQuery(filter)+sort,
 			page),
 		[]byte{},
-		true,
 	)
 	fmt.Printf("P: %s\n, Q: %s\n", "/api/now/table/"+table, fmt.Sprintf(
 		"sysparm_limit=20&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d",
@@ -468,7 +466,6 @@ func (snow *SNOWStruct) SearchSnowFor(table string, fields []string, filter map[
 			createKeyValuePairsForQuery(filter),
 			page),
 		[]byte{},
-		true,
 	)
 	toReturn := []SnowIncident{}
 	if err == nil {
@@ -505,7 +502,7 @@ func createKeyValuePairsForQuery(m map[string]string) string {
 	return toReturn[0 : len(toReturn)-1]
 }
 
-func (snow *SNOWStruct) getStuffFromURL(method string, path string, query string, payload []byte, refreshToken bool) (io.ReadCloser, error) {
+func (snow *SNOWStruct) getStuffFromURL(method string, path string, query string, payload []byte) (io.ReadCloser, error) {
 	snowTokenLock.Lock()
 	client := snowConf.Client(context.Background(), snow.Token)
 	newpath, _ := url.JoinPath(snow.BaseURL, path)
@@ -526,7 +523,7 @@ func (snow *SNOWStruct) getStuffFromURL(method string, path string, query string
 	return resp.Body, err
 }
 
-func (snow *SNOWStruct) getStuffAndHeadersFromURL(method string, path string, query string, payload []byte, refreshToken bool) (io.ReadCloser, int, map[string][]string, error) {
+func (snow *SNOWStruct) getStuffAndHeadersFromURL(method string, path string, query string, payload []byte) (io.ReadCloser, int, map[string][]string, error) {
 	snowTokenLock.Lock()
 	client := snowConf.Client(context.Background(), snow.Token)
 	newpath, _ := url.JoinPath(snow.BaseURL, path)
