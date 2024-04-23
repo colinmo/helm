@@ -19,6 +19,15 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+type TokenStatusType int64
+
+const (
+	Pending TokenStatusType = iota
+	Inactive
+	Active
+	Spring
+)
+
 type SNOWStruct struct {
 	Task
 	RedirectPath    string
@@ -36,7 +45,7 @@ type SNOWStruct struct {
 	BaseURL         string
 	AuthURL         string
 	StatusCallback  func(bool, string)
-	TokenStatus     GSMTokenStatus
+	TokenStatus     TokenStatusType
 	G               *singleflight.Group
 	Token           *oauth2.Token
 }
