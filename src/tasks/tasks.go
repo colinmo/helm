@@ -91,7 +91,6 @@ func GetAllTasks(
 	zettleHome string) {
 	if msplannerActive {
 		go func() {
-			Planner.Refresh()
 			Planner.Download("")
 			taskWindowRefresh("Planner")
 		}()

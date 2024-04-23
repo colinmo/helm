@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,10 +10,12 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/pkg/browser"
+	"golang.org/x/oauth2"
 )
 
 type MSAuthResponse struct {
@@ -49,9 +52,7 @@ type PlannerStruct struct {
 	Task
 	PlannerAccessTokenChan         chan string
 	PlannerAccessTokenRequestsChan chan string
-	AccessToken                    string
-	RefreshToken                   string
-	Expiration                     time.Time
+	Token                          *oauth2.Token
 	GettingToken                   bool
 	PlanTitles                     map[string]string
 	RedirectPath                   string
@@ -62,100 +63,59 @@ type PlannerStruct struct {
 
 var msTokenLock sync.Mutex
 
+var planConf *oauth2.Config
+
 func (p *PlannerStruct) Init(
 	baseRedirect string,
 	accessToken string,
 	refreshToken string,
 	expiration time.Time) {
-	p.PlannerAccessTokenChan = make(chan string)
-	p.PlannerAccessTokenRequestsChan = make(chan string)
+	msTokenLock.Lock()
 	p.PlanTitles = map[string]string{}
 	p.RedirectPath = "/ms"
-	p.RedirectURI, _ = url.JoinPath(baseRedirect, p.RedirectPath)
 	p.MyTasks = []TaskResponseStruct{}
-	if accessToken != "" {
-		p.AccessToken = accessToken
-		p.RefreshToken = refreshToken
-		p.Expiration = expiration
-	}
-	// Start the background runner
-	p.SingleThreadReturnOrGetPlannerAccessToken()
-}
-
-func (p *PlannerStruct) SingleThreadReturnOrGetPlannerAccessToken() {
-	if p.AccessToken == "" {
-		p.Login()
-	}
-	go func() {
-		for {
-			_, ok := <-p.PlannerAccessTokenRequestsChan
-			if !ok {
-				break
-			}
-			for {
-				if p.AccessToken != "" {
-					break
-				}
-				time.Sleep(1 * time.Second)
-			}
-			if p.Expiration.Before(time.Now()) {
-				p.Refresh()
-			}
-			p.PlannerAccessTokenChan <- p.AccessToken
-		}
-	}()
-}
-
-func (p *PlannerStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
-	var MSToken MSAuthResponse
-	query := r.URL.Query()
-	if query.Get("code") != "" {
-		payload := url.Values{
-			"client_id":           {msApplicationClientId},
-			"scope":               {msScopes},
-			"code":                {query.Get("code")},
-			"redirect_uri":        {p.RedirectURI},
-			"grant_type":          {"authorization_code"},
-			"client_secret":       {msApplicationSecret},
-			"requested_token_use": {"on_behalf_of"},
-		}
-		resp, err := http.PostForm(
-			fmt.Sprintf(
+	planConf = &oauth2.Config{
+		ClientID:     msApplicationClientId,
+		ClientSecret: msApplicationSecret,
+		RedirectURL: func() string {
+			thisUrl, _ := url.JoinPath(baseRedirect, p.RedirectPath)
+			return thisUrl
+		}(),
+		Scopes: strings.Split(msScopes, " "),
+		Endpoint: oauth2.Endpoint{
+			AuthURL: fmt.Sprintf(
+				`https://login.microsoftonline.com/%s/oauth2/v2.0/authorize`,
+				MsApplicationTenant),
+			TokenURL: fmt.Sprintf(
 				`https://login.microsoftonline.com/%s/oauth2/v2.0/token`,
 				MsApplicationTenant,
 			),
-			payload,
-		)
+		},
+	}
+	p.Login()
+}
+
+func (p *PlannerStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	if query.Get("code") != "" {
+		t, err := planConf.Exchange(context.Background(), query.Get("code"))
 		if err != nil {
-			log.Fatalf("Login failed %s\n", err)
 			ConnectionStatusBox(false, "M")
 		} else {
-			err := json.NewDecoder(resp.Body).Decode(&MSToken)
-			if err != nil {
-				log.Fatalf("Failed MS %s\n", err)
-			}
-			p.RefreshToken = MSToken.RefreshToken
-			seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", MSToken.ExpiresIn-10))
-			p.Expiration = time.Now().Add(seconds)
+			p.Token = t
 			ConnectionStatusBox(true, "M")
 			w.Header().Add("Content-type", "text/html")
 			fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.<script>window.close();</script></body></html>")
-			p.AccessToken = MSToken.AccessToken
+			msTokenLock.Unlock()
 		}
 	}
 }
 
 func (p *PlannerStruct) Login() {
-	browser.OpenURL(
-		fmt.Sprintf(`https://login.microsoftonline.com/%s/oauth2/v2.0/authorize?finalUri=?code=xy&client_id=%s&response_type=code&redirect_uri=http://localhost:84/ms&response_mode=query&scope=%s`,
-			MsApplicationTenant,
-			msApplicationClientId,
-			msScopes),
-	)
+	browser.OpenURL(planConf.AuthCodeURL("some-user-state", oauth2.AccessTypeOffline))
 }
 
 func (p *PlannerStruct) Download(specific string) {
-	p.GetAccessToken()
 	ActiveTaskStatusUpdate(1)
 	defer ActiveTaskStatusUpdate(-1)
 
@@ -239,18 +199,15 @@ func (p *PlannerStruct) Download(specific string) {
 }
 
 func (p *PlannerStruct) CallGraphURI(method string, path string, payload []byte, query string) (io.ReadCloser, error) {
-	client := &http.Client{
-		Timeout: time.Second * 10,
-	}
+	msTokenLock.Lock()
+	client := planConf.Client(context.Background(), p.Token)
 	newpath, _ := url.JoinPath("https://graph.microsoft.com/v1.0/", path)
-	if len(query) > 0 {
-		newpath = newpath + "?" + query
-	}
 	req, _ := http.NewRequest(method, newpath, bytes.NewReader(payload))
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", p.AccessToken))
+	req.URL.RawQuery = query
 	req.Header.Set("Content-type", "application/json")
 
 	resp, err := client.Do(req)
+	msTokenLock.Unlock()
 	if err == nil && resp.StatusCode == 200 {
 		return resp.Body, err
 	}
@@ -272,44 +229,4 @@ func (p *PlannerStruct) TeamPriorityToGSMPriority(priority int) string {
 	default:
 		return "5"
 	}
-}
-
-func (p *PlannerStruct) Refresh() {
-	var MSToken MSAuthResponse
-	if len(p.RefreshToken) == 0 {
-		return
-	}
-	payload := url.Values{
-		"client_id":     {msApplicationClientId},
-		"scope":         {msScopes},
-		"refresh_token": {p.RefreshToken},
-		"redirect_uri":  {p.RedirectURI},
-		"grant_type":    {"refresh_token"},
-		"client_secret": {msApplicationSecret},
-	}
-	resp, err := http.PostForm(
-		fmt.Sprintf(`https://login.microsoftonline.com/%s/oauth2/v2.0/token`,
-			MsApplicationTenant,
-		),
-		payload,
-	)
-	if err != nil {
-		ConnectionStatusBox(false, "M")
-		log.Fatalf("Login failed %s\n", err)
-	} else {
-		err := json.NewDecoder(resp.Body).Decode(&MSToken)
-		if err != nil {
-			log.Fatalf("Failed MS %s\n", err)
-		}
-		p.RefreshToken = MSToken.RefreshToken
-		seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", MSToken.ExpiresIn-10))
-		p.Expiration = time.Now().Add(seconds)
-		p.AccessToken = MSToken.AccessToken
-		ConnectionStatusBox(true, "M")
-	}
-}
-
-func (p *PlannerStruct) GetAccessToken() string {
-	p.PlannerAccessTokenRequestsChan <- time.Now().String()
-	return <-p.PlannerAccessTokenChan
 }

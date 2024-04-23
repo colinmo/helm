@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,23 +14,20 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/sync/singleflight"
-
 	"github.com/pkg/browser"
+	"golang.org/x/oauth2"
+	"golang.org/x/sync/singleflight"
 )
 
 type SNOWStruct struct {
 	Task
 	RedirectPath    string
 	RedirectURI     string
-	AccessToken     string
 	UserID          string
 	UserSnumber     string
 	UserTeams       []string
 	UserEmail       string
 	DefaultTeam     string
-	RefreshToken    string
-	Expiration      time.Time
 	MyTasks         []TaskResponseStruct
 	MyIncidents     []TaskResponseStruct
 	LoggedIncidents []TaskResponseStruct
@@ -40,6 +38,7 @@ type SNOWStruct struct {
 	StatusCallback  func(bool, string)
 	TokenStatus     GSMTokenStatus
 	G               *singleflight.Group
+	Token           *oauth2.Token
 }
 
 var SnowStatuses = map[string]string{
@@ -96,58 +95,39 @@ var SNUrgencyLabels = []string{
 	"3 - Low",
 }
 
-// var snowTokenLock sync.Mutex
+var snowConf *oauth2.Config
+
+var snowTokenLock sync.Mutex
 
 func (snow *SNOWStruct) Init(
 	baseRedirect string,
 	accessToken string,
 	refreshToken string,
 	expiration time.Time) {
+	snowTokenLock.Lock()
 	snow.TokenStatus = Inactive
-	if accessToken != "" && time.Now().After(expiration) {
-		snow.TokenStatus = Expired
-	} else if accessToken != "" {
-		snow.AccessToken = accessToken
-		snow.RefreshToken = refreshToken
-		snow.Expiration = expiration
-		snow.TokenStatus = Active
-	}
-	snow.BaseURL = snBaseUrl
-	snow.AuthURL = snAuthUrl
 	snow.RedirectPath = "/snow"
-	snow.RedirectURI, _ = url.JoinPath(baseRedirect, snow.RedirectPath)
-
+	snow.BaseURL = snBaseUrl
+	snowConf = &oauth2.Config{
+		ClientID:     snApplicationClientId,
+		ClientSecret: snApplicationSecret,
+		RedirectURL: func() string {
+			thisUrl, _ := url.JoinPath(baseRedirect, snow.RedirectPath)
+			return thisUrl
+		}(),
+		Scopes: []string{},
+		Endpoint: oauth2.Endpoint{
+			AuthURL: snAuthUrl,
+			TokenURL: func() string {
+				thisUrl, _ := url.JoinPath(snBaseUrl, "oauth_token.do")
+				fmt.Printf("Token swap: %s\n", thisUrl)
+				return thisUrl
+			}(),
+		},
+	}
 	// Start the background runner
 	snow.G = &singleflight.Group{}
-}
-
-func (snow *SNOWStruct) getAccessToken() (bool, error) {
-	_, e, _ := snow.G.Do(
-		"GetSNOWToken",
-		func() (interface{}, error) {
-			if snow.TokenStatus == Active && time.Now().After(snow.Expiration) {
-				// Expired token
-				snow.AccessToken = ""
-				ConnectionStatusBox(false, "S")
-				snow.TokenStatus = Expired
-				snow.Refresh()
-			}
-			if snow.TokenStatus != Active {
-				// No token
-				snow.AccessToken = ""
-				ConnectionStatusBox(false, "S")
-				if snow.RefreshToken == "" {
-					snow.Login()
-				} else {
-					snow.Refresh()
-				}
-				return "", fmt.Errorf("pending token")
-			}
-			// Valid token
-			return snow.AccessToken, nil
-		},
-	)
-	return e == nil, e
+	snow.Login()
 }
 
 func (snow *SNOWStruct) Login() {
@@ -156,7 +136,7 @@ func (snow *SNOWStruct) Login() {
 			"SNOWLogin",
 			func() (interface{}, error) {
 				snow.TokenStatus = Pending
-				browser.OpenURL(snow.AuthURL)
+				browser.OpenURL(snowConf.AuthCodeURL("some-user-state", oauth2.AccessTypeOffline))
 				for {
 					if snow.TokenStatus == Active {
 						return "", nil
@@ -167,268 +147,182 @@ func (snow *SNOWStruct) Login() {
 	}()
 }
 
-var snowTokenLock sync.Mutex
-
-// Reconnect to GSM via username/password
-func (snow *SNOWStruct) Refresh() {
-	snowTokenLock.Lock()
-	if snow.RefreshToken == "" {
-		snow.Login()
-		return
-	}
-	payload := url.Values{
-		"grant_type":    {"refresh_token"},
-		"refresh_token": {snow.RefreshToken},
-		"redirect_uri":  {"http://localhost:84/snow"},
-		"client_id":     {snApplicationClientId},
-		"client_secret": {snApplicationSecret},
-	}
-	targetURL, _ := url.JoinPath(snow.BaseURL, "oauth_token.do")
-	resp, err := http.PostForm(
-		targetURL,
-		payload,
-	)
-	if err == nil {
-		var SNToken MSAuthResponse
-		json.NewDecoder(resp.Body).Decode(&SNToken)
-		snow.AccessToken = SNToken.AccessToken
-		snow.RefreshToken = SNToken.RefreshToken
-		seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", SNToken.ExpiresIn-10))
-		snow.Expiration = time.Now().Add(seconds)
-		ConnectionStatusBox(true, "S")
-		snow.TokenStatus = Active
-		AppPreferences.SnowAccessToken = snow.AccessToken
-		AppPreferences.SnowSRefreshToken = snow.RefreshToken
-		AppPreferences.SnowExpiresAt = snow.Expiration
-	} else {
-		snow.TokenStatus = Expired
-		snow.RefreshToken = ""
-		snow.AccessToken = ""
-		snow.Expiration = snow.Expiration.Add(-200 * time.Hour)
-		AppPreferences.SnowAccessToken = snow.AccessToken
-		AppPreferences.SnowSRefreshToken = snow.RefreshToken
-		AppPreferences.SnowExpiresAt = snow.Expiration
-		ConnectionStatusBox(false, "S")
-	}
-	snowTokenLock.Unlock()
-}
-
 func (snow *SNOWStruct) Download(incidentWindow func(), requestsWindow func(), teamIncidentWindow func()) {
-	snow.getAccessToken()
-	for {
-		if snow.TokenStatus == Active {
-			break
-		}
-	}
 	snow.DownloadIncidents(incidentWindow)
 	snow.DownloadMyRequests(requestsWindow)
 	snow.DownloadTeamIncidents(teamIncidentWindow)
 }
 
 func (snow *SNOWStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
-	var SNToken MSAuthResponse
 	query := r.URL.Query()
 	if query.Get("code") != "" {
-		payload := url.Values{
-			"client_id":           {snApplicationClientId},
-			"code":                {query.Get("code")},
-			"redirect_uri":        {snow.RedirectURI},
-			"grant_type":          {"authorization_code"},
-			"client_secret":       {snApplicationSecret},
-			"requested_token_use": {"on_behalf_of"},
-		}
-		targetURL, _ := url.JoinPath(snow.BaseURL, "oauth_token.do")
-		resp, err := http.PostForm(
-			targetURL,
-			payload,
-		)
+		t, err := snowConf.Exchange(context.Background(), query.Get("code"))
 		if err != nil {
-			log.Fatalf("SN Login failed %s\n", err)
 			ConnectionStatusBox(false, "S")
 		} else {
-			err := json.NewDecoder(resp.Body).Decode(&SNToken)
-			if err != nil {
-				log.Fatalf("Failed SN %s\n", err)
-			}
-			if SNToken.AccessToken == "" {
-				x, y := json.Marshal(SNToken)
-				log.Fatalf("Failed to authenticate to SN %s\n%v\n", x, y)
-			}
-			snow.RefreshToken = SNToken.RefreshToken
-			seconds, _ := time.ParseDuration(fmt.Sprintf("%ds", SNToken.ExpiresIn-10))
-			snow.Expiration = time.Now().Add(seconds)
+			snow.Token = t
 			ConnectionStatusBox(true, "S")
 			w.Header().Add("Content-type", "text/html")
 			fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated to Service Now, you may close this window.<script>window.close();</script></body></html>")
-			snow.AccessToken = SNToken.AccessToken
-			snow.TokenStatus = Active
-			AppPreferences.SnowAccessToken = snow.AccessToken
-			AppPreferences.SnowSRefreshToken = snow.RefreshToken
-			AppPreferences.SnowExpiresAt = snow.Expiration
+			AppPreferences.SnowAccessToken = snow.Token.AccessToken
+			AppPreferences.SnowSRefreshToken = snow.Token.RefreshToken
+			AppPreferences.SnowExpiresAt = snow.Token.Expiry
+			snowTokenLock.Unlock()
 		}
 	}
 }
 
 func (snow *SNOWStruct) DownloadIncidents(afterFunc func()) {
-	ok, _ := snow.getAccessToken()
-	if ok {
-		go func() {
-			snow.G.Do(
-				"DownloadIncidents",
-				func() (interface{}, error) {
-					ActiveTaskStatusUpdate(1)
-					defer ActiveTaskStatusUpdate(-1)
-					snow.MyIncidents = []TaskResponseStruct{}
-					for offset := 0; offset < 200; offset++ {
-						res, _ := snow.GetMyIncidentsForPage(offset)
-						for _, e := range res {
-							myOverride := e.Priority
-							if val, ok := PriorityOverrides.SNow[e.ID]; ok {
-								myOverride = val
-							}
-							snow.MyIncidents = append(
-								snow.MyIncidents,
-								TaskResponseStruct{
-									BusObRecId:       e.ID,
-									ID:               e.Number,
-									Title:            e.Description,
-									CreatedDateTime:  e.Created,
-									Priority:         e.Priority,
-									PriorityOverride: myOverride,
-									Status:           e.Status,
-								},
-							)
+	go func() {
+		snow.G.Do(
+			"DownloadIncidents",
+			func() (interface{}, error) {
+				ActiveTaskStatusUpdate(1)
+				defer ActiveTaskStatusUpdate(-1)
+				snow.MyIncidents = []TaskResponseStruct{}
+				for offset := 0; offset < 200; offset++ {
+					res, _ := snow.GetMyIncidentsForPage(offset)
+					for _, e := range res {
+						myOverride := e.Priority
+						if val, ok := PriorityOverrides.SNow[e.ID]; ok {
+							myOverride = val
 						}
-						if len(res) != 10 {
-							break
-						}
+						snow.MyIncidents = append(
+							snow.MyIncidents,
+							TaskResponseStruct{
+								BusObRecId:       e.ID,
+								ID:               e.Number,
+								Title:            e.Description,
+								CreatedDateTime:  e.Created,
+								Priority:         e.Priority,
+								PriorityOverride: myOverride,
+								Status:           e.Status,
+							},
+						)
 					}
-					sort.SliceStable(
-						snow.MyIncidents,
-						func(i, j int) bool {
-							var toReturn bool
-							if snow.MyIncidents[i].PriorityOverride == snow.MyIncidents[j].PriorityOverride {
-								toReturn = snow.MyIncidents[i].CreatedDateTime.Before(snow.MyIncidents[j].CreatedDateTime)
-							} else {
-								toReturn = snow.MyIncidents[i].PriorityOverride < snow.MyIncidents[j].PriorityOverride
-							}
-							return toReturn
-						},
-					)
-					afterFunc()
-					return "", nil
-				},
-			)
-		}()
-	}
+					if len(res) != 10 {
+						break
+					}
+				}
+				sort.SliceStable(
+					snow.MyIncidents,
+					func(i, j int) bool {
+						var toReturn bool
+						if snow.MyIncidents[i].PriorityOverride == snow.MyIncidents[j].PriorityOverride {
+							toReturn = snow.MyIncidents[i].CreatedDateTime.Before(snow.MyIncidents[j].CreatedDateTime)
+						} else {
+							toReturn = snow.MyIncidents[i].PriorityOverride < snow.MyIncidents[j].PriorityOverride
+						}
+						return toReturn
+					},
+				)
+				afterFunc()
+				return "", nil
+			},
+		)
+	}()
 }
 
 func (snow *SNOWStruct) DownloadMyRequests(afterFunc func()) {
-	ok, _ := snow.getAccessToken()
-	if ok {
-		go func() {
-			snow.G.Do(
-				"DownloadMyRequests",
-				func() (interface{}, error) {
-					ActiveTaskStatusUpdate(1)
-					defer ActiveTaskStatusUpdate(-1)
-					snow.LoggedIncidents = []TaskResponseStruct{}
-					for offset := 0; offset < 200; offset++ {
-						res, _ := snow.GetMyRequestsForPage(offset)
-						for _, e := range res {
-							myOverride := e.Priority
-							if val, ok := PriorityOverrides.SNow[e.ID]; ok {
-								myOverride = val
-							}
-							snow.LoggedIncidents = append(
-								snow.LoggedIncidents,
-								TaskResponseStruct{
-									BusObRecId:       e.ID,
-									ID:               e.Number,
-									Title:            e.Description,
-									CreatedDateTime:  e.Created,
-									Priority:         e.Priority,
-									PriorityOverride: myOverride,
-									Status:           e.Status,
-								},
-							)
+	go func() {
+		snow.G.Do(
+			"DownloadMyRequests",
+			func() (interface{}, error) {
+				ActiveTaskStatusUpdate(1)
+				defer ActiveTaskStatusUpdate(-1)
+				snow.LoggedIncidents = []TaskResponseStruct{}
+				for offset := 0; offset < 200; offset++ {
+					res, _ := snow.GetMyRequestsForPage(offset)
+					for _, e := range res {
+						myOverride := e.Priority
+						if val, ok := PriorityOverrides.SNow[e.ID]; ok {
+							myOverride = val
 						}
-						if len(res) != 10 {
-							break
-						}
+						snow.LoggedIncidents = append(
+							snow.LoggedIncidents,
+							TaskResponseStruct{
+								BusObRecId:       e.ID,
+								ID:               e.Number,
+								Title:            e.Description,
+								CreatedDateTime:  e.Created,
+								Priority:         e.Priority,
+								PriorityOverride: myOverride,
+								Status:           e.Status,
+							},
+						)
 					}
-					sort.SliceStable(
-						snow.LoggedIncidents,
-						func(i, j int) bool {
-							var toReturn bool
-							if snow.LoggedIncidents[i].PriorityOverride == snow.LoggedIncidents[j].PriorityOverride {
-								toReturn = snow.LoggedIncidents[i].CreatedDateTime.Before(snow.LoggedIncidents[j].CreatedDateTime)
-							} else {
-								toReturn = snow.LoggedIncidents[i].PriorityOverride < snow.LoggedIncidents[j].PriorityOverride
-							}
-							return toReturn
-						},
-					)
-					afterFunc()
-					return "", nil
-				},
-			)
-		}()
-	}
+					if len(res) != 10 {
+						break
+					}
+				}
+				sort.SliceStable(
+					snow.LoggedIncidents,
+					func(i, j int) bool {
+						var toReturn bool
+						if snow.LoggedIncidents[i].PriorityOverride == snow.LoggedIncidents[j].PriorityOverride {
+							toReturn = snow.LoggedIncidents[i].CreatedDateTime.Before(snow.LoggedIncidents[j].CreatedDateTime)
+						} else {
+							toReturn = snow.LoggedIncidents[i].PriorityOverride < snow.LoggedIncidents[j].PriorityOverride
+						}
+						return toReturn
+					},
+				)
+				afterFunc()
+				return "", nil
+			},
+		)
+	}()
 }
 
 func (snow *SNOWStruct) DownloadTeamIncidents(afterFunc func()) {
-	ok, _ := snow.getAccessToken()
-	if ok {
-		go func() {
-			snow.G.Do(
-				"DownloadTeamIncidents",
-				func() (interface{}, error) {
-					ActiveTaskStatusUpdate(1)
-					defer ActiveTaskStatusUpdate(-1)
-					snow.TeamIncidents = []TaskResponseStruct{}
-					for offset := 0; offset < 200; offset++ {
-						res, _ := snow.GetMyTeamIncidentsForPage(offset)
-						for _, e := range res {
-							myOverride := e.Priority
-							if val, ok := PriorityOverrides.SNow[e.ID]; ok {
-								myOverride = val
-							}
-							snow.TeamIncidents = append(
-								snow.TeamIncidents,
-								TaskResponseStruct{
-									BusObRecId:       e.ID,
-									ID:               e.Number,
-									Title:            e.Description,
-									CreatedDateTime:  e.Created,
-									Priority:         e.Priority,
-									PriorityOverride: myOverride,
-									Status:           e.Status,
-								},
-							)
+	go func() {
+		snow.G.Do(
+			"DownloadTeamIncidents",
+			func() (interface{}, error) {
+				ActiveTaskStatusUpdate(1)
+				defer ActiveTaskStatusUpdate(-1)
+				snow.TeamIncidents = []TaskResponseStruct{}
+				for offset := 0; offset < 200; offset++ {
+					res, _ := snow.GetMyTeamIncidentsForPage(offset)
+					for _, e := range res {
+						myOverride := e.Priority
+						if val, ok := PriorityOverrides.SNow[e.ID]; ok {
+							myOverride = val
 						}
-						if len(res) != 10 {
-							break
-						}
+						snow.TeamIncidents = append(
+							snow.TeamIncidents,
+							TaskResponseStruct{
+								BusObRecId:       e.ID,
+								ID:               e.Number,
+								Title:            e.Description,
+								CreatedDateTime:  e.Created,
+								Priority:         e.Priority,
+								PriorityOverride: myOverride,
+								Status:           e.Status,
+							},
+						)
 					}
-					sort.SliceStable(
-						snow.TeamIncidents,
-						func(i, j int) bool {
-							var toReturn bool
-							if snow.TeamIncidents[i].PriorityOverride == snow.TeamIncidents[j].PriorityOverride {
-								toReturn = snow.TeamIncidents[i].CreatedDateTime.Before(snow.TeamIncidents[j].CreatedDateTime)
-							} else {
-								toReturn = snow.TeamIncidents[i].PriorityOverride < snow.TeamIncidents[j].PriorityOverride
-							}
-							return toReturn
-						},
-					)
-					afterFunc()
-					return "", nil
-				},
-			)
-		}()
-	}
+					if len(res) != 10 {
+						break
+					}
+				}
+				sort.SliceStable(
+					snow.TeamIncidents,
+					func(i, j int) bool {
+						var toReturn bool
+						if snow.TeamIncidents[i].PriorityOverride == snow.TeamIncidents[j].PriorityOverride {
+							toReturn = snow.TeamIncidents[i].CreatedDateTime.Before(snow.TeamIncidents[j].CreatedDateTime)
+						} else {
+							toReturn = snow.TeamIncidents[i].PriorityOverride < snow.TeamIncidents[j].PriorityOverride
+						}
+						return toReturn
+					},
+				)
+				afterFunc()
+				return "", nil
+			},
+		)
+	}()
 }
 
 func (snow *SNOWStruct) GetMyIncidentsForPage(page int) ([]SnowIncident, error) {
@@ -612,9 +506,8 @@ func createKeyValuePairsForQuery(m map[string]string) string {
 }
 
 func (snow *SNOWStruct) getStuffFromURL(method string, path string, query string, payload []byte, refreshToken bool) (io.ReadCloser, error) {
-	client := &http.Client{
-		Timeout: time.Second * 10,
-	}
+	snowTokenLock.Lock()
+	client := snowConf.Client(context.Background(), snow.Token)
 	newpath, _ := url.JoinPath(snow.BaseURL, path)
 	req, e := http.NewRequest(method, newpath, bytes.NewReader(payload))
 	req.URL.RawQuery = query
@@ -622,30 +515,20 @@ func (snow *SNOWStruct) getStuffFromURL(method string, path string, query string
 	if e != nil {
 		log.Fatal(e)
 	}
-
-	if snow.AccessToken == "" || time.Now().After(snow.Expiration) {
-		snow.Refresh()
-		return snow.getStuffFromURL(method, path, query, payload, false)
-	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", snow.AccessToken))
 	req.Header.Set("Content-type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
+	snowTokenLock.Unlock()
 	if err != nil {
 		log.Fatal(err)
 		return nil, err
-	}
-	if resp.StatusCode == 401 && refreshToken {
-		snow.Refresh()
-		return snow.getStuffFromURL(method, path, query, payload, false)
 	}
 	return resp.Body, err
 }
 
 func (snow *SNOWStruct) getStuffAndHeadersFromURL(method string, path string, query string, payload []byte, refreshToken bool) (io.ReadCloser, int, map[string][]string, error) {
-	client := &http.Client{
-		Timeout: time.Second * 10,
-	}
+	snowTokenLock.Lock()
+	client := snowConf.Client(context.Background(), snow.Token)
 	newpath, _ := url.JoinPath(snow.BaseURL, path)
 	req, e := http.NewRequest(method, newpath, bytes.NewReader(payload))
 	req.URL.RawQuery = query
@@ -654,21 +537,13 @@ func (snow *SNOWStruct) getStuffAndHeadersFromURL(method string, path string, qu
 		log.Fatal(e)
 	}
 
-	if snow.AccessToken == "" || time.Now().After(snow.Expiration) {
-		snow.Refresh()
-		return snow.getStuffAndHeadersFromURL(method, path, query, payload, false)
-	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", snow.AccessToken))
 	req.Header.Set("Content-type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
+	snowTokenLock.Unlock()
 	if err != nil {
 		log.Fatal(err)
 		return nil, 0, map[string][]string{}, err
-	}
-	if resp.StatusCode == 401 && refreshToken {
-		snow.Refresh()
-		return snow.getStuffAndHeadersFromURL(method, path, query, payload, false)
 	}
 	return resp.Body, resp.StatusCode, resp.Header, err
 }
