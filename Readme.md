@@ -45,4 +45,7 @@ This is meant to be a main controller for my day-to-day work and other tasks. Cu
   * [ ] Links to individual task groups
   * [ ] Historical burndown
   * [ ] Other links/ personal stats
+  * [ ] Status of Kubernetes things
+    * [ ] `kubectl --context=tst --namespace=itarch exec --stdin --tty coltest-lf6mc -- free`
+  * [ ] Include the `ahab` Kubernetes control function
 * [ ] Add Name to Notes

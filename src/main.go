@@ -16,7 +16,9 @@ import (
 	"time"
 
 	icon "vonexplaino.com/m/v2/helm/icon"
+	"vonexplaino.com/m/v2/helm/iserver"
 	"vonexplaino.com/m/v2/helm/tasks"
+	vwidget "vonexplaino.com/m/v2/helm/widget"
 
 	fyne "fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -76,6 +78,8 @@ var stringDateFormat = "20060102T15:04:05"
 
 var allAvailableTeams map[string]string
 var alphaTeams []string
+
+var iServer iserver.IServerStruct
 
 func setup() {
 	os.Setenv("TZ", "Australia/Brisbane")
@@ -235,6 +239,7 @@ func main() {
 			activeTaskStatusUpdate,
 			filepath.Dir(appPreferences.ZettlekastenHome),
 		)
+		iServer.Init("http://localhost:84/")
 	}()
 	if desk, ok := thisApp.(desktop.App); ok {
 		// desk.SetSystemTrayIcon(fyne.NewStaticResource("Systray", icon.IconWhite))
@@ -533,7 +538,13 @@ func markdownWindowSetup() {
 			writeFileContents(path.Join(appPreferences.ZettlekastenHome, x), markdownInput.Text)
 		}),
 	)
-	content := container.NewBorder(menu, widget.NewLabelWithData(AppStatus.CurrentZettleDKB), nil, nil, markdownInput)
+	content := container.NewBorder(
+		menu,
+		widget.NewLabelWithData(AppStatus.CurrentZettleDKB),
+		nil,
+		nil,
+		markdownInput,
+	)
 	mainWindow.SetContent(content)
 	mainWindow.SetCloseIntercept(func() {
 		mainWindow.Hide()
@@ -725,6 +736,19 @@ func taskWindowSetup() {
 	)
 	TaskTabsIndexes = map[string]int{}
 	TaskTabs = container.NewAppTabs()
+	TaskTabsIndexes["Dashboard"] = 0
+	TaskTabs.Append(
+		container.NewTabItem(
+			"Dashboard",
+			container.NewBorder(
+				nil,
+				nil,
+				nil,
+				nil,
+				container.NewAdaptiveGrid(2, vwidget.NewGaugeWidget(10, 20, 15), vwidget.NewGaugeWidget(0, 100, 3)),
+			),
+		),
+	)
 	if appPreferences.TaskPreferences.MSPlannerActive {
 		TaskTabsIndexes["Planner"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
