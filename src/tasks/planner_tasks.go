@@ -18,15 +18,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type MSAuthResponse struct {
-	TokenType    string `json:"token_type"`
-	Scope        string `json:"scope"`
-	ExpiresIn    int    `json:"expires_in"`
-	ExpiresDate  time.Time
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-}
-
 type myTasksGraphResponse struct {
 	NextPage string `json:"@odata.nextLink"`
 	Value    []struct {
@@ -98,9 +89,12 @@ func (p *PlannerStruct) Init(
 func (p *PlannerStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	if query.Get("code") != "" {
+		fmt.Printf("Code\n")
 		t, err := planConf.Exchange(context.Background(), query.Get("code"))
 		if err != nil {
 			ConnectionStatusBox(false, "M")
+			w.Header().Add("Content-type", "text/html")
+			fmt.Fprintf(w, "<html><head></head><body><H1>Failed to Authenticate<p>%s</body></html>", err.Error())
 		} else {
 			p.Token = t
 			ConnectionStatusBox(true, "M")
