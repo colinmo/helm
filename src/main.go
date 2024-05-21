@@ -18,7 +18,7 @@ import (
 	"vonexplaino.com/m/v2/helm/iserver"
 	"vonexplaino.com/m/v2/helm/kube"
 	"vonexplaino.com/m/v2/helm/tasks"
-	vwidget "vonexplaino.com/m/v2/helm/widget"
+	vonwidget "vonexplaino.com/m/v2/helm/widget"
 
 	fyne "fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -731,7 +731,7 @@ func taskWindowSetup() {
 				nil,
 				nil,
 				nil,
-				container.NewAdaptiveGrid(2, vwidget.NewGaugeWidget(10, 20, 15), vwidget.NewGaugeWidget(0, 100, 3)),
+				container.NewAdaptiveGrid(2, vonwidget.NewGaugeWidget(10, 20, 15), vonwidget.NewGaugeWidget(0, 100, 3)),
 			),
 		),
 	)
@@ -905,6 +905,15 @@ func setupKubenetesWindow() *fyne.Container {
 				),
 			),
 			// Monitor
+			container.NewHBox(
+				vonwidget.NewLinegraphWidget(
+					0,
+					100,
+					[]float64{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 50, 0, 25, 50, 75},
+					"",
+					"MiB",
+				),
+			),
 		), nil, nil, nil, container.NewWithoutLayout(),
 	)
 }

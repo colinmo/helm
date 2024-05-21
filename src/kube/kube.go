@@ -39,11 +39,12 @@ func GetMemoryForPod(podname string, results binding.ExternalStringList) {
 	if memoryMonitorRunning {
 		memoryMonitorQuit <- true
 	}
+	fmt.Printf("One at a time\n")
 	memoryMonitorRunning = true
 	go func() {
-		cmd := exec.Command(`kubectl`,
-			"--context="+context,
-			"--namespace="+namespace,
+		cmdArray := []string{`kubectl`,
+			"--context=" + context,
+			"--namespace=" + namespace,
 			"exec",
 			"--stdin",
 			"--tty",
@@ -51,22 +52,25 @@ func GetMemoryForPod(podname string, results binding.ExternalStringList) {
 			"--",
 			"bash",
 			"-c",
-			"while true ; do free && sleep 300 ; done",
-		)
+			"while true ; do free && sleep 300 ; done"}
+		cmd := exec.Command(cmdArray[0], cmdArray[1:]...)
 
 		stdout, _ := cmd.StdoutPipe()
 		err := cmd.Start()
+		fmt.Printf("Start %v\n", cmdArray)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
+			fmt.Printf(".")
 			select {
 			case <-memoryMonitorQuit:
 				return
 			default:
 				m := scanner.Text()
+				fmt.Printf("\n%s\n", m)
 				if strings.Contains(m, "Mem: ") {
 					re := regexp.MustCompile(`\s+`)
 					split := re.Split(m, -1)
@@ -74,8 +78,10 @@ func GetMemoryForPod(podname string, results binding.ExternalStringList) {
 				}
 			}
 		}
+		fmt.Printf("Wait")
 		cmd.Wait()
 	}()
+	fmt.Printf("Done!")
 }
 
 func GetDeployments() ([]string, error) {
