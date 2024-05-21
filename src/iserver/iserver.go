@@ -55,7 +55,7 @@ func (p *IServerStruct) StartLocalServers() {
 		p.Authenticate(w, r)
 	})
 	go func() {
-		AuthWebServer = &http.Server{Addr: ":85", Handler: nil}
+		AuthWebServer = &http.Server{Addr: ":86", Handler: nil}
 		if err := AuthWebServer.ListenAndServe(); err != nil {
 			log.Fatal(err)
 		}
