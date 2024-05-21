@@ -17,8 +17,8 @@ import (
 type Linegraph struct {
 	widget.BaseWidget
 
-	min, max       float64
-	points         []float64
+	min, max       int
+	points         []int
 	xlabel, ylabel string
 	id             string
 
@@ -29,8 +29,8 @@ type Linegraph struct {
 var linegraphBaseImage *fyne.StaticResource
 
 func NewLinegraphWidget(
-	min, max float64,
-	points []float64,
+	min, max int,
+	points []int,
 	xlabel, ylabel string,
 ) (newLinegraph *Linegraph) {
 	newLinegraph = &Linegraph{
@@ -78,7 +78,7 @@ func (item *Linegraph) CreateRenderer() fyne.WidgetRenderer {
 
 	item.xlegend = widget.NewLabel(item.xlabel)
 	item.ylegend = widget.NewLabel(item.ylabel)
-	item.maxlegend = widget.NewLabel(fmt.Sprintf("%f", item.max))
+	item.maxlegend = widget.NewLabel(fmt.Sprintf("%d", item.max))
 
 	/*
 		c := container.NewBorder(
@@ -100,7 +100,8 @@ func (item *Linegraph) CreateRenderer() fyne.WidgetRenderer {
 	return widget.NewSimpleRenderer(c)
 }
 
-func (item *Linegraph) UpdateItems(newvalues []float64) {
+func (item *Linegraph) UpdateItems(newvalues []int) {
+	item.points = newvalues
 	item.center = canvas.NewImageFromResource(
 		fyne.NewStaticResource(item.id+".svg", []byte(`<?xml version="1.0"?>
 		<svg version="1.1" width="600" height="320" viewBox="0,0,600,320"
@@ -112,13 +113,26 @@ func (item *Linegraph) UpdateItems(newvalues []float64) {
 	item.Refresh()
 }
 
+func (item *Linegraph) UpdateMax(newmax int) {
+	item.max = newmax
+	fmt.Printf("New max %d\n", item.max)
+	item.Refresh()
+}
+
 func (item *Linegraph) ValuesToPointString() (pointString string) {
 	pointString = "M"
 	prefix := ""
-	xstep := 580 / (len(item.points) - 1)
-	for i, x := range item.points {
-		pointString = fmt.Sprintf("%s%s%d,%f ", pointString, prefix, 10+i*xstep, 10+300-(x/item.max)*300)
-		prefix = "L"
+	thisLen := len(item.points) - 1
+	if thisLen == 0 {
+		thisLen = 2
 	}
+	xstep := 580 / thisLen
+	if item.max != 0 {
+		for i, x := range item.points {
+			pointString = fmt.Sprintf("%s%s%d,%d ", pointString, prefix, 10+i*xstep, 10+300-(x/item.max)*300)
+			prefix = "L"
+		}
+	}
+	fmt.Printf("New line: %s\n", pointString)
 	return
 }

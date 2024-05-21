@@ -6,6 +6,7 @@ import (
 	"log"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2/data/binding"
@@ -35,7 +36,7 @@ func Setup(context1, namespace1 string) {
 	namespace = namespace1
 }
 
-func GetMemoryForPod(podname string, results binding.ExternalStringList) {
+func GetMemoryForPod(podname string, results binding.ExternalIntList, maxMemory *int) {
 	if memoryMonitorRunning {
 		memoryMonitorQuit <- true
 	}
@@ -52,7 +53,7 @@ func GetMemoryForPod(podname string, results binding.ExternalStringList) {
 			"--",
 			"bash",
 			"-c",
-			"while true ; do free && sleep 300 ; done"}
+			"while true ; do free && sleep 10 ; done"}
 		cmd := exec.Command(cmdArray[0], cmdArray[1:]...)
 
 		stdout, _ := cmd.StdoutPipe()
@@ -74,7 +75,10 @@ func GetMemoryForPod(podname string, results binding.ExternalStringList) {
 				if strings.Contains(m, "Mem: ") {
 					re := regexp.MustCompile(`\s+`)
 					split := re.Split(m, -1)
-					results.Append(split[2])
+					*maxMemory, _ = strconv.Atoi(split[1])
+					newMemory, _ := strconv.Atoi(split[2])
+					fmt.Printf("Split: %v\n%s;%d\n%s\n", split, split[1], *maxMemory, split[2])
+					results.Append(newMemory)
 				}
 			}
 		}

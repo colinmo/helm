@@ -829,7 +829,16 @@ func taskWindowSetup() {
 func setupKubenetesWindow() *fyne.Container {
 	deployments := binding.BindStringList(&[]string{})
 	pods := binding.BindStringList(&[]string{})
-	timingResults := binding.BindStringList(&[]string{})
+	timingResults := binding.BindIntList(&[]int{})
+	timingResultsList := binding.BindStringList(&[]string{})
+	memoryMonitor := vonwidget.NewLinegraphWidget(
+		0,
+		100,
+		[]int{},
+		"",
+		"MiB",
+	)
+	maxMemory := 0
 	return container.NewBorder(
 		container.NewGridWrap(
 			fyne.NewSize(300, 600),
@@ -884,8 +893,23 @@ func setupKubenetesWindow() *fyne.Container {
 							widget.NewLabel(lab),
 							layout.NewSpacer(),
 							widget.NewButton("watch", func() {
-								timingResults.Set([]string{})
-								kube.GetMemoryForPod(lab, timingResults)
+								timingResults.Set([]int{})
+								kube.GetMemoryForPod(lab, timingResults, &maxMemory)
+								timingResults.AddListener(
+									binding.NewDataListener(func() {
+										x, _ := timingResults.Get()
+										fmt.Printf("Results: %v\n", x)
+										memoryMonitor.UpdateMax(maxMemory)
+										memoryMonitor.UpdateItems(x)
+									}),
+								)
+								// x
+								newList := []string{}
+								for i := 0; i < timingResults.Length(); i++ {
+									me, _ := timingResults.GetItem(i)
+									newList = append(newList, fmt.Sprintf("%d", me))
+								}
+								timingResultsList.Set(newList)
 							}),
 						}
 					},
@@ -895,24 +919,19 @@ func setupKubenetesWindow() *fyne.Container {
 				widget.NewLabelWithStyle("Pod Monitor", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 				nil, nil, nil,
 				widget.NewListWithData(
-					timingResults,
+					timingResultsList,
 					func() fyne.CanvasObject {
 						return widget.NewLabel("")
 					},
 					func(i binding.DataItem, o fyne.CanvasObject) {
-						o.(*widget.Label).Bind(i.(binding.String))
+						val, _ := i.(binding.Int)
+						o.(*widget.Label).Text = fmt.Sprintf("%d", val)
 					},
 				),
 			),
 			// Monitor
 			container.NewHBox(
-				vonwidget.NewLinegraphWidget(
-					0,
-					100,
-					[]float64{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 50, 0, 25, 50, 75},
-					"",
-					"MiB",
-				),
+				memoryMonitor,
 			),
 		), nil, nil, nil, container.NewWithoutLayout(),
 	)
