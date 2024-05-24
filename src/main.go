@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	icon "vonexplaino.com/m/v2/helm/icon"
-	"vonexplaino.com/m/v2/helm/iserver"
-	"vonexplaino.com/m/v2/helm/kube"
-	"vonexplaino.com/m/v2/helm/tasks"
-	vonwidget "vonexplaino.com/m/v2/helm/widget"
+	icon "vonexplaino.com/m/v2/hq/icon"
+	"vonexplaino.com/m/v2/hq/iserver"
+	"vonexplaino.com/m/v2/hq/kube"
+	"vonexplaino.com/m/v2/hq/tasks"
+	vonwidget "vonexplaino.com/m/v2/hq/widget"
 
 	fyne "fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -148,7 +148,6 @@ func overrides() {
 			).Objects
 			ztConnectionActive.Refresh()
 		}
-		taskWindow.Content().Refresh()
 	}
 	jiraConnectionActive = container.NewStack()
 	msConnectionActive = container.NewStack()
@@ -649,8 +648,6 @@ func preferencesWindowSetup() {
 		thisApp.Preferences().SetString("KubeContext", appPreferences.KubePreferences.Context)
 		appPreferences.KubePreferences.Namespace = kubeNamespace.Text
 		thisApp.Preferences().SetString("KubeNamespace", appPreferences.KubePreferences.Namespace)
-
-		kube.Setup(appPreferences.KubePreferences.Context, appPreferences.KubePreferences.Namespace)
 	})
 	preferencesWindow.SetContent(
 		container.New(
@@ -731,20 +728,23 @@ func taskWindowSetup() {
 				nil,
 				nil,
 				nil,
-				container.NewAdaptiveGrid(2, vonwidget.NewGaugeWidget(10, 20, 15), vonwidget.NewGaugeWidget(0, 100, 3)),
+				container.NewAdaptiveGrid(2, widget.NewLabel("OK")),
 			),
 		),
 	)
 	if appPreferences.TaskPreferences.MSPlannerActive {
 		TaskTabsIndexes["Planner"] = len(TaskTabsIndexes)
 		TaskTabs.Append(
-			container.NewTabItem("Planner", container.NewBorder(
-				nil,
-				nil,
-				nil,
-				nil,
-				container.NewWithoutLayout(),
-			)),
+			container.NewTabItem(
+				"Planner",
+				container.NewBorder(
+					nil,
+					nil,
+					nil,
+					nil,
+					container.NewWithoutLayout(),
+				),
+			),
 		)
 	}
 	if appPreferences.TaskPreferences.JiraActive {
@@ -831,17 +831,17 @@ func setupKubenetesWindow() *fyne.Container {
 	pods := binding.BindStringList(&[]string{})
 	timingResults := binding.BindIntList(&[]int{})
 	timingResultsList := binding.BindStringList(&[]string{})
+	maxMemory := 0
 	memoryMonitor := vonwidget.NewLinegraphWidget(
 		0,
-		100,
-		[]int{},
+		400,
+		[]int{20, 30, 102, 400, 3, 222, 223, 102},
 		"",
 		"MiB",
 	)
-	maxMemory := 0
 	return container.NewBorder(
 		container.NewGridWrap(
-			fyne.NewSize(300, 600),
+			fyne.NewSize(300, 300),
 			// Deployments
 			container.NewBorder(
 				widget.NewLabelWithStyle("Deployments", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
@@ -898,14 +898,17 @@ func setupKubenetesWindow() *fyne.Container {
 								timingResults.AddListener(
 									binding.NewDataListener(func() {
 										x, _ := timingResults.Get()
-										fmt.Printf("Results: %v\n", x)
-										memoryMonitor.UpdateMax(maxMemory)
-										memoryMonitor.UpdateItems(x)
+										memoryMonitor.UpdateItemsAndMax(x, maxMemory)
+										memoryMonitor.Refresh()
 									}),
 								)
 								// x
 								newList := []string{}
-								for i := 0; i < timingResults.Length(); i++ {
+								lastX := timingResults.Length() - 20
+								if lastX < 0 {
+									lastX = 0
+								}
+								for i := lastX; i < timingResults.Length(); i++ {
 									me, _ := timingResults.GetItem(i)
 									newList = append(newList, fmt.Sprintf("%d", me))
 								}
@@ -1216,7 +1219,6 @@ func taskWindowRefresh(specific string) {
 											"ORDERBYparent^ORDERBYname",
 											0,
 										)
-										fmt.Printf("Found: %v\n", foundServices)
 										if err == nil {
 											results := []string{}
 											foundAffectsOfferings = map[string]string{}
@@ -1493,6 +1495,8 @@ func taskWindowRefresh(specific string) {
 				nil,
 				list2,
 			)
+
+			TaskTabs.Items[TaskTabsIndexes["SNIncidents"]].Text = fmt.Sprintf("Incidents (%d)", len(tasks.Snow.MyIncidents))
 		}
 		if _, ok := TaskTabsIndexes["SNTeamIncidents"]; ok && (specific == "" || specific == "SNTeamIncidents") {
 			var list3 fyne.CanvasObject
@@ -1559,6 +1563,7 @@ func taskWindowRefresh(specific string) {
 				nil,
 				list3,
 			)
+			TaskTabs.Items[TaskTabsIndexes["SNTeamIncidents"]].Text = fmt.Sprintf("Team Incidents (%d)", len(tasks.Snow.TeamIncidents))
 		}
 		if _, ok := TaskTabsIndexes["SNRequests"]; ok && (specific == "" || specific == "SNRequests") {
 			var list4 fyne.CanvasObject
@@ -1622,6 +1627,7 @@ func taskWindowRefresh(specific string) {
 				nil,
 				list4,
 			)
+			TaskTabs.Items[TaskTabsIndexes["SNRequests"]].Text = fmt.Sprintf("Requests (%d)", len(tasks.Snow.LoggedIncidents))
 		}
 	}
 	if _, ok := TaskTabsIndexes["Planner"]; ok &&
@@ -1746,6 +1752,7 @@ func taskWindowRefresh(specific string) {
 			nil,
 			list5,
 		)
+		TaskTabs.Items[TaskTabsIndexes["Planner"]].Text = fmt.Sprintf("Plans (%d)", len(tasks.Planner.MyTasks))
 	}
 	if _, ok := TaskTabsIndexes["Jira"]; ok && appPreferences.TaskPreferences.JiraActive && (specific == "" || specific == "Jira") {
 		// Get the teams
@@ -1877,6 +1884,7 @@ func taskWindowRefresh(specific string) {
 			nil,
 			list,
 		)
+		TaskTabs.Items[TaskTabsIndexes["Jira"]].Text = fmt.Sprintf("Jira (%d)", len(tasks.Jira.MyTasks))
 	}
 	if _, ok := TaskTabsIndexes["Zettle"]; ok && (specific == "" || specific == "Zettle") {
 		// MY PLANNER
@@ -1901,7 +1909,6 @@ func taskWindowRefresh(specific string) {
 					container.NewStack(
 						widget.NewLabel(""),
 						newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-							fmt.Printf("%s\n", thisID)
 							browser.OpenFile(thisID)
 						}),
 					))
@@ -1984,13 +1991,16 @@ func taskWindowRefresh(specific string) {
 			nil,
 			list5,
 		)
+		TaskTabs.Items[TaskTabsIndexes["Zettle"]].Text = fmt.Sprintf("Zettlekasten (%d)", len(tasks.Zettle.MyTasks))
 	}
-	if _, ok := TaskTabsIndexes["Kube"]; ok && (specific == "" || specific == "Kube") {
-		fmt.Printf("Kube active")
-	}
-	if _, ok := TaskTabsIndexes["Dashboard"]; ok && (specific == "" || specific == "Dashboard") {
-		fmt.Printf("Dashboard active")
-	}
+	/*
+		if _, ok := TaskTabsIndexes["Kube"]; ok && (specific == "" || specific == "Kube") {
+
+		}
+		if _, ok := TaskTabsIndexes["Dashboard"]; ok && (specific == "" || specific == "Dashboard") {
+
+		}
+	*/
 	taskWindow.Content().Refresh()
 }
 

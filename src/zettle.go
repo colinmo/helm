@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path"
 	"time"
@@ -32,7 +33,7 @@ func getFileContentsAndCreateIfMissing(filename string) string {
 func writeFileContents(filename string, content string) {
 	err := os.WriteFile(filename, []byte(content), 0666)
 	if err != nil {
-		fmt.Printf("Failed to save\n%s\n", err)
+		log.Fatalf("Failed to save\n%s\n", err)
 	}
 }
 

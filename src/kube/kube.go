@@ -2,14 +2,29 @@ package kube
 
 import (
 	"bufio"
+	"bytes"
+	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2/data/binding"
+
+	apps "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	restclient "k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	"k8s.io/client-go/util/homedir"
 )
 
 type PreferencesStruct struct {
@@ -18,34 +33,82 @@ type PreferencesStruct struct {
 	Namespace string
 	Config    string
 }
-type saveOutput struct {
-	savedOutput []byte
-}
 
-func (so *saveOutput) Write(p []byte) (n int, err error) {
-	so.savedOutput = append(so.savedOutput, p...)
-	return len(p), nil
-}
-
-var context, namespace string
+var thisContext, thisNamespace string
 var memoryMonitorQuit = make(chan bool)
 var memoryMonitorRunning = false
+var Kubeconfig *string
+var FilteredByDeployment string = ""
 
 func Setup(context1, namespace1 string) {
-	context = context1
-	namespace = namespace1
+	if home := homedir.HomeDir(); home != "" {
+		Kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		Kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	}
+	flag.Parse()
+	thisContext = context1
+	thisNamespace = namespace1
+
+	os.Setenv("PATH", fmt.Sprintf("%s:/Users/s457972/.krew/bin/:/Users/s457972/.docker/bin/", os.Getenv("PATH")))
+	cmd := exec.Command(
+		"kubectl",
+		"oidc-login",
+		"get-token",
+		"--oidc-issuer-url=https://auth.griffith.edu.au",
+		"--oidc-client-id=oidc-kubernetes",
+		"--oidc-extra-scope=groups",
+		"--oidc-extra-scope=department",
+		"--grant-type=authcode",
+	)
+	if errors.Is(cmd.Err, exec.ErrDot) {
+		cmd.Err = nil
+	}
+
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		logOut(fmt.Sprintf("Error: %v\nStdOut: %v\nStdErr: %v\n", err, out.String(), stderr.String()))
+	} else {
+		logOut(fmt.Sprintf("Output: %v\n", out.String()))
+	}
+}
+func BuildContextConfigFromFlags(masterUrl, kubeconfigPath string) (*restclient.Config, error) {
+	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath},
+		&clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: masterUrl}, CurrentContext: thisContext}).ClientConfig()
+}
+
+func SwitchContext(context1 string) (*kubernetes.Clientset, error) {
+	thisContext = context1
+	return GetClientset()
+}
+
+func GetClientset() (*kubernetes.Clientset, error) {
+	// use the current context in kubeconfig
+	config, err := BuildContextConfigFromFlags("", *Kubeconfig)
+	if err != nil {
+		logOut(fmt.Sprintf("Clientset failed %v\n", err))
+		return nil, err
+	}
+	logOut(fmt.Sprintf("Config: %v\n", config))
+
+	// create the clientset
+	return kubernetes.NewForConfig(config)
 }
 
 func GetMemoryForPod(podname string, results binding.ExternalIntList, maxMemory *int) {
 	if memoryMonitorRunning {
 		memoryMonitorQuit <- true
 	}
-	fmt.Printf("One at a time\n")
 	memoryMonitorRunning = true
 	go func() {
 		cmdArray := []string{`kubectl`,
-			"--context=" + context,
-			"--namespace=" + namespace,
+			"--context=" + thisContext,
+			"--namespace=" + thisNamespace,
 			"exec",
 			"--stdin",
 			"--tty",
@@ -53,90 +116,97 @@ func GetMemoryForPod(podname string, results binding.ExternalIntList, maxMemory 
 			"--",
 			"bash",
 			"-c",
-			"while true ; do free && sleep 10 ; done"}
+			"while true ; do free && sleep 60 ; done"}
 		cmd := exec.Command(cmdArray[0], cmdArray[1:]...)
 
 		stdout, _ := cmd.StdoutPipe()
 		err := cmd.Start()
-		fmt.Printf("Start %v\n", cmdArray)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
-			fmt.Printf(".")
 			select {
 			case <-memoryMonitorQuit:
 				return
 			default:
 				m := scanner.Text()
-				fmt.Printf("\n%s\n", m)
 				if strings.Contains(m, "Mem: ") {
 					re := regexp.MustCompile(`\s+`)
 					split := re.Split(m, -1)
 					*maxMemory, _ = strconv.Atoi(split[1])
 					newMemory, _ := strconv.Atoi(split[2])
-					fmt.Printf("Split: %v\n%s;%d\n%s\n", split, split[1], *maxMemory, split[2])
 					results.Append(newMemory)
 				}
 			}
 		}
-		fmt.Printf("Wait")
 		cmd.Wait()
 	}()
-	fmt.Printf("Done!")
 }
 
-func GetDeployments() ([]string, error) {
-	cmdVariables := []string{
-		`kubectl`,
-		"--context=" + context,
-		"--namespace=" + namespace,
-		"--output=json",
-		"get",
-		"deployments",
-		"-o",
-		"jsonpath='{.items[*].metadata.name}'",
-	}
-	bob, err := runAndReturn(cmdVariables)
+func GetDeployments() (returnme []string, err error) {
+	deps, err := getDeployments()
 	if err == nil {
-		return strings.Split(strings.Trim(bob[0], "'"), " "), nil
+		returnme = []string{}
+		for _, x := range deps.Items {
+			returnme = append(returnme, x.Name)
+		}
 	}
-	return bob, err
+	return
 }
 
-func GetPods() ([]string, error) {
-	cmdVariables := []string{
-		`kubectl`,
-		"--context=" + context,
-		"--namespace=" + namespace,
-		"--output=json",
-		"get",
-		"pods",
-		"-o",
-		"jsonpath='{.items[*].metadata.name}'",
+func getDeployments() (*apps.DeploymentList, error) {
+	clientset, err := GetClientset()
+
+	if err != nil {
+		x := apps.DeploymentList{}
+		return &x, err
 	}
-	bob, err := runAndReturn(cmdVariables)
+	p, e := clientset.AppsV1().Deployments(thisNamespace).List(context.TODO(), metav1.ListOptions{})
+	logOut(fmt.Sprintf("Depl error: %v\n", e))
+	logOut(fmt.Sprintf("Found %d deps\n - %s,%s\n", len(p.Items), thisContext, thisNamespace))
+	return p, e
+}
+
+func GetPods() (returnme []string, err error) {
+	deps, err := getPods()
 	if err == nil {
-		return strings.Split(strings.Trim(bob[0], "'"), " "), nil
+		returnme = []string{}
+		for _, x := range deps.Items {
+			returnme = append(returnme, x.Name)
+		}
 	}
-	return bob, err
+	return
 }
 
-func runAndReturn(cmdVariables []string) ([]string, error) {
-	fmt.Printf("Running %v\n", cmdVariables)
-	cmd := exec.Command(cmdVariables[0], cmdVariables[1:]...)
+func getPods() (*v1.PodList, error) {
+	clientset, err := GetClientset()
 
-	var so saveOutput
-	cmd.Stdout = &so
-	cmd.Stderr = &so
-	bob := cmd.Run()
-	if bob != nil && bob.Error() != "exit status 1" {
-		log.Fatalf("Damn %v\n", bob)
-		return []string{}, bob
+	if err != nil {
+		x := v1.PodList{}
+		return &x, err
 	}
-	xy := string(so.savedOutput)
-	fmt.Printf("Returning %s\n", xy)
-	return strings.Split(strings.Trim(xy, "\r\n"), "\r\n"), bob
+	p, e := clientset.CoreV1().Pods(thisNamespace).List(context.TODO(), metav1.ListOptions{})
+	logOut(fmt.Sprintf("Pod error: %v\n", e))
+	if FilteredByDeployment != "" {
+		lastIndexFilter := len(FilteredByDeployment)
+		n := 0
+		for _, p1 := range p.Items {
+			if len(p1.Name) > lastIndexFilter && p1.Name[0:lastIndexFilter] == FilteredByDeployment {
+				p.Items[n] = p1
+				n++
+			}
+		}
+		p.Items = p.Items[:n]
+	}
+	logOut(fmt.Sprintf("Found %d pods\n - %s,%s\n", len(p.Items), thisContext, thisNamespace))
+	return p, e
+}
+
+func logOut(this string) {
+	f, _ := os.OpenFile("/tmp/test.txt",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f.WriteString(this)
+	f.Close()
 }

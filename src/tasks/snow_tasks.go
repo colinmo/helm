@@ -129,7 +129,6 @@ func (snow *SNOWStruct) Init(
 			AuthURL: snAuthUrl,
 			TokenURL: func() string {
 				thisUrl, _ := url.JoinPath(snBaseUrl, "oauth_token.do")
-				fmt.Printf("Token swap: %s\n", thisUrl)
 				return thisUrl
 			}(),
 		},
@@ -451,11 +450,6 @@ func (snow *SNOWStruct) GetAnyTable(table string, fields []string, filter map[st
 			page),
 		[]byte{},
 	)
-	fmt.Printf("P: %s\n, Q: %s\n", "/api/now/table/"+table, fmt.Sprintf(
-		"sysparm_limit=20&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d",
-		strings.Join(fields, ","),
-		createKeyValuePairsForQuery(filter)+sort,
-		page))
 	var toReturn []byte
 	if err == nil {
 		defer result.Close()

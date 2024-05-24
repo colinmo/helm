@@ -89,7 +89,6 @@ func (p *PlannerStruct) Init(
 func (p *PlannerStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	if query.Get("code") != "" {
-		fmt.Printf("Code\n")
 		t, err := planConf.Exchange(context.Background(), query.Get("code"))
 		if err != nil {
 			ConnectionStatusBox(false, "M")

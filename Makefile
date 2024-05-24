@@ -19,5 +19,5 @@ build-newosx:
 build-osxu: build-oldosx build-newosx build-osx
 	cd bin && \
 	lipo -create -output hq macold macnew && \
-	cp hq ../src/HQ.app/Contents/MacOS && \
+	cp hq ../src/HQ.app/Contents/MacOS/hq && \
 	codesign -f -s - ../src/HQ.app

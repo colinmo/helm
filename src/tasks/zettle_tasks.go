@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -47,7 +46,6 @@ func (zet *ZettleStruct) Download(dir string) {
 				f, err := os.ReadFile(path)
 				if err == nil {
 					if lookupRegex.Match(f) {
-						fmt.Printf("%s\n", path)
 						zet.MyTasks = append(zet.MyTasks, fileToTask(path))
 					}
 				} else {

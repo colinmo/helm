@@ -4,7 +4,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"os/exec"
 	"strings"
 )
@@ -24,7 +23,6 @@ func searchFiles(directory string, lookfor string) ([]string, error) {
 	cmdVariables := []string{`/bin/sh`, "-c", `find . \( -name '*.markdown' -o -name '*.md' \) -exec grep -li '` + lookfor + `' {} \;`}
 	cmd := exec.Command(cmdVariables[0], cmdVariables[1:]...)
 	cmd.Dir = directory
-	fmt.Print(strings.Join(cmdVariables, " ") + "\n")
 
 	var so saveOutput
 	cmd.Stdout = &so
@@ -39,7 +37,6 @@ func searchFiles(directory string, lookfor string) ([]string, error) {
 			// Problem with input to executable
 			return []string{}, errors.New("bad string format")
 		}
-		fmt.Printf("Failed with %s\n", bob)
 	}
 	output := strings.Split(strings.Trim(string(so.savedOutput), "./\n"), "\n")
 	for i, x := range output {

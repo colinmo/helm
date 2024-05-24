@@ -65,7 +65,6 @@ func (p *IServerStruct) StartLocalServers() {
 func (p *IServerStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	if query.Get("code") != "" {
-		fmt.Printf("Code\n")
 		t, err := planConf.Exchange(context.Background(), query.Get("code"))
 		if err != nil {
 			//ConnectionStatusBox(false, "M")
@@ -85,6 +84,7 @@ func (p *IServerStruct) Login() {
 	browser.OpenURL(planConf.AuthCodeURL("some-user-state", oauth2.AccessTypeOffline))
 }
 
+/*
 func (p *IServerStruct) WhoAmI() {
 	mep, err := p.CallRestEndpoint("GET", "/odata/Me", []byte{}, "")
 	if err != nil || mep == nil {
@@ -96,6 +96,7 @@ func (p *IServerStruct) WhoAmI() {
 	}
 	fmt.Printf("%s\n\n%v", string(bytemep), err)
 }
+*/
 
 func (p *IServerStruct) CallRestEndpoint(method string, path string, payload []byte, query string) (io.ReadCloser, error) {
 	isTokenLock.Lock()

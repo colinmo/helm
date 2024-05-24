@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"bytes"
 	"fmt"
 
 	"fyne.io/fyne/v2"
@@ -22,8 +23,8 @@ type Linegraph struct {
 	xlabel, ylabel string
 	id             string
 
-	back, center                *canvas.Image
 	xlegend, ylegend, maxlegend *widget.Label
+	c                           *fyne.Container
 }
 
 var linegraphBaseImage *fyne.StaticResource
@@ -46,9 +47,6 @@ func NewLinegraphWidget(
 		linegraphBaseImage = fyne.NewStaticResource("linegraph-background.svg", []byte(`<?xml version="1.0"?>
 	<svg version="1.1" width="600" height="320" viewBox="0,0,600,320"
 		xmlns="http://www.w3.org/2000/svg">
-		<rect x="0" y="0" width="600" height="320" stroke="none" fill="white" />
-		<line x1="10" y1="10" x2="10" y2="310" stroke="black" stroke-width="1px" />
-		<line x1="10" y1="310" x2="590" y2="310" stroke="black" stroke-width="1px" />
 	</svg>`))
 	}
 	return
@@ -58,69 +56,62 @@ func NewLinegraphWidget(
  * SVG in Fyne cannot have text
  */
 func (item *Linegraph) CreateRenderer() fyne.WidgetRenderer {
-	item.back = canvas.NewImageFromResource(linegraphBaseImage)
-	item.back.FillMode = canvas.ImageFillOriginal
-	item.back.Move(fyne.NewPos(0, 0))
-	item.back.Resize(fyne.NewSize(300, 600))
-	item.back.Refresh()
-
-	item.center = canvas.NewImageFromResource(
-		fyne.NewStaticResource(item.id+".svg", []byte(`<?xml version="1.0"?>
-		<svg version="1.1" width="600" height="320" viewBox="0,0,600,320"
-			xmlns="http://www.w3.org/2000/svg">
-			<path d="`+item.ValuesToPointString()+`" fill="none" stroke="red" stroke-width="1px"/>
-		</svg>`),
-		))
-	item.center.FillMode = canvas.ImageFillOriginal
-	item.center.Move(fyne.NewPos(0, 0))
-	item.center.Resize(fyne.NewSize(300, 600))
-	item.center.Refresh()
-
 	item.xlegend = widget.NewLabel(item.xlabel)
 	item.ylegend = widget.NewLabel(item.ylabel)
 	item.maxlegend = widget.NewLabel(fmt.Sprintf("%d", item.max))
 
-	/*
-		c := container.NewBorder(
-			item.maxlegend,
-			item.xlegend,
-			item.ylegend,
-			nil,
-			container.NewWithoutLayout(
-				item.back,
-				item.center,
-			),
-		)*/
-	c := container.NewWithoutLayout(
-		item.back,
-		item.center,
+	item.c = container.NewWithoutLayout(
+		item.BasicImage(),
+		item.xlegend,
 	)
-	c.Resize(fyne.NewSize(300, 600))
-	c.Refresh()
-	return widget.NewSimpleRenderer(c)
+	item.c.Resize(fyne.NewSize(320, 600))
+	item.c.Refresh()
+	return widget.NewSimpleRenderer(item.c)
 }
 
+func (item *Linegraph) GraphSVG() []byte {
+	return []byte(`<?xml version="1.0"?>
+	<svg version="1.1" width="600" height="320" viewBox="0,0,600,320"
+		xmlns="http://www.w3.org/2000/svg">
+		<rect x="0" y="0" width="600" height="320" stroke="none" fill="white" />
+		<line x1="10" y1="10" x2="10" y2="310" stroke="black" stroke-width="1px" />
+		<line x1="10" y1="310" x2="590" y2="310" stroke="black" stroke-width="1px" />
+		<path d="` + item.ValuesToPointString() + `" fill="none" stroke="blue" stroke-width="1px"/>
+	</svg>`)
+}
+
+func (item *Linegraph) BasicImage() *canvas.Image {
+	graph := canvas.NewImageFromReader(bytes.NewReader(item.GraphSVG()), uuid.New().String()+".svg")
+	graph.FillMode = canvas.ImageFillOriginal
+	graph.Move(fyne.NewPos(0, 0))
+	graph.Resize(fyne.NewSize(320, 600))
+	graph.Refresh()
+	return graph
+}
+
+func (item *Linegraph) Refresh() {
+	item.c.Objects[0] = item.BasicImage()
+	item.c.Refresh()
+	canvas.Refresh(item)
+}
 func (item *Linegraph) UpdateItems(newvalues []int) {
 	item.points = newvalues
-	item.center = canvas.NewImageFromResource(
-		fyne.NewStaticResource(item.id+".svg", []byte(`<?xml version="1.0"?>
-		<svg version="1.1" width="600" height="320" viewBox="0,0,600,320"
-			xmlns="http://www.w3.org/2000/svg">
-			<path d="`+item.ValuesToPointString()+`" fill="none" stroke="red" stroke-width="1px"/>
-		</svg>`),
-		))
-
 	item.Refresh()
 }
 
 func (item *Linegraph) UpdateMax(newmax int) {
 	item.max = newmax
-	fmt.Printf("New max %d\n", item.max)
+	item.Refresh()
+}
+func (item *Linegraph) UpdateItemsAndMax(newvalues []int, newmax int) {
+	item.points = newvalues
+	item.max = newmax
 	item.Refresh()
 }
 
 func (item *Linegraph) ValuesToPointString() (pointString string) {
 	pointString = "M"
+	dotString := ""
 	prefix := ""
 	thisLen := len(item.points) - 1
 	if thisLen == 0 {
@@ -129,10 +120,24 @@ func (item *Linegraph) ValuesToPointString() (pointString string) {
 	xstep := 580 / thisLen
 	if item.max != 0 {
 		for i, x := range item.points {
-			pointString = fmt.Sprintf("%s%s%d,%d ", pointString, prefix, 10+i*xstep, 10+300-(x/item.max)*300)
+			point := item.ValueToPoint(x)
+			pointString = fmt.Sprintf("%s%s%d,%d ", pointString, prefix, 10+i*xstep, point)
 			prefix = "L"
+			dotString = fmt.Sprintf("%s M%d,%dm-2,-2l0,4l4,0l0,-4l-4,0", dotString, 10+i*xstep, point)
 		}
 	}
-	fmt.Printf("New line: %s\n", pointString)
+	pointString = fmt.Sprintf("%s %s", pointString, dotString)
 	return
+}
+
+func (item *Linegraph) ValueToPoint(val int) int {
+	border := 10
+	height := 300
+
+	if item.max == 0 {
+		return 0
+	}
+	point := int(border + height - int((float32(val)/float32(item.max))*float32(height)))
+
+	return point
 }

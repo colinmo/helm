@@ -44,7 +44,6 @@ func NewGaugeWidget(
 		id:      uuid.New().String(),
 	}
 	if backgroundImage == nil {
-		fmt.Printf("Let's do this")
 		// Put the static rendering images creation here?
 		backgroundImage = fyne.NewStaticResource("gauge-background.svg", []byte(`<?xml version="1.0"?>
 	<svg version="1.1" width="300" height="300" viewBox="0,0,300,300"
