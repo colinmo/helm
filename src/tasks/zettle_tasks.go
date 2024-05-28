@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -36,6 +37,7 @@ func (zet *ZettleStruct) Download(dir string) {
 	TaskWindowRefresh("Zettle")
 	ConnectionStatusBox(false, "Z")
 	zet.MyTasks = []TaskResponseStruct{}
+	foundTasks := map[string]bool{}
 	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err == nil {
 			name := d.Name()
@@ -46,7 +48,8 @@ func (zet *ZettleStruct) Download(dir string) {
 				f, err := os.ReadFile(path)
 				if err == nil {
 					if lookupRegex.Match(f) {
-						zet.MyTasks = append(zet.MyTasks, fileToTask(path))
+						xx, _ := filepath.EvalSymlinks(path)
+						foundTasks[xx] = true
 					}
 				} else {
 					log.Fatalf("Can't read %v\n", err)
@@ -55,6 +58,10 @@ func (zet *ZettleStruct) Download(dir string) {
 		}
 		return nil
 	})
+	for path := range foundTasks {
+		fmt.Printf(" - %s\n", path)
+		zet.MyTasks = append(zet.MyTasks, fileToTask(path))
+	}
 	sort.SliceStable(zet.MyTasks, func(i, k int) bool {
 		if zet.MyTasks[i].PriorityOverride == zet.MyTasks[k].PriorityOverride {
 			return zet.MyTasks[i].CreatedDateTime.Before(zet.MyTasks[k].CreatedDateTime)
