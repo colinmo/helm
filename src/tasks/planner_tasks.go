@@ -108,7 +108,7 @@ func (p *PlannerStruct) Login() {
 	browser.OpenURL(planConf.AuthCodeURL("some-user-state", oauth2.AccessTypeOffline))
 }
 
-func (p *PlannerStruct) Download(specific string) {
+func (p *PlannerStruct) Download() {
 	ActiveTaskStatusUpdate(1)
 	defer ActiveTaskStatusUpdate(-1)
 
