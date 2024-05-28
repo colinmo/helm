@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -59,7 +58,6 @@ func (zet *ZettleStruct) Download(dir string) {
 		return nil
 	})
 	for path := range foundTasks {
-		fmt.Printf(" - %s\n", path)
 		zet.MyTasks = append(zet.MyTasks, fileToTask(path))
 	}
 	sort.SliceStable(zet.MyTasks, func(i, k int) bool {

@@ -87,6 +87,18 @@ func SwitchContext(context1 string) (*kubernetes.Clientset, error) {
 	return GetClientset()
 }
 
+func GetContext() string {
+	return thisContext
+}
+
+func SwitchNamespace(namespace1 string) {
+	thisNamespace = namespace1
+}
+
+func GetNamespace() string {
+	return thisNamespace
+}
+
 func GetClientset() (*kubernetes.Clientset, error) {
 	// use the current context in kubeconfig
 	config, err := BuildContextConfigFromFlags("", *Kubeconfig)

@@ -27,6 +27,8 @@ type Linegraph struct {
 	c                           *fyne.Container
 }
 
+var finalImageWidth = float32(300.0)
+var finalImageHeight = float32(160.0)
 var linegraphBaseImage *fyne.StaticResource
 
 func NewLinegraphWidget(
@@ -64,7 +66,7 @@ func (item *Linegraph) CreateRenderer() fyne.WidgetRenderer {
 		item.BasicImage(),
 		item.xlegend,
 	)
-	item.c.Resize(fyne.NewSize(320, 600))
+	item.c.Resize(fyne.NewSize(finalImageWidth, finalImageHeight))
 	item.c.Refresh()
 	return widget.NewSimpleRenderer(item.c)
 }
@@ -84,7 +86,7 @@ func (item *Linegraph) BasicImage() *canvas.Image {
 	graph := canvas.NewImageFromReader(bytes.NewReader(item.GraphSVG()), uuid.New().String()+".svg")
 	graph.FillMode = canvas.ImageFillOriginal
 	graph.Move(fyne.NewPos(0, 0))
-	graph.Resize(fyne.NewSize(320, 600))
+	graph.Resize(fyne.NewSize(finalImageWidth, finalImageHeight))
 	graph.Refresh()
 	return graph
 }
