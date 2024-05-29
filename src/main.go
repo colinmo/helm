@@ -547,7 +547,7 @@ func taskWindowSetup() {
 				nil,
 				nil,
 				nil,
-				container.NewAdaptiveGrid(2, widget.NewLabel("# of open tasks\nStatus of projects\nLookup of iServer for RSDF")),
+				container.NewAdaptiveGrid(2, widget.NewLabel("# of open tasks\nStatus of projects\nLookup of iServer for RSDF\n* Other things")),
 			),
 		),
 	)
@@ -670,7 +670,7 @@ func taskWindowRefresh(specific string) {
 				col4 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Priority`))
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 				for _, x := range tasks.Snow.MyIncidents {
-					thisID := x.ID
+					thisID := x.BusObRecId
 					myPriority := x.PriorityOverride
 					if x.Priority != x.PriorityOverride {
 						myPriority = fmt.Sprintf("%s(%s)", x.PriorityOverride, x.Priority)
@@ -681,7 +681,7 @@ func taskWindowRefresh(specific string) {
 						container.NewStack(
 							widget.NewLabel(""),
 							newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-								browser.OpenURL(tasks.Snow.BaseURL + "/now/sow/record/incident/" + thisID)
+								browser.OpenURL(tasks.Snow.BaseURL + "/now/sow/record/task/" + thisID)
 							}),
 						))
 					col1.Objects = append(col1.Objects,
@@ -720,7 +720,7 @@ func taskWindowRefresh(specific string) {
 							fyne.TextAlignCenter,
 							fyne.TextStyle{},
 							tempFunc)))
-					col5.Objects = append(col5.Objects, widget.NewLabel(tasks.SnowStatuses[x.Status]))
+					col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
 				}
 				list2 = container.NewVScroll(
 					container.NewHBox(
@@ -1174,7 +1174,7 @@ func taskWindowRefresh(specific string) {
 					col4.Objects = append(col4.Objects, container.NewStack(
 						getPriorityIconFor(x.PriorityOverride, priorityIcons),
 						widget.NewLabelWithStyle(x.PriorityOverride, fyne.TextAlignCenter, fyne.TextStyle{})))
-					col5.Objects = append(col5.Objects, widget.NewLabel(tasks.SnowStatuses[x.Status]))
+					col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
 				}
 				list3 = container.NewVScroll(
 					container.NewHBox(
@@ -1239,7 +1239,7 @@ func taskWindowRefresh(specific string) {
 					col4.Objects = append(col4.Objects, container.NewStack(
 						getPriorityIconFor(x.PriorityOverride, priorityIcons),
 						widget.NewLabelWithStyle(x.PriorityOverride, fyne.TextAlignCenter, fyne.TextStyle{})))
-					col5.Objects = append(col5.Objects, widget.NewLabel(tasks.SnowStatuses[x.Status]))
+					col5.Objects = append(col5.Objects, widget.NewLabel(x.Status))
 				}
 				list4 = container.NewVScroll(
 					container.NewHBox(

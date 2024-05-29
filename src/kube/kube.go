@@ -39,6 +39,7 @@ var memoryMonitorQuit = make(chan bool)
 var memoryMonitorRunning = false
 var Kubeconfig *string
 var FilteredByDeployment string = ""
+var cmd *exec.Cmd
 
 func Setup(context1, namespace1 string) {
 	if home := homedir.HomeDir(); home != "" {
@@ -114,7 +115,7 @@ func GetClientset() (*kubernetes.Clientset, error) {
 
 func GetMemoryForPod(podname string, results binding.ExternalIntList, maxMemory *int) {
 	if memoryMonitorRunning {
-		memoryMonitorQuit <- true
+		cmd.Process.Kill()
 	}
 	memoryMonitorRunning = true
 	go func() {
@@ -129,7 +130,7 @@ func GetMemoryForPod(podname string, results binding.ExternalIntList, maxMemory 
 			"bash",
 			"-c",
 			"while true ; do free && sleep 60 ; done"}
-		cmd := exec.Command(cmdArray[0], cmdArray[1:]...)
+		cmd = exec.Command(cmdArray[0], cmdArray[1:]...)
 
 		stdout, _ := cmd.StdoutPipe()
 		err := cmd.Start()
@@ -139,18 +140,13 @@ func GetMemoryForPod(podname string, results binding.ExternalIntList, maxMemory 
 
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
-			select {
-			case <-memoryMonitorQuit:
-				return
-			default:
-				m := scanner.Text()
-				if strings.Contains(m, "Mem: ") {
-					re := regexp.MustCompile(`\s+`)
-					split := re.Split(m, -1)
-					*maxMemory, _ = strconv.Atoi(split[1])
-					newMemory, _ := strconv.Atoi(split[2])
-					results.Append(newMemory)
-				}
+			m := scanner.Text()
+			if strings.Contains(m, "Mem: ") {
+				re := regexp.MustCompile(`\s+`)
+				split := re.Split(m, -1)
+				*maxMemory, _ = strconv.Atoi(split[1])
+				newMemory, _ := strconv.Atoi(split[2])
+				results.Append(newMemory)
 			}
 		}
 		cmd.Wait()

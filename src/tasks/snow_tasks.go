@@ -51,7 +51,12 @@ type SNOWStruct struct {
 }
 
 var SnowStatuses = map[string]string{
-	"1": "New", "2": "In Progress", "3": "On Hold", "6": "Resolved", "8": "Cancelled",
+	"1": "New",
+	"2": "In Progress",
+	"3": "On Hold",
+	"6": "Resolved",
+	"7": "Closed",
+	"8": "Cancelled",
 }
 var SNContactTypes = map[string]string{
 	"-- None --":           "-- None --",
@@ -205,10 +210,12 @@ func (snow *SNOWStruct) DownloadIncidents(afterFunc func()) {
 								Priority:         e.Priority,
 								PriorityOverride: myOverride,
 								Status:           e.Status,
+								Type:             e.Type,
+								History:          e.History,
 							},
 						)
 					}
-					if len(res) != 10 {
+					if len(res) == 0 {
 						break
 					}
 				}
@@ -259,7 +266,7 @@ func (snow *SNOWStruct) DownloadMyRequests(afterFunc func()) {
 							},
 						)
 					}
-					if len(res) != 10 {
+					if len(res) == 0 {
 						break
 					}
 				}
@@ -310,7 +317,7 @@ func (snow *SNOWStruct) DownloadTeamIncidents(afterFunc func()) {
 							},
 						)
 					}
-					if len(res) != 10 {
+					if len(res) == 0 {
 						break
 					}
 				}
@@ -335,9 +342,9 @@ func (snow *SNOWStruct) DownloadTeamIncidents(afterFunc func()) {
 
 func (snow *SNOWStruct) GetMyIncidentsForPage(page int) ([]SnowIncident, error) {
 	r, err := snow.SearchSnowFor(
-		"incident", // table
-		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state"}, // fields to return
-		map[string]string{"assigned_to": AppPreferences.SnowUser, "state": "IN1,2,3,4,5,7"},      // filters
+		"task", // table
+		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state", "sys_class_name", "approval_history"}, // fields to return
+		map[string]string{"assigned_to": AppPreferences.SnowUser, "state": "<0"},                                                       // filters
 		page,
 	)
 	return r, err
@@ -347,7 +354,7 @@ func (snow *SNOWStruct) GetMyRequestsForPage(page int) ([]SnowIncident, error) {
 	r, err := snow.SearchSnowFor(
 		"incident", // table
 		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state"}, // fields to return
-		map[string]string{"opened_by": AppPreferences.SnowUser, "state": "IN1,2,3,4,5,7"},        // filters
+		map[string]string{"opened_by": AppPreferences.SnowUser, "state": "IN1,2,3,4,5"},          // filters
 		page,
 	)
 	return r, err
@@ -355,9 +362,9 @@ func (snow *SNOWStruct) GetMyRequestsForPage(page int) ([]SnowIncident, error) {
 
 func (snow *SNOWStruct) GetMyTeamIncidentsForPage(page int) ([]SnowIncident, error) {
 	r, err := snow.SearchSnowFor(
-		"incident", // table
-		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state"},                      // fields to return
-		map[string]string{"assigned_to": "=", "state": "IN1,2,3,4,5,7", "assignment_group": AppPreferences.SnowGroup}, // filters
+		"task", // table
+		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state"},           // fields to return
+		map[string]string{"assigned_to": "=", "state": "<0", "assignment_group": AppPreferences.SnowGroup}, // filters
 		page,
 	)
 	return r, err
@@ -421,6 +428,8 @@ type SnowIncident struct {
 	Priority    string
 	Status      string
 	Description string
+	Type        string
+	History     string
 }
 type SnowResponseIncidents struct {
 	Number           string `json:"number"`
@@ -429,6 +438,8 @@ type SnowResponseIncidents struct {
 	Created          string `json:"sys_created_on"`
 	Priority         string `json:"priority"`
 	State            string `json:"state"`
+	ApprovalHistory  string `json:"approval_history"`
+	Type             string `json:"sys_class_name"`
 }
 
 type SnowResponse struct {
@@ -439,15 +450,17 @@ func (snow *SNOWStruct) GetAnyTable(table string, fields []string, filter map[st
 	if sort != "" {
 		sort = "^" + sort
 	}
+	pageLength := 20
 	filter["active"] = "=true"
 	result, err := snow.getStuffFromURL(
 		"GET",
 		"/api/now/table/"+table,
 		fmt.Sprintf(
-			"sysparm_limit=20&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d",
+			"sysparm_limit=%d&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d",
+			pageLength,
 			strings.Join(fields, ","),
 			createKeyValuePairsForQuery(filter)+sort,
-			page),
+			page*pageLength),
 		[]byte{},
 	)
 	var toReturn []byte
@@ -460,14 +473,16 @@ func (snow *SNOWStruct) GetAnyTable(table string, fields []string, filter map[st
 
 func (snow *SNOWStruct) SearchSnowFor(table string, fields []string, filter map[string]string, page int) ([]SnowIncident, error) {
 	var incidentsResponse SnowResponse
+	pageLength := 20
 	result, err := snow.getStuffFromURL(
 		"GET",
 		"/api/now/table/"+table,
 		fmt.Sprintf(
-			"sysparm_limit=10&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d",
+			"sysparm_limit=%d&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d&sysparm_display_value=true",
+			pageLength,
 			strings.Join(fields, ","),
 			createKeyValuePairsForQuery(filter),
-			page),
+			page*pageLength),
 		[]byte{},
 	)
 	toReturn := []SnowIncident{}
@@ -476,14 +491,16 @@ func (snow *SNOWStruct) SearchSnowFor(table string, fields []string, filter map[
 		err = json.NewDecoder(result).Decode(&incidentsResponse)
 		if err == nil {
 			for _, x := range incidentsResponse.Results {
-				created, _ := time.Parse("2006-01-02 15:04:05", x.Created)
+				created, _ := time.Parse("02/01/2006 15:04:04", x.Created)
 				me := SnowIncident{
 					ID:          x.ID,
 					Number:      x.Number,
 					Created:     created,
-					Priority:    x.Priority,
+					Priority:    x.Priority[0:1],
 					Status:      x.State,
 					Description: x.ShortDescription,
+					Type:        x.Type,
+					History:     x.ApprovalHistory,
 				}
 				toReturn = append(toReturn, me)
 			}

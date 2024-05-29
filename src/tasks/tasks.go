@@ -43,6 +43,7 @@ type TaskResponseStruct struct {
 	Type             string
 	Blocked          bool
 	Links            []string
+	History          string
 }
 
 /** If we move this into /tasks, keep these here and refer in main as tasks.* ? */

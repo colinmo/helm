@@ -43,6 +43,7 @@ func NewLinegraphWidget(
 		xlabel: xlabel,
 		ylabel: ylabel,
 		id:     uuid.New().String(),
+		c:      container.NewWithoutLayout(),
 	}
 	newLinegraph.ExtendBaseWidget(newLinegraph)
 	if linegraphBaseImage == nil {
@@ -92,13 +93,23 @@ func (item *Linegraph) BasicImage() *canvas.Image {
 }
 
 func (item *Linegraph) Refresh() {
-	item.c.Objects[0] = item.BasicImage()
-	item.c.Refresh()
-	canvas.Refresh(item)
+	item.UpdateXLegend()
+	if len(item.c.Objects) > 0 {
+		item.c.Objects[0] = item.BasicImage()
+		item.c.Refresh()
+		canvas.Refresh(item)
+	}
 }
 func (item *Linegraph) UpdateItems(newvalues []int) {
 	item.points = newvalues
 	item.Refresh()
+}
+
+func (item *Linegraph) UpdateXLegend() {
+	l := len(item.points)
+	if l > 0 {
+		item.xlegend.Text = fmt.Sprintf("%d/%d\n", item.points[len(item.points)-1], item.max)
+	}
 }
 
 func (item *Linegraph) UpdateMax(newmax int) {
