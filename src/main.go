@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"image/color"
 	"log"
 	"math"
 	"os"
@@ -20,7 +19,6 @@ import (
 
 	fyne "fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/data/validation"
@@ -243,124 +241,6 @@ func main() {
 		desk.SetSystemTrayMenu(m)
 	}
 	thisApp.Run()
-}
-
-func buildMonthSelect(dateToShow time.Time, owningDialog *dialog.Dialog) *fyne.Container {
-	// Calculate the days shown
-	startOfMonth, _ := time.Parse("2006-January-03", fmt.Sprintf("%s-%s", dateToShow.Format("2006-January"), "01"))
-	startOfMonthDisplay := startOfMonth
-	startOffset := int(startOfMonth.Weekday())
-	if startOffset != 6 {
-		startOfMonthDisplay = startOfMonthDisplay.AddDate(0, 0, -1*int(startOfMonth.Weekday()))
-	} else {
-		startOffset = 0
-	}
-	totalDays := startOffset + startOfMonth.AddDate(0, 1, -1).Day()
-	remainder := totalDays % 7
-	if remainder > 0 {
-		totalDays += 7 - totalDays%7
-	}
-
-	days := []fyne.CanvasObject{
-		widget.NewLabelWithStyle("S", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		widget.NewLabelWithStyle("M", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		widget.NewLabelWithStyle("T", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		widget.NewLabelWithStyle("W", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		widget.NewLabelWithStyle("T", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		widget.NewLabelWithStyle("F", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		widget.NewLabelWithStyle("S", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-	}
-	thisDay := startOfMonthDisplay
-	todayString := time.Now().Format("01/02/2006")
-	for i := 0; i < totalDays; i++ {
-		mike := thisDay
-		bg := canvas.NewRectangle(color.NRGBA{R: 220, G: 220, B: 220, A: 0})
-		if thisDay.Format("01/02/2006") == todayString {
-			bg = canvas.NewRectangle(color.NRGBA{R: 100, G: 200, B: 150, A: 255})
-		}
-		days = append(days, container.NewStack(bg, widget.NewButton(fmt.Sprintf("%d", thisDay.Day()), func() {
-			x, _ := AppStatus.CurrentZettleDKB.Get()
-			saveZettle(markdownInput.Text, x)
-
-			AppStatus.CurrentZettleDBDate = mike
-			AppStatus.CurrentZettleDKB.Set(zettleFileName(AppStatus.CurrentZettleDBDate))
-			x, _ = AppStatus.CurrentZettleDKB.Get()
-			markdownInput.Text = getFileContentsAndCreateIfMissing(path.Join(appPreferences.ZettlekastenHome, x))
-			markdownInput.Refresh()
-			(*owningDialog).Hide()
-		})))
-		thisDay = thisDay.AddDate(0, 0, 1)
-	}
-	return container.NewGridWithColumns(7,
-		days...)
-}
-
-func createDatePicker(dateToShow time.Time, owningDialog *dialog.Dialog) fyne.CanvasObject {
-	var calendarWidget *fyne.Container
-	var monthSelect *widget.Label
-	var monthDisplay *fyne.Container
-	var backMonth *widget.Button
-	var forwardMonth *widget.Button
-
-	monthSelect = widget.NewLabel(dateToShow.Format("January 2006"))
-
-	monthDisplay = buildMonthSelect(dateToShow, owningDialog)
-
-	backMonth = widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() {
-		dateToShow = dateToShow.AddDate(0, -1, 0)
-		monthSelect = widget.NewLabel(dateToShow.Format("January 2006"))
-		monthDisplay = buildMonthSelect(dateToShow, owningDialog)
-		calendarWidget.RemoveAll()
-		calendarWidget.Add(container.NewBorder(
-			container.NewHBox(
-				backMonth,
-				layout.NewSpacer(),
-				monthSelect,
-				layout.NewSpacer(),
-				forwardMonth,
-			),
-			nil,
-			nil,
-			nil,
-			monthDisplay))
-		calendarWidget.Refresh()
-	})
-	forwardMonth = widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() {
-		dateToShow = dateToShow.AddDate(0, 1, 0)
-		monthSelect = widget.NewLabel(dateToShow.Format("January 2006"))
-		monthDisplay = buildMonthSelect(dateToShow, owningDialog)
-		calendarWidget.RemoveAll()
-		calendarWidget.Add(container.NewBorder(
-			container.NewHBox(
-				backMonth,
-				layout.NewSpacer(),
-				monthSelect,
-				layout.NewSpacer(),
-				forwardMonth,
-			),
-			nil,
-			nil,
-			nil,
-			monthDisplay))
-		calendarWidget.Refresh()
-	})
-	// Build the UI
-	// Note: RemoveAll/Add required so the above back/Forward months look the same
-	calendarWidget = container.NewHBox(widget.NewLabel("Loading"))
-	calendarWidget.RemoveAll()
-	calendarWidget.Add(container.NewBorder(
-		container.NewHBox(
-			backMonth,
-			layout.NewSpacer(),
-			monthSelect,
-			layout.NewSpacer(),
-			forwardMonth,
-		),
-		nil,
-		nil,
-		nil,
-		monthDisplay))
-	return calendarWidget
 }
 
 func markdownWindowSetup() {

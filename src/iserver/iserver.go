@@ -67,12 +67,10 @@ func (p *IServerStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
 	if query.Get("code") != "" {
 		t, err := planConf.Exchange(context.Background(), query.Get("code"))
 		if err != nil {
-			//ConnectionStatusBox(false, "M")
 			w.Header().Add("Content-type", "text/html")
 			fmt.Fprintf(w, "<html><head></head><body><H1>Failed to Authenticate<p>%s</body></html>", err.Error())
 		} else {
 			p.Token = t
-			//ConnectionStatusBox(true, "M")
 			w.Header().Add("Content-type", "text/html")
 			fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.<script>window.close();</script></body></html>")
 			isTokenLock.Unlock()
