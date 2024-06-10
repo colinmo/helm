@@ -1044,7 +1044,7 @@ func taskWindowRefresh(specific string) {
 						container.NewStack(
 							widget.NewLabel(""),
 							newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-								browser.OpenURL(tasks.Snow.BaseURL + "/now/sow/record/incident/" + thisID)
+								browser.OpenURL(tasks.Snow.BaseURL + "/now/sow/record/task/" + thisID)
 							}),
 						))
 					col2.Objects = append(col2.Objects, widget.NewLabel(x.Owner))

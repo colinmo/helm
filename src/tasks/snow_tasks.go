@@ -372,8 +372,8 @@ func (snow *SNOWStruct) GetMyRequestsForPage(page int) ([]SnowIncident, error) {
 func (snow *SNOWStruct) GetMyTeamIncidentsForPage(page int) ([]SnowIncident, error) {
 	r, err := snow.SearchSnowFor(
 		"task", // table
-		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state"},           // fields to return
-		map[string]string{"assigned_to": "=", "state": "<0", "assignment_group": AppPreferences.SnowGroup}, // filters
+		[]string{"number", "short_description", "variables.contract_title", "sys_id", "priority", "sys_created_on", "state"}, // fields to return
+		map[string]string{"assigned_to": "=", "state": "IN1,2,3,4,5", "assignment_group": AppPreferences.SnowGroup},          // filters
 		page,
 	)
 	return r, err
@@ -443,6 +443,7 @@ type SnowIncident struct {
 type SnowResponseIncidents struct {
 	Number           string `json:"number"`
 	ShortDescription string `json:"short_description"`
+	Contract         string `json:"variables.contract_title"`
 	ID               string `json:"sys_id"`
 	Created          string `json:"sys_created_on"`
 	Priority         string `json:"priority"`
@@ -501,6 +502,7 @@ func (snow *SNOWStruct) SearchSnowFor(table string, fields []string, filter map[
 		if err == nil {
 			for _, x := range incidentsResponse.Results {
 				created, _ := time.Parse("02/01/2006 15:04:04", x.Created)
+				fmt.Printf("%v\n", x)
 				me := SnowIncident{
 					ID:          x.ID,
 					Number:      x.Number,
@@ -510,6 +512,9 @@ func (snow *SNOWStruct) SearchSnowFor(table string, fields []string, filter map[
 					Description: x.ShortDescription,
 					Type:        x.Type,
 					History:     x.ApprovalHistory,
+				}
+				if len(x.Contract) > 0 {
+					me.Description = fmt.Sprintf("%s (Contract)", x.Contract)
 				}
 				toReturn = append(toReturn, me)
 			}
