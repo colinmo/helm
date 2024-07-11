@@ -353,7 +353,7 @@ func (snow *SNOWStruct) GetMyIncidentsForPage(page int) ([]SnowIncident, error) 
 	r, err := snow.SearchSnowFor(
 		"task", // table
 		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state", "sys_class_name", "approval_history"}, // fields to return
-		map[string]string{"assigned_to": AppPreferences.SnowUser, "state": "<0"},                                                       // filters
+		map[string]string{"assigned_to": AppPreferences.SnowUser, "active": "=true"},                                                   // filters
 		page,
 	)
 	return r, err
@@ -363,7 +363,7 @@ func (snow *SNOWStruct) GetMyRequestsForPage(page int) ([]SnowIncident, error) {
 	r, err := snow.SearchSnowFor(
 		"incident", // table
 		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state"}, // fields to return
-		map[string]string{"opened_by": AppPreferences.SnowUser, "state": "IN1,2,3,4,5"},          // filters
+		map[string]string{"opened_by": AppPreferences.SnowUser, "active": "=true"},               // filters
 		page,
 	)
 	return r, err
@@ -373,7 +373,7 @@ func (snow *SNOWStruct) GetMyTeamIncidentsForPage(page int) ([]SnowIncident, err
 	r, err := snow.SearchSnowFor(
 		"task", // table
 		[]string{"number", "short_description", "variables.contract_title", "sys_id", "priority", "sys_created_on", "state"}, // fields to return
-		map[string]string{"assigned_to": "=", "state": "IN1,2,3,4,5", "assignment_group": AppPreferences.SnowGroup},          // filters
+		map[string]string{"assigned_to": "=", "active": "=true", "assignment_group": AppPreferences.SnowGroup},               // filters
 		page,
 	)
 	return r, err
