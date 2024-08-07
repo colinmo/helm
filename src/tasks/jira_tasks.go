@@ -144,6 +144,22 @@ func (j *JiraStruct) callJiraURI(method string, path string, payload []byte, que
 	}
 	return resp.Body, err
 }
+
+func (j *JiraStruct) callJiraGraphql(payload []byte) (io.ReadCloser, error) {
+	client := &http.Client{
+		Timeout: time.Second * 10,
+	}
+	req, _ := http.NewRequest("POST", "https://team.atlassian.com/gateway/api/graphql", bytes.NewReader(payload))
+
+	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", AppPreferences.JiraUsername, AppPreferences.JiraKey)))))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, err
+}
 func (j *JiraStruct) jiraPriorityToGSMPriority(priority string) string {
 	switch priority {
 	case "Highest":
@@ -162,6 +178,23 @@ func (j *JiraStruct) jiraPriorityToGSMPriority(priority string) string {
 }
 
 type TeamsSearchResponse struct {
+	Data struct {
+		Team struct {
+			TeamSearch struct {
+				PageInfo struct {
+					HasNextPage bool   `json:"hasNextPage"`
+					EndCursor   string `json:"endCursor"`
+				} `json:"pageInfo"`
+				Nodes []struct {
+					Team struct {
+						DisplayName string `json:"displayName"`
+						State       string `json:"state"`
+						ID          string `json:"id"`
+					} `json:"team"`
+				} `json:"nodes"`
+			} `json:"teamSearchV2"`
+		} `json:"team"`
+	} `json:"data"`
 	ID          string `json:"id"`
 	DisplayName string `json:"displayName"`
 	State       string `json:"state"`
@@ -171,20 +204,38 @@ func (j *JiraStruct) TeamsLookup() (map[string]string, []string) {
 	ActiveTaskStatusUpdate(1)
 	defer ActiveTaskStatusUpdate(-1)
 	ConnectionStatusBox(true, "J")
-	baseQuery := `organizationId=j084dc2b-38b8-1dj7-j0bj-kb330a12d358`
-	queryToCall := fmt.Sprintf("%s&startAt=0", baseQuery)
-	foundTeams := []TeamsSearchResponse{}
+	baseQuery := `{ "query": "query MyQuery {team @optIn(to: \"Team-search-v2\") {teamSearchV2(first: 20 organizationId: \"ari:cloud:platform::org/j084dc2b-38b8-1dj7-j0bj-kb330a12d358\" siteId: \"a352fe0d-15d5-4fa9-a3da-bd113c40f175\") { pageInfo { hasNextPage endCursor } nodes { team { displayName id state} } } } }", "operationName": "MyQuery"}`
+	foundTeams := TeamsSearchResponse{}
+	queryToCall := baseQuery
 	bigFoundTeams := map[string]string{}
 	values := []string{}
-	r, err := j.callJiraURI("GET", "../../../gateway/api/v3/teams/search", []byte{}, queryToCall)
-	if err == nil {
-		defer r.Close()
-		_ = json.NewDecoder(r).Decode(&foundTeams)
-	}
-	for _, x := range foundTeams {
-		if x.State == "ACTIVE" {
-			bigFoundTeams[x.DisplayName] = strings.Split(x.ID, "/")[1]
-			values = append(values, x.DisplayName)
+	oldAfter := ""
+	for {
+		r, err := j.callJiraGraphql([]byte(queryToCall))
+		if err == nil {
+			defer r.Close()
+			_ = json.NewDecoder(r).Decode(&foundTeams)
+		} else {
+			log.Fatalf("Wah %s\n", err.Error())
+		}
+		for _, x := range foundTeams.Data.Team.TeamSearch.Nodes {
+			if x.Team.State == "ACTIVE" {
+				bigFoundTeams[x.Team.DisplayName] = strings.Split(x.Team.ID, "/")[1]
+				values = append(values, x.Team.DisplayName)
+			}
+		}
+		if foundTeams.Data.Team.TeamSearch.PageInfo.HasNextPage {
+			queryToCall = strings.Replace(
+				baseQuery,
+				"first:",
+				`after: \"`+foundTeams.Data.Team.TeamSearch.PageInfo.EndCursor+`\" first:`,
+				1)
+			if oldAfter == foundTeams.Data.Team.TeamSearch.PageInfo.EndCursor {
+				log.Fatalf("NO CHANGE %s\n", oldAfter)
+			}
+			oldAfter = foundTeams.Data.Team.TeamSearch.PageInfo.EndCursor
+		} else {
+			break
 		}
 	}
 	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
