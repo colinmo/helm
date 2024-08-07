@@ -208,9 +208,7 @@ type Task struct {
 
 func (t *Task) Init() {
 	// Initialising
-	fmt.Printf("Generic init")
 }
 
 func (t *Task) Authenticate(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("Authenticating")
 }

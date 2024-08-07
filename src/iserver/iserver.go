@@ -82,20 +82,6 @@ func (p *IServerStruct) Login() {
 	browser.OpenURL(planConf.AuthCodeURL("some-user-state", oauth2.AccessTypeOffline))
 }
 
-/*
-func (p *IServerStruct) WhoAmI() {
-	mep, err := p.CallRestEndpoint("GET", "/odata/Me", []byte{}, "")
-	if err != nil || mep == nil {
-		log.Fatalf("failed to call endpoint %v\n", err)
-	}
-	bytemep, err := io.ReadAll(mep)
-	if err != nil {
-		log.Fatalf("failed to read io.Reader %v\n", err)
-	}
-	fmt.Printf("%s\n\n%v", string(bytemep), err)
-}
-*/
-
 func (p *IServerStruct) CallRestEndpoint(method string, path string, payload []byte, query string) (io.ReadCloser, error) {
 	isTokenLock.Lock()
 

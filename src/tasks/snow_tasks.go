@@ -362,8 +362,8 @@ func (snow *SNOWStruct) GetMyIncidentsForPage(page int) ([]SnowIncident, error) 
 func (snow *SNOWStruct) GetMyRequestsForPage(page int) ([]SnowIncident, error) {
 	r, err := snow.SearchSnowFor(
 		"incident", // table
-		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state"}, // fields to return
-		map[string]string{"opened_by": AppPreferences.SnowUser, "active": "=true"},               // filters
+		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state"},   // fields to return
+		map[string]string{"opened_by": AppPreferences.SnowUser, "active": "=true", "state": "!=6"}, // filters
 		page,
 	)
 	return r, err
@@ -502,7 +502,6 @@ func (snow *SNOWStruct) SearchSnowFor(table string, fields []string, filter map[
 		if err == nil {
 			for _, x := range incidentsResponse.Results {
 				created, _ := time.Parse("02/01/2006 15:04:04", x.Created)
-				fmt.Printf("%v\n", x)
 				me := SnowIncident{
 					ID:          x.ID,
 					Number:      x.Number,

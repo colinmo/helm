@@ -1616,7 +1616,7 @@ func createNewJiraTicket() {
 	teamSelect := widget.NewSelect(
 		alphaTeams,
 		func(thisString string) {
-			fmt.Printf("Selected: %s %s\n", thisString, allAvailableTeams[thisString])
+			// fmt.Printf("Selected: %s %s\n", thisString, allAvailableTeams[thisString])
 		},
 	)
 	parentOptions := map[string]string{}
