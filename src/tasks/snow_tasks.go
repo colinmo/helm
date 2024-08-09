@@ -59,17 +59,17 @@ var SnowStatuses = map[string]string{
 	"8": "Cancelled",
 }
 var SNContactTypes = map[string]string{
-	"-- None --":           "-- None --",
-	"chat":                 "Chat",
-	"messaging":            "Messaging",
-	"phone":                "Phone",
-	"video":                "Video",
-	"microsoft_teams_chat": "Microsoft Teams Chat",
-	"email":                "Email",
-	"event":                "Event",
-	"walk-in":              "Walk-in",
-	"incident_creation":    "Incident creation by employee",
-	"self-service":         "Self-service",
+	"-- None --":                    "-- None --",
+	"Chat":                          "chat",
+	"Messaging":                     "messaging",
+	"Phone":                         "phone",
+	"Video":                         "video",
+	"Microsoft Teams Chat":          "microsoft_teams_chat",
+	"Email":                         "email",
+	"Event":                         "event",
+	"Walk-in":                       "walk-in",
+	"Incident creation by employee": "incident_creation",
+	"Self-service":                  "self-service",
 }
 
 var SNContactTypeLabels = []string{
