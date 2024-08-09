@@ -51,6 +51,8 @@ var thisApp fyne.App
 var mainWindow fyne.Window
 var preferencesWindow fyne.Window
 var taskWindow fyne.Window
+var kubernetesWindow fyne.Window
+
 var markdownInput *widget.Entry
 var AppStatus AppStatusStruct
 var TaskTabsIndexes map[string]int
@@ -205,6 +207,9 @@ func main() {
 	taskWindow = thisApp.NewWindow("Tasks")
 	taskWindowSetup()
 
+	kubernetesWindow = thisApp.NewWindow("Kubernetes")
+	kubernetesWindowSetup()
+
 	go func() {
 		tasks.GetAllTasks(
 			appPreferences.TaskPreferences.JiraActive,
@@ -231,6 +236,9 @@ func main() {
 			}),
 			fyne.NewMenuItem("Tasks", func() {
 				taskWindow.Show()
+			}),
+			fyne.NewMenuItem("Kubernetes", func() {
+				kubernetesWindow.Show()
 			}),
 			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem("Preferences", func() {
@@ -498,14 +506,6 @@ func taskWindowSetup() {
 			container.NewWithoutLayout(),
 		)),
 	)
-	// Kubernetes tasks
-	TaskTabsIndexes["Kube"] = len(TaskTabsIndexes)
-	TaskTabs.Append(
-		container.NewTabItem("Kubernetes", container.NewBorder(
-			nil, nil, nil, nil,
-			setupKubenetesWindow(),
-		)),
-	)
 	taskWindow.SetContent(
 		container.NewBorder(
 			nil,
@@ -766,7 +766,9 @@ func taskWindowRefresh(specific string) {
 									widget.NewEntryWithData(binding.BindString(&items.ShortDescription))),
 								"ContactType": container.NewBorder(
 									nil, nil, nil, nil,
-									widget.NewSelect(tasks.SNContactTypeLabels, func(s string) { items.ContactType = tasks.SNContactTypes[s] })),
+									widget.NewSelect(tasks.SNContactTypeLabels, func(s string) {
+										items.ContactType = tasks.SNContactTypes[s]
+									})),
 								"Impact": container.NewBorder(
 									nil, nil, nil, nil,
 									widget.NewSelect(tasks.SNImpactLabels, func(s string) { items.Impact = tasks.SNImpact[s] })),
@@ -887,7 +889,6 @@ func taskWindowRefresh(specific string) {
 											theme.DocumentSaveIcon(),
 											func() {
 												// Validate form
-
 												// Convert Items to Saving
 												if items.AffectedUser == "me" {
 													saving.AffectedUser = appPreferences.TaskPreferences.SnowUser[1:]
@@ -1522,9 +1523,6 @@ func taskWindowRefresh(specific string) {
 		TaskTabs.Items[TaskTabsIndexes["Zettle"]].Text = fmt.Sprintf("Zettlekasten (%d)", len(tasks.Zettle.MyTasks))
 	}
 	/*
-		if _, ok := TaskTabsIndexes["Kube"]; ok && (specific == "" || specific == "Kube") {
-
-		}
 		if _, ok := TaskTabsIndexes["Dashboard"]; ok && (specific == "" || specific == "Dashboard") {
 
 		}

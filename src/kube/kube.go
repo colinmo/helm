@@ -2,9 +2,7 @@ package kube
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -52,30 +50,6 @@ func Setup(context1, namespace1 string) {
 	thisNamespace = namespace1
 
 	os.Setenv("PATH", fmt.Sprintf("%s:/Users/s457972/.krew/bin/:/Users/s457972/.docker/bin/", os.Getenv("PATH")))
-	cmd := exec.Command(
-		"kubectl",
-		"oidc-login",
-		"get-token",
-		"--oidc-issuer-url=https://auth.griffith.edu.au",
-		"--oidc-client-id=oidc-kubernetes",
-		"--oidc-extra-scope=groups",
-		"--oidc-extra-scope=department",
-		"--grant-type=authcode",
-	)
-	if errors.Is(cmd.Err, exec.ErrDot) {
-		cmd.Err = nil
-	}
-
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if err != nil {
-		logOut(fmt.Sprintf("Error: %v\nStdOut: %v\nStdErr: %v\n", err, out.String(), stderr.String()))
-	} else {
-		logOut(fmt.Sprintf("Output: %v\n", out.String()))
-	}
 }
 
 func MyIcon() []byte {
@@ -214,6 +188,53 @@ func getPods() (*v1.PodList, error) {
 	}
 	logOut(fmt.Sprintf("Found %d pods\n - %s,%s\n", len(p.Items), thisContext, thisNamespace))
 	return p, e
+}
+
+func GetContexts() (contexts []string, err error) {
+	b, err := os.ReadFile(*Kubeconfig)
+	if err != nil {
+		return
+	}
+	x, err := clientcmd.NewClientConfigFromBytes(b)
+	if err != nil {
+		return
+	}
+	y, err := x.RawConfig()
+	if err != nil {
+		return
+	}
+	contexts = make([]string, len(y.Contexts))
+
+	i := 0
+	for k := range y.Contexts {
+		contexts[i] = k
+		i++
+	}
+	return
+}
+func GetNamespaces() (returnme []string, err error) {
+	deps, err := getNamespaces()
+	if err == nil {
+		returnme = []string{}
+		for _, x := range deps.Items {
+			if len(x.ObjectMeta.Name) > 0 {
+				returnme = append(returnme, x.ObjectMeta.Name)
+			}
+		}
+	}
+	return
+}
+func getNamespaces() (nsList *v1.NamespaceList, err error) {
+	clientset, err := GetClientset()
+	if err != nil {
+		x := v1.NamespaceList{}
+		nsList = &x
+		return
+	}
+	nsList, err = clientset.CoreV1().
+		Namespaces().
+		List(context.Background(), metav1.ListOptions{})
+	return
 }
 
 func logOut(this string) {

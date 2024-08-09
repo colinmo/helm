@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	fyne "fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
@@ -11,12 +13,27 @@ import (
 	vonwidget "vonexplaino.com/m/v2/hq/widget"
 )
 
+func kubernetesWindowSetup() {
+	kubernetesWindow.Resize(fyne.NewSize(500, 500))
+	kubernetesWindow.Hide()
+	kubernetesWindow.SetCloseIntercept(func() {
+		kubernetesWindow.Hide()
+	})
+	kubernetesWindow.SetContent(setupKubenetesWindow())
+}
+
 func setupKubenetesWindow() *fyne.Container {
 	deployments := binding.BindStringList(&[]string{})
 	pods := binding.BindStringList(&[]string{})
 	timingResults := binding.BindIntList(&[]int{})
-	contexts := []string{"na", "gc", "minikube", "tst"}
-	namespaces := []string{"ers", "itarch"}
+	contexts, e := kube.GetContexts()
+	if e != nil {
+		fmt.Printf("Failed to get contexts %s\n", e.Error())
+	}
+	namespaces, e := kube.GetNamespaces()
+	if e != nil {
+		fmt.Printf("Failed to get contexts %s\n", e.Error())
+	}
 
 	maxMemory := 0
 	memoryMonitor := vonwidget.NewLinegraphWidget(
@@ -31,15 +48,6 @@ func setupKubenetesWindow() *fyne.Container {
 		memoryMonitor.UpdateItemsAndMax(x, maxMemory)
 		memoryMonitor.Refresh()
 	}))
-
-	contextSelector := widget.NewSelect(
-		contexts,
-		func(selected string) {
-			kube.SwitchContext(selected)
-		},
-	)
-	contextSelector.SetSelected(kube.GetContext())
-
 	namespaceSelector := widget.NewSelect(
 		namespaces,
 		func(selected string) {
@@ -47,6 +55,19 @@ func setupKubenetesWindow() *fyne.Container {
 		},
 	)
 	namespaceSelector.SetSelected(kube.GetNamespace())
+
+	contextSelector := widget.NewSelect(
+		contexts,
+		func(selected string) {
+			kube.SwitchContext(selected)
+			namespaces, e = kube.GetNamespaces()
+			namespaceSelector.Options = namespaces
+			if e != nil {
+				fmt.Printf("Failed to get contexts %s\n", e.Error())
+			}
+		},
+	)
+	contextSelector.SetSelected(kube.GetContext())
 
 	return container.NewBorder(
 		container.NewHBox(
