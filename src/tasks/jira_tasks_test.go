@@ -1,6 +1,6 @@
 package tasks
 
-var JiraFixtures = "/Users/s457972/Dropbox/swap/golang/helm/fixtures/"
+var JiraFixtures = "/Users/s457972/Dropbox/swap/golang/hq/fixtures/"
 
 /*
 func TestConvertFileToData(t *testing.T) {

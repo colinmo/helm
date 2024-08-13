@@ -33,7 +33,6 @@ type PreferencesStruct struct {
 }
 
 var thisContext, thisNamespace string
-var memoryMonitorQuit = make(chan bool)
 var memoryMonitorRunning = false
 var Kubeconfig *string
 var FilteredByDeployment string = ""
@@ -62,6 +61,7 @@ func BuildContextConfigFromFlags(masterUrl, kubeconfigPath string) (*restclient.
 }
 
 func SwitchContext(context1 string) (*kubernetes.Clientset, error) {
+	logOut(fmt.Sprintf("Switch context to: %s\n", context1))
 	thisContext = context1
 	return GetClientset()
 }
@@ -71,6 +71,7 @@ func GetContext() string {
 }
 
 func SwitchNamespace(namespace1 string) {
+	logOut(fmt.Sprintf("Switch namespace to: %s\n", namespace1))
 	thisNamespace = namespace1
 }
 
@@ -92,8 +93,10 @@ func GetClientset() (*kubernetes.Clientset, error) {
 }
 
 func GetMemoryForPod(podname string, results binding.ExternalIntList, maxMemory *int) {
+	results.Set([]int{})
 	if memoryMonitorRunning {
 		cmd.Process.Kill()
+		return
 	}
 	memoryMonitorRunning = true
 	go func() {
@@ -155,12 +158,21 @@ func getDeployments() (*apps.DeploymentList, error) {
 	return p, e
 }
 
+func DeleteDeployment(deploymentid string) error {
+	clientset, err := GetClientset()
+
+	if err != nil {
+		return err
+	}
+	return clientset.AppsV1().Deployments(thisNamespace).Delete(context.TODO(), deploymentid, metav1.DeleteOptions{})
+}
+
 func GetPods() (returnme []string, err error) {
 	deps, err := getPods()
 	if err == nil {
 		returnme = []string{}
 		for _, x := range deps.Items {
-			returnme = append(returnme, x.Name)
+			returnme = append(returnme, x.Name+"|"+string(x.Status.Phase))
 		}
 	}
 	return
@@ -176,10 +188,11 @@ func getPods() (*v1.PodList, error) {
 	p, e := clientset.CoreV1().Pods(thisNamespace).List(context.TODO(), metav1.ListOptions{})
 	logOut(fmt.Sprintf("Pod error: %v\n", e))
 	if FilteredByDeployment != "" {
-		lastIndexFilter := len(FilteredByDeployment)
+		fltr := FilteredByDeployment + "-"
+		lastIndexFilter := len(fltr)
 		n := 0
 		for _, p1 := range p.Items {
-			if len(p1.Name) > lastIndexFilter && p1.Name[0:lastIndexFilter] == FilteredByDeployment {
+			if len(p1.Name) > lastIndexFilter && p1.Name[0:lastIndexFilter] == fltr {
 				p.Items[n] = p1
 				n++
 			}
@@ -188,6 +201,14 @@ func getPods() (*v1.PodList, error) {
 	}
 	logOut(fmt.Sprintf("Found %d pods\n - %s,%s\n", len(p.Items), thisContext, thisNamespace))
 	return p, e
+}
+
+func DeletePod(podid string) error {
+	clientset, err := GetClientset()
+	if err != nil {
+		return err
+	}
+	return clientset.CoreV1().Pods(thisNamespace).Delete(context.TODO(), podid, metav1.DeleteOptions{})
 }
 
 func GetContexts() (contexts []string, err error) {
@@ -238,8 +259,9 @@ func getNamespaces() (nsList *v1.NamespaceList, err error) {
 }
 
 func logOut(this string) {
-	f, _ := os.OpenFile("/tmp/test.txt",
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	f.WriteString(this)
-	f.Close()
+	fmt.Print(this)
+	//f, _ := os.OpenFile("/tmp/test.txt",
+	//	os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	//f.WriteString(this)
+	//f.Close()
 }
