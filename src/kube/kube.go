@@ -259,7 +259,7 @@ func getNamespaces() (nsList *v1.NamespaceList, err error) {
 }
 
 func logOut(this string) {
-	fmt.Print(this)
+	// fmt.Print(this)
 	//f, _ := os.OpenFile("/tmp/test.txt",
 	//	os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	//f.WriteString(this)
