@@ -272,6 +272,7 @@ func (snow *SNOWStruct) DownloadMyRequests(afterFunc func()) {
 								Priority:         e.Priority,
 								PriorityOverride: myOverride,
 								Status:           e.Status,
+								Type:             e.Type,
 							},
 						)
 					}
@@ -323,6 +324,7 @@ func (snow *SNOWStruct) DownloadTeamIncidents(afterFunc func()) {
 								Priority:         e.Priority,
 								PriorityOverride: myOverride,
 								Status:           e.Status,
+								Type:             e.Type,
 							},
 						)
 					}
@@ -362,11 +364,44 @@ func (snow *SNOWStruct) GetMyIncidentsForPage(page int) ([]SnowIncident, error) 
 func (snow *SNOWStruct) GetMyRequestsForPage(page int) ([]SnowIncident, error) {
 	r, err := snow.SearchSnowFor(
 		"incident", // table
-		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state"},   // fields to return
-		map[string]string{"opened_by": AppPreferences.SnowUser, "active": "=true", "state": "!=6"}, // filters
+		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state", "sys_class_name"}, // fields to return
+		map[string]string{"opened_by": AppPreferences.SnowUser, "active": "=true", "state": "!=6"},                 // filters
 		page,
 	)
-	return r, err
+	s, err2 := snow.SearchSnowFor(
+		"sc_request", // table
+		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state", "sys_class_name"}, // fields to return
+		map[string]string{"active": "=true", "state": "!=6", "requested_for": AppPreferences.SnowUser},             // filters
+		page,
+	)
+	t, err3 := snow.SearchSnowFor(
+		"sc_req_item", // table
+		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state", "sys_class_name"}, // fields to return
+		map[string]string{"active": "=true", "state": "!=6", "requested_for": AppPreferences.SnowUser},             // filters
+		page,
+	)
+	if err == nil && err == err2 && err2 == err3 {
+		return append(append(r, s...), t...), nil
+	}
+	if err == nil {
+		if err2 == nil {
+			return append(r, s...), err3
+		}
+		if err3 == nil {
+			return append(r, t...), err2
+		}
+		return r, err2
+	}
+	if err2 == nil {
+		if err3 == nil {
+			return append(s, t...), err
+		}
+		return s, err
+	}
+	if err3 == nil {
+		return t, err
+	}
+	return nil, err
 }
 
 func (snow *SNOWStruct) GetMyTeamIncidentsForPage(page int) ([]SnowIncident, error) {
@@ -495,6 +530,12 @@ func (snow *SNOWStruct) SearchSnowFor(table string, fields []string, filter map[
 			page*pageLength),
 		[]byte{},
 	)
+	fmt.Printf(
+		"/api/now/table/"+table+"?sysparm_limit=%d&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d&sysparm_display_value=true\n",
+		pageLength,
+		strings.Join(fields, ","),
+		createKeyValuePairsForQuery(filter),
+		page*pageLength)
 	toReturn := []SnowIncident{}
 	if err == nil {
 		defer result.Close()

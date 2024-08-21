@@ -72,14 +72,14 @@ var alphaTeams []string
 var iServer iserver.IServerStruct
 
 func setup() {
-	os.Setenv("TZ", "Australia/Brisbane")
+	loc, _ := time.LoadLocation("Australia/Brisbane")
 	AppStatus = AppStatusStruct{
 		CurrentZettleDBDate: time.Now().Local(),
 		CurrentZettleDKB:    binding.NewString(),
 		TaskTaskStatus:      binding.NewString(),
 		TaskTaskCount:       0,
 	}
-	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().Local()))
+	AppStatus.CurrentZettleDKB.Set(zettleFileName(time.Now().In(loc).Local()))
 }
 
 func overrides() {
@@ -343,6 +343,16 @@ func markdownWindowSetup() {
 			}),
 			widget.NewButtonWithIcon("", theme.HistoryIcon(), func() {
 				deepdeep.Show()
+			}),
+			widget.NewButtonWithIcon("", theme.CheckButtonCheckedIcon(), func() {
+				lines := strings.Split(markdownInput.Text, "\n")
+				cursorRow := markdownInput.CursorRow
+				if markdownInput.CursorColumn == 0 {
+					lines[cursorRow] = " * [ ] \n" + lines[cursorRow][markdownInput.CursorColumn:]
+				} else {
+					lines[cursorRow] = lines[cursorRow][0:markdownInput.CursorColumn] + "\n * [ ] " + lines[cursorRow][markdownInput.CursorColumn:]
+				}
+				markdownInput.SetText(strings.Join(lines, "\n"))
 			}),
 		),
 		container.NewHBox(
@@ -1106,12 +1116,21 @@ func taskWindowRefresh(specific string) {
 				col5 := container.NewVBox(widget.NewRichTextFromMarkdown(`### Status`))
 				for _, x := range tasks.Snow.LoggedIncidents {
 					thisID := x.BusObRecId
+					thisTable := x.Type
+					switch x.Type {
+					case "Request":
+						thisTable = "sc_request"
+					case "Requested Item":
+						thisTable = "sc_req_item"
+					default:
+						thisTable = "incident"
+					}
 					col0.Objects = append(
 						col0.Objects,
 						container.NewStack(
 							widget.NewLabel(""),
 							newTappableIcon(theme.InfoIcon(), func(_ *fyne.PointEvent) {
-								browser.OpenURL(tasks.Snow.BaseURL + "/now/sow/record/incident/" + thisID)
+								browser.OpenURL(tasks.Snow.BaseURL + "/now/sow/record/" + thisTable + "/" + thisID)
 							}),
 						))
 					col1.Objects = append(col1.Objects,
