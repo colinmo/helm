@@ -530,12 +530,6 @@ func (snow *SNOWStruct) SearchSnowFor(table string, fields []string, filter map[
 			page*pageLength),
 		[]byte{},
 	)
-	fmt.Printf(
-		"/api/now/table/"+table+"?sysparm_limit=%d&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d&sysparm_display_value=true\n",
-		pageLength,
-		strings.Join(fields, ","),
-		createKeyValuePairsForQuery(filter),
-		page*pageLength)
 	toReturn := []SnowIncident{}
 	if err == nil {
 		defer result.Close()
