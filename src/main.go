@@ -900,19 +900,6 @@ func taskWindowRefresh(specific string) {
 											func() {
 												// Validate form
 												// Convert Items to Saving
-												if items.AffectedUser == "me" {
-													saving.AffectedUser = appPreferences.TaskPreferences.SnowUser[1:]
-												}
-												saving.Service = foundServices[items.Service]
-												saving.ServiceOffering = foundServices[items.ServiceOffering]
-												saving.ShortDescription = items.ShortDescription
-												saving.ContactType = tasks.SNContactTypes[items.ContactType]
-												saving.Impact = tasks.SNImpact[items.Impact]
-												saving.Urgency = tasks.SNUrgency[items.Urgency]
-												saving.AssignmentGroup = foundAssignmentGroups[items.AssignmentGroup]
-												if x, ok := foundAssignedTo[items.AssignedTo]; ok {
-													saving.AssignedTo = x
-												}
 												missing := []string{}
 												for name, value := range map[string]string{
 													"Affected User":     items.AffectedUser,
@@ -935,6 +922,20 @@ func taskWindowRefresh(specific string) {
 													)
 												} else {
 													// Save
+													if items.AffectedUser == "me" {
+														saving.AffectedUser = appPreferences.TaskPreferences.SnowUser[1:]
+													}
+													saving.Service = foundServices[items.Service]
+													saving.ServiceOffering = foundAffectsOfferings[items.ServiceOffering]
+													saving.ShortDescription = items.ShortDescription
+													saving.ContactType = items.ContactType
+													saving.Impact = tasks.SNImpact[items.Impact]
+													saving.Urgency = tasks.SNUrgency[items.Urgency]
+													saving.AssignmentGroup = foundAssignmentGroups[items.AssignmentGroup]
+													saving.Description = items.Description
+													if x, ok := foundAssignedTo[items.AssignedTo]; ok {
+														saving.AssignedTo = x
+													}
 													number, url, err := tasks.Snow.CreateNewIncident(saving)
 													if err == nil && url > "" {
 														me := dialog.NewCustom(
