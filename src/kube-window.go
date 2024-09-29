@@ -30,16 +30,9 @@ func setupKubenetesWindow() *fyne.Container {
 	// Variable holders
 	deployments := binding.BindStringList(&[]string{})
 	pods := binding.BindStringList(&[]string{})
+	contexts := []string{}
+	namespaces := []string{}
 
-	// Get kubes available
-	contexts, e := kube.GetContexts()
-	if e != nil {
-		fmt.Printf("Failed to get contexts %s\n", e.Error())
-	}
-	namespaces, e := kube.GetNamespaces()
-	if e != nil {
-		fmt.Printf("Failed to get contexts %s\n", e.Error())
-	}
 	// Selectors
 	namespaceSelector := widget.NewSelect(
 		namespaces,
@@ -136,10 +129,10 @@ func setupKubenetesWindow() *fyne.Container {
 
 	contextSelector.OnChanged = func(new string) {
 		kube.SwitchContext(new)
-		namespaces, e = kube.GetNamespaces()
+		namespaces, err := kube.GetNamespaces()
 		namespaceSelector.Options = namespaces
-		if e != nil {
-			fmt.Printf("Failed to get contexts %s\n", e.Error())
+		if err != nil {
+			fmt.Printf("Failed to get contexts %s\n", err.Error())
 		}
 		deployments.Set([]string{})
 		pods.Set([]string{})
@@ -157,6 +150,20 @@ func setupKubenetesWindow() *fyne.Container {
 			widget.NewLabel("Namespace"),
 			namespaceSelector,
 			widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() {
+				if len(contextSelector.Options) == 0 {
+					// Get kubes available
+					contexts, e := kube.GetContexts()
+					if e == nil {
+						contextSelector.SetOptions(contexts)
+						contextSelector.SetSelected(kube.GetContext())
+					}
+					namespaces, e := kube.GetNamespaces()
+					if e == nil {
+						namespaceSelector.SetOptions(namespaces)
+						namespaceSelector.SetSelected(kube.GetNamespace())
+					}
+
+				}
 				x, _ := kube.GetDeployments()
 				deployments.Set(x)
 				y, _ := kube.GetPods()

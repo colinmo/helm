@@ -1,14 +1,19 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/url"
 	"os"
 	"os/user"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	fyne "fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"vonexplaino.com/m/v2/hq/kube"
@@ -43,6 +48,16 @@ func preferencesToLocalVar() {
 		appPreferences.TaskPreferences.PriorityOverride = thisApp.Preferences().StringWithFallback("PriorityOverride", pribase)
 	}
 	kube.Setup(appPreferences.KubePreferences.Context, appPreferences.KubePreferences.Namespace)
+	json.Unmarshal([]byte(thisApp.Preferences().StringWithFallback("LinkPreferences", `[]`)), &appPreferences.LinkPreferences)
+	appPreferences.LinkPreferences = []struct {
+		Label string
+		URL   string
+	}{}
+	appPreferences.LinkPreferences = append(appPreferences.LinkPreferences, struct {
+		Label string
+		URL   string
+	}{"SAB", "https://griffitheduau.sharepoint.com/sites/sab/SitePages/Home.aspx"})
+
 }
 
 func preferencesWindowSetup() {
@@ -92,6 +107,19 @@ func preferencesWindowSetup() {
 	kubeContext.SetText(appPreferences.KubePreferences.Context)
 	kubeNamespace := widget.NewEntry()
 	kubeNamespace.SetText(appPreferences.KubePreferences.Namespace)
+	// Links
+	links := binding.NewStringList()
+	for _, l := range appPreferences.LinkPreferences {
+		l2, _ := url.Parse(l.URL)
+		links.Append(fmt.Sprintf(`%s|%s`, l.Label, l2))
+	}
+	linksList := widget.NewListWithData(
+		links,
+		func() fyne.CanvasObject { return widget.NewLabel("") },
+		func(di binding.DataItem, co fyne.CanvasObject) {
+			co.(*widget.Label).Bind(di.(binding.String))
+		},
+	)
 
 	preferencesWindow.Resize(fyne.NewSize(500, 500))
 	preferencesWindow.Hide()
@@ -135,6 +163,27 @@ func preferencesWindowSetup() {
 		thisApp.Preferences().SetString("KubeContext", appPreferences.KubePreferences.Context)
 		appPreferences.KubePreferences.Namespace = kubeNamespace.Text
 		thisApp.Preferences().SetString("KubeNamespace", appPreferences.KubePreferences.Namespace)
+
+		appPreferences.LinkPreferences = []struct {
+			Label string
+			URL   string
+		}{}
+		x, _ := links.Get()
+		for _, l := range x {
+			bits := strings.Split(l, "|")
+			appPreferences.LinkPreferences = append(
+				appPreferences.LinkPreferences,
+				struct {
+					Label string
+					URL   string
+				}{
+					Label: bits[0],
+					URL:   bits[1],
+				},
+			)
+		}
+		out, _ := json.Marshal(appPreferences.LinkPreferences)
+		thisApp.Preferences().SetString("LinkPreferences", string(out))
 	})
 	preferencesWindow.SetContent(
 		container.New(
@@ -183,6 +232,10 @@ func preferencesWindowSetup() {
 			kubeContext,
 			widget.NewLabel("Namespace"),
 			kubeNamespace,
+			widget.NewLabel(""),
+			widget.NewLabelWithStyle("Links", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			widget.NewButton("Add", func() {}),
+			linksList,
 		),
 	)
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -45,6 +46,10 @@ type AppPreferencesStruct struct {
 	ZettlekastenHome string
 	TaskPreferences  tasks.TaskPreferencesStruct
 	KubePreferences  kube.PreferencesStruct
+	LinkPreferences  []struct {
+		Label string
+		URL   string
+	}
 }
 
 var thisApp fyne.App
@@ -437,15 +442,21 @@ func taskWindowSetup() {
 	TaskTabsIndexes = map[string]int{}
 	TaskTabs = container.NewAppTabs()
 	TaskTabsIndexes["Dashboard"] = 0
+	// Links
+	md := "## Links\n"
+	for _, l := range appPreferences.LinkPreferences {
+		l2, _ := url.Parse(l.URL)
+		md = md + fmt.Sprintf(`* [%s](%s)`+"\n", l.Label, l2)
+	}
 	TaskTabs.Append(
 		container.NewTabItem(
 			"Dashboard",
 			container.NewBorder(
+				widget.NewLabel("# of open tasks\nStatus of projects\nLookup of iServer for RSDF\n* Other things"),
 				nil,
 				nil,
 				nil,
-				nil,
-				container.NewAdaptiveGrid(2, widget.NewLabel("# of open tasks\nStatus of projects\nLookup of iServer for RSDF\n* Other things")),
+				widget.NewRichTextFromMarkdown(md),
 			),
 		),
 	)
