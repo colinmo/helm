@@ -112,6 +112,8 @@ func setupKubenetesWindow() *fyne.Container {
 				deets[1] = "✔"
 			case "Failed":
 				deets[1] = "☠"
+			case "Terminating":
+				deets[1] = "☠"
 			case "Unknown":
 				deets[1] = "‽"
 			}
