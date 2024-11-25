@@ -57,53 +57,6 @@ func InitTasks(appPreferences *TaskPreferencesStruct, connectionStatusBoxRef fun
 	ActiveTaskStatusUpdate = activeTaskStatusUpdateRef
 	ConnectionStatusBox = connectionStatusBoxRef
 	AppPreferences = *appPreferences
-	if AppPreferences.JiraActive {
-		Jira.Init()
-	}
-	if AppPreferences.MSPlannerActive {
-		Planner.Init("http://localhost:84/", "", "", time.Now())
-	}
-	if appPreferences.SnowActive {
-		Snow.Init(
-			"http://localhost:84/",
-			"",
-			"",
-			time.Now())
-	}
-	Zettle.Init()
-}
-
-func GetAllTasks(
-	jiraActive,
-	msplannerActive,
-	snowActive bool,
-	taskWindowRefresh func(string),
-	updateFunc func(int),
-	zettleHome string) {
-	if msplannerActive {
-		go func() {
-			Planner.Download()
-			taskWindowRefresh("Planner")
-		}()
-	}
-	if jiraActive {
-		go func() {
-			Jira.Download()
-			taskWindowRefresh("Jira")
-		}()
-	}
-	if snowActive {
-		go func() {
-			Snow.Download(
-				func() { taskWindowRefresh("SNIncidents") },
-				func() { taskWindowRefresh("SNRequests") },
-				func() { taskWindowRefresh("SNTeamIncidents") },
-			)
-			taskWindowRefresh("Snow")
-		}()
-	}
-	Zettle.Download(zettleHome)
-	taskWindowRefresh("Zettle")
 }
 
 type TaskPreferencesStruct struct {

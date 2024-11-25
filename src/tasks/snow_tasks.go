@@ -112,13 +112,19 @@ var SNUrgencyLabels = []string{
 var snowConf *oauth2.Config
 
 var snowTokenLock sync.Mutex
+var incidentWindow, requestsWindow, teamIncidentWindow func()
 
 func (snow *SNOWStruct) Init(
 	baseRedirect string,
-	accessToken string,
-	refreshToken string,
-	expiration time.Time) {
+	expiration time.Time,
+	incidentWindow2 func(),
+	requestsWindow2 func(),
+	teamIncidentWindow2 func()) {
 	snowTokenLock.Lock()
+	incidentWindow = incidentWindow2
+	requestsWindow = requestsWindow2
+	teamIncidentWindow = teamIncidentWindow2
+
 	snow.TokenStatus = Inactive
 	snow.RedirectPath = "/snow"
 	snow.BaseURL = snBaseUrl
@@ -160,7 +166,7 @@ func (snow *SNOWStruct) Login() {
 	}()
 }
 
-func (snow *SNOWStruct) Download(incidentWindow func(), requestsWindow func(), teamIncidentWindow func()) {
+func (snow *SNOWStruct) Download() {
 	snow.DownloadIncidents(incidentWindow)
 	snow.DownloadMyRequests(requestsWindow)
 	snow.DownloadTeamIncidents(teamIncidentWindow)
@@ -181,6 +187,7 @@ func (snow *SNOWStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
 			AppPreferences.SnowSRefreshToken = snow.Token.RefreshToken
 			AppPreferences.SnowExpiresAt = snow.Token.Expiry
 			snowTokenLock.Unlock()
+			snow.Download()
 		}
 	}
 }
@@ -255,29 +262,37 @@ func (snow *SNOWStruct) DownloadMyRequests(afterFunc func()) {
 				ActiveTaskStatusUpdate(1)
 				defer ActiveTaskStatusUpdate(-1)
 				snow.LoggedIncidents = []TaskResponseStruct{}
-				for offset := 0; offset < 200; offset++ {
-					res, _ := snow.GetMyRequestsForPage(offset)
-					for _, e := range res {
-						myOverride := e.Priority
-						if val, ok := PriorityOverrides.SNow[e.ID]; ok {
-							myOverride = val
+				for _, funcin := range []func(int) ([]SnowIncident, error){
+					snow.GetMyRequestIncidentsForPage,
+					snow.GetMyRequestReqItemsForPage,
+					snow.GetMyRequestSCsForPage} {
+					for offset := 0; offset < 200; offset++ {
+						res, e1 := funcin(offset)
+						if e1 != nil {
+							log.Fatalf("DAMNNIT %s\n", e1.Error())
 						}
-						snow.LoggedIncidents = append(
-							snow.LoggedIncidents,
-							TaskResponseStruct{
-								BusObRecId:       e.ID,
-								ID:               e.Number,
-								Title:            e.Description,
-								CreatedDateTime:  e.Created,
-								Priority:         e.Priority,
-								PriorityOverride: myOverride,
-								Status:           e.Status,
-								Type:             e.Type,
-							},
-						)
-					}
-					if len(res) == 0 {
-						break
+						for _, e := range res {
+							myOverride := e.Priority
+							if val, ok := PriorityOverrides.SNow[e.ID]; ok {
+								myOverride = val
+							}
+							snow.LoggedIncidents = append(
+								snow.LoggedIncidents,
+								TaskResponseStruct{
+									BusObRecId:       e.ID,
+									ID:               e.Number,
+									Title:            e.Description,
+									CreatedDateTime:  e.Created,
+									Priority:         e.Priority,
+									PriorityOverride: myOverride,
+									Status:           e.Status,
+									Type:             e.Type,
+								},
+							)
+						}
+						if len(res) == 0 {
+							break
+						}
 					}
 				}
 				sort.SliceStable(
@@ -361,47 +376,32 @@ func (snow *SNOWStruct) GetMyIncidentsForPage(page int) ([]SnowIncident, error) 
 	return r, err
 }
 
-func (snow *SNOWStruct) GetMyRequestsForPage(page int) ([]SnowIncident, error) {
-	r, err := snow.SearchSnowFor(
+func (snow *SNOWStruct) GetMyRequestIncidentsForPage(page int) (returnMe []SnowIncident, err error) {
+	returnMe, err = snow.SearchSnowFor(
 		"incident", // table
 		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state", "sys_class_name"}, // fields to return
 		map[string]string{"opened_by": AppPreferences.SnowUser, "active": "=true", "state": "!=6"},                 // filters
 		page,
 	)
-	s, err2 := snow.SearchSnowFor(
+	return
+}
+func (snow *SNOWStruct) GetMyRequestSCsForPage(page int) (returnMe []SnowIncident, err error) {
+	returnMe, err = snow.SearchSnowFor(
 		"sc_request", // table
 		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state", "sys_class_name"}, // fields to return
 		map[string]string{"active": "=true", "state": "!=6", "requested_for": AppPreferences.SnowUser},             // filters
 		page,
 	)
-	t, err3 := snow.SearchSnowFor(
+	return
+}
+func (snow *SNOWStruct) GetMyRequestReqItemsForPage(page int) (returnMe []SnowIncident, err error) {
+	returnMe, err = snow.SearchSnowFor(
 		"sc_req_item", // table
 		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state", "sys_class_name"}, // fields to return
 		map[string]string{"active": "=true", "state": "!=6", "requested_for": AppPreferences.SnowUser},             // filters
 		page,
 	)
-	if err == nil && err == err2 && err2 == err3 {
-		return append(append(r, s...), t...), nil
-	}
-	if err == nil {
-		if err2 == nil {
-			return append(r, s...), err3
-		}
-		if err3 == nil {
-			return append(r, t...), err2
-		}
-		return r, err2
-	}
-	if err2 == nil {
-		if err3 == nil {
-			return append(s, t...), err
-		}
-		return s, err
-	}
-	if err3 == nil {
-		return t, err
-	}
-	return nil, err
+	return
 }
 
 func (snow *SNOWStruct) GetMyTeamIncidentsForPage(page int) ([]SnowIncident, error) {
@@ -518,16 +518,17 @@ func (snow *SNOWStruct) GetAnyTable(table string, fields []string, filter map[st
 
 func (snow *SNOWStruct) SearchSnowFor(table string, fields []string, filter map[string]string, page int) ([]SnowIncident, error) {
 	var incidentsResponse SnowResponse
-	pageLength := 20
+	pageLength := 50
+	params := fmt.Sprintf(
+		"sysparm_limit=%d&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d&sysparm_display_value=true",
+		pageLength,
+		strings.Join(fields, ","),
+		createKeyValuePairsForQuery(filter),
+		page*pageLength)
 	result, err := snow.getStuffFromURL(
 		"GET",
 		"/api/now/table/"+table,
-		fmt.Sprintf(
-			"sysparm_limit=%d&sysparm_fields=%s&sysparm_query=%s&sysparm_offset=%d&sysparm_display_value=true",
-			pageLength,
-			strings.Join(fields, ","),
-			createKeyValuePairsForQuery(filter),
-			page*pageLength),
+		params,
 		[]byte{},
 	)
 	toReturn := []SnowIncident{}
@@ -571,7 +572,6 @@ func createKeyValuePairsForQuery(m map[string]string) string {
 }
 
 func (snow *SNOWStruct) getStuffFromURL(method string, path string, query string, payload []byte) (io.ReadCloser, error) {
-	snowTokenLock.Lock()
 	client := snowConf.Client(context.Background(), snow.Token)
 	newpath, _ := url.JoinPath(snow.BaseURL, path)
 	req, e := http.NewRequest(method, newpath, bytes.NewReader(payload))
@@ -583,7 +583,6 @@ func (snow *SNOWStruct) getStuffFromURL(method string, path string, query string
 	req.Header.Set("Content-type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
-	snowTokenLock.Unlock()
 	if err != nil {
 		log.Fatal(err)
 		return nil, err
@@ -592,7 +591,6 @@ func (snow *SNOWStruct) getStuffFromURL(method string, path string, query string
 }
 
 func (snow *SNOWStruct) getStuffAndHeadersFromURL(method string, path string, query string, payload []byte) (io.ReadCloser, int, map[string][]string, error) {
-	snowTokenLock.Lock()
 	client := snowConf.Client(context.Background(), snow.Token)
 	newpath, _ := url.JoinPath(snow.BaseURL, path)
 	req, e := http.NewRequest(method, newpath, bytes.NewReader(payload))
@@ -605,7 +603,6 @@ func (snow *SNOWStruct) getStuffAndHeadersFromURL(method string, path string, qu
 	req.Header.Set("Content-type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
-	snowTokenLock.Unlock()
 	if err != nil {
 		log.Fatal(err)
 		return nil, 0, map[string][]string{}, err

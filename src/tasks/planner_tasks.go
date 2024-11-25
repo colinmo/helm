@@ -58,8 +58,6 @@ var planConf *oauth2.Config
 
 func (p *PlannerStruct) Init(
 	baseRedirect string,
-	accessToken string,
-	refreshToken string,
 	expiration time.Time) {
 	msTokenLock.Lock()
 	p.PlanTitles = map[string]string{}
@@ -104,6 +102,7 @@ func (p *PlannerStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("Content-type", "text/html")
 			fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.<script>window.close();</script></body></html>")
 			msTokenLock.Unlock()
+			p.Download()
 		}
 	}
 }
@@ -113,6 +112,7 @@ func (p *PlannerStruct) Login() {
 }
 
 func (p *PlannerStruct) Download() {
+	msTokenLock.Lock()
 	ActiveTaskStatusUpdate(1)
 	defer ActiveTaskStatusUpdate(-1)
 
@@ -193,10 +193,11 @@ func (p *PlannerStruct) Download() {
 		}
 		return p.MyTasks[i].PriorityOverride < p.MyTasks[j].PriorityOverride
 	})
+	TaskWindowRefresh("Planner")
+	msTokenLock.Unlock()
 }
 
 func (p *PlannerStruct) CallGraphURI(method string, path string, payload []byte, query string) (io.ReadCloser, error) {
-	msTokenLock.Lock()
 	client := planConf.Client(context.Background(), p.Token)
 	newpath, _ := url.JoinPath("https://graph.microsoft.com/v1.0/", path)
 	req, _ := http.NewRequest(method, newpath, bytes.NewReader(payload))
@@ -204,7 +205,6 @@ func (p *PlannerStruct) CallGraphURI(method string, path string, payload []byte,
 	req.Header.Set("Content-type", "application/json")
 
 	resp, err := client.Do(req)
-	msTokenLock.Unlock()
 	if err == nil && resp.StatusCode == 200 {
 		return resp.Body, err
 	}

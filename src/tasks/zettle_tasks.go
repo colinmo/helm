@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -33,7 +34,6 @@ func (zet *ZettleStruct) Download(dir string) {
 	defer ActiveTaskStatusUpdate(-1)
 	zetLock.Lock()
 	defer zetLock.Unlock()
-	TaskWindowRefresh("Zettle")
 	ConnectionStatusBox(false, "Z")
 	zet.MyTasks = []TaskResponseStruct{}
 	foundTasks := map[string]bool{}
@@ -54,6 +54,8 @@ func (zet *ZettleStruct) Download(dir string) {
 					log.Fatalf("Can't read %v\n", err)
 				}
 			}
+		} else {
+			fmt.Printf("Error %s\n", err.Error())
 		}
 		return nil
 	})
@@ -67,6 +69,7 @@ func (zet *ZettleStruct) Download(dir string) {
 		return zet.MyTasks[i].PriorityOverride < zet.MyTasks[k].PriorityOverride
 	})
 	ConnectionStatusBox(true, "Z")
+	TaskWindowRefresh("Zettle")
 }
 
 type ZettleYaml struct {
