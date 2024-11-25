@@ -15,8 +15,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-var defaultModel = "Baseline Architecture"
-
 type IServerStruct struct {
 	Token        *oauth2.Token
 	RedirectPath string
@@ -75,6 +73,7 @@ func (p *IServerStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "<html><head></head><body><H1>Authenticated<p>You are authenticated, you may close this window.<script>window.close();</script></body></html>")
 			isTokenLock.Unlock()
 		}
+		AuthWebServer.Shutdown(context.Background())
 	}
 }
 

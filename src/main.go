@@ -224,7 +224,7 @@ func main() {
 			activeTaskStatusUpdate,
 			filepath.Dir(appPreferences.ZettlekastenHome),
 		)
-		iServer.Init("http://localhost:86/")
+		//iServer.Init("http://localhost:86/")
 	}()
 
 	if desk, ok := thisApp.(desktop.App); ok {
@@ -254,6 +254,7 @@ func main() {
 		desk.SetSystemTrayMenu(m)
 	}
 	thisApp.Run()
+	fmt.Printf("And we're done")
 }
 
 func markdownWindowSetup() {
