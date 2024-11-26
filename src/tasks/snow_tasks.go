@@ -149,20 +149,25 @@ func (snow *SNOWStruct) Init(
 	snow.Login()
 }
 
+var SnowLoginDone = make(chan struct{})
+
 func (snow *SNOWStruct) Login() {
 	go func() {
+		fmt.Printf("Snow login\n")
 		snow.G.Do(
 			"SNOWLogin",
 			func() (interface{}, error) {
 				snow.TokenStatus = Pending
 				browser.OpenURL(snowConf.AuthCodeURL("some-user-state", oauth2.AccessTypeOffline))
 				for {
-					if snow.TokenStatus == Active {
+					select {
+					case <-SnowLoginDone:
 						return "", nil
 					}
 				}
 			},
 		)
+		fmt.Printf("Done Snow login\n")
 	}()
 }
 
@@ -186,6 +191,8 @@ func (snow *SNOWStruct) Authenticate(w http.ResponseWriter, r *http.Request) {
 			AppPreferences.SnowAccessToken = snow.Token.AccessToken
 			AppPreferences.SnowSRefreshToken = snow.Token.RefreshToken
 			AppPreferences.SnowExpiresAt = snow.Token.Expiry
+			SnowLoginDone <- struct{}{}
+			snow.TokenStatus = Active
 			snowTokenLock.Unlock()
 			snow.Download()
 		}
@@ -203,6 +210,7 @@ func (snow *SNOWStruct) MyIcon() []byte {
 
 func (snow *SNOWStruct) DownloadIncidents(afterFunc func()) {
 	go func() {
+		fmt.Printf("Snow Incidents\n")
 		snow.G.Do(
 			"DownloadIncidents",
 			func() (interface{}, error) {
@@ -251,11 +259,13 @@ func (snow *SNOWStruct) DownloadIncidents(afterFunc func()) {
 				return "", nil
 			},
 		)
+		fmt.Printf("End Snow Incidents\n")
 	}()
 }
 
 func (snow *SNOWStruct) DownloadMyRequests(afterFunc func()) {
 	go func() {
+		fmt.Printf("Snow REquests\n")
 		snow.G.Do(
 			"DownloadMyRequests",
 			func() (interface{}, error) {
@@ -311,11 +321,13 @@ func (snow *SNOWStruct) DownloadMyRequests(afterFunc func()) {
 				return "", nil
 			},
 		)
+		fmt.Printf("End Snow REquests\n")
 	}()
 }
 
 func (snow *SNOWStruct) DownloadTeamIncidents(afterFunc func()) {
 	go func() {
+		fmt.Printf("Snow Team\n")
 		snow.G.Do(
 			"DownloadTeamIncidents",
 			func() (interface{}, error) {
@@ -363,6 +375,7 @@ func (snow *SNOWStruct) DownloadTeamIncidents(afterFunc func()) {
 				return "", nil
 			},
 		)
+		fmt.Printf("End Snow Team\n")
 	}()
 }
 

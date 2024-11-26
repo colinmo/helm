@@ -913,10 +913,7 @@ func taskWindowRefresh(specific string) {
 		TaskTabs.Items[TaskTabsIndexes["Planner"]].Text = fmt.Sprintf("Plans (%d)", len(tasks.Planner.MyTasks))
 	}
 	if _, ok := TaskTabsIndexes["Jira"]; ok && appPreferences.TaskPreferences.JiraActive && (specific == "" || specific == "Jira") {
-		// Get the teams
-		go func() {
-			allAvailableTeams, alphaTeams = tasks.Jira.TeamsLookup()
-		}()
+
 		var list fyne.CanvasObject
 		if len(tasks.Jira.MyTasks) == 0 {
 			list = widget.NewLabel("No requests")
@@ -1206,6 +1203,7 @@ func createNewJiraTicket() {
 	)
 	allProjects := map[string]string{}
 	go func() {
+		fmt.Printf("Find projects\n")
 		find, projectOrder := tasks.Jira.ProjectLookup(projectEntry.SelectedText())
 		projectEntry.SetOptions(projectOrder)
 		for k, v := range find {
@@ -1217,6 +1215,7 @@ func createNewJiraTicket() {
 		if len(projectOrder) == 1 {
 			projectEntry.SetText(projectOrder[0])
 		}
+		fmt.Printf("End find projects\n")
 	}()
 	summaryEntry := widget.NewEntry()
 	descriptionEntry := widget.NewMultiLineEntry()
@@ -1273,6 +1272,7 @@ func createNewJiraTicket() {
 					theme.DocumentSaveIcon(),
 					func() {
 						go func() {
+							fmt.Printf("Save JIRA\n")
 							// Validate
 							// Save
 							saveMe := IssueObject{}
@@ -1342,6 +1342,7 @@ func createNewJiraTicket() {
 
 							}
 							deepdeep.Show()
+							fmt.Printf("Done Save JIRA\n")
 						}()
 					},
 				),
@@ -1355,6 +1356,7 @@ func createNewJiraTicket() {
 				widget.NewLabel("Description"), descriptionEntry,
 				widget.NewLabel("Assignee"), container.NewBorder(nil, nil, nil, widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
 					go func() {
+						fmt.Printf("Person lookup\n")
 						find, order := tasks.Jira.PersonLookup(assigneeSelect.Text)
 						assigneeSelect.SetOptions(order)
 						for k, v := range find {
@@ -1363,10 +1365,12 @@ func createNewJiraTicket() {
 						if len(order) == 1 {
 							assigneeSelect.SetText(order[0])
 						}
+						fmt.Printf("End Person Lookup\n")
 					}()
 				}), assigneeSelect),
 				widget.NewLabel("Reporter"), container.NewBorder(nil, nil, nil, widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
 					go func() {
+						fmt.Printf("Person lookup\n")
 						find, order := tasks.Jira.PersonLookup(reporterSelect.Text)
 						reporterSelect.SetOptions(order)
 						for k, v := range find {
@@ -1375,6 +1379,7 @@ func createNewJiraTicket() {
 						if len(order) == 1 {
 							reporterSelect.SetText(order[0])
 						}
+						fmt.Printf("End Person Lookup\n")
 					}()
 				}), reporterSelect),
 				widget.NewLabel("Team"), teamSelect,

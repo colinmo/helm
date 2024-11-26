@@ -85,6 +85,7 @@ func pullUpdates() {
 	quit := make(chan struct{})
 	// Run on interval
 	go func() {
+		fmt.Printf("Timer started\n")
 		for {
 			select {
 			case <-ticker.C:
@@ -92,7 +93,7 @@ func pullUpdates() {
 				weekday := time.Now().Weekday()
 				if hour > 8 && hour < 17 && weekday > 0 && weekday < 6 {
 					for _, y := range scheduledTasksList {
-						go func() { y() }()
+						y()
 					}
 				}
 				// do stuff
@@ -180,9 +181,11 @@ func startTasks() {
 		tasks.Jira.Init()
 		scheduledTasksList["Jira"] = func() {
 			tasks.Jira.Download()
+			allAvailableTeams, alphaTeams = tasks.Jira.TeamsLookup()
 			taskWindowRefresh("Jira")
 		}
 		tasks.Jira.Download()
+		allAvailableTeams, alphaTeams = tasks.Jira.TeamsLookup()
 		taskWindowRefresh("Jira")
 	}
 	if appPreferences.TaskPreferences.MSPlannerActive {
