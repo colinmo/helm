@@ -383,7 +383,7 @@ func (snow *SNOWStruct) GetMyIncidentsForPage(page int) ([]SnowIncident, error) 
 	r, err := snow.SearchSnowFor(
 		"task", // table
 		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state", "sys_class_name", "approval_history"}, // fields to return
-		map[string]string{"assigned_to": AppPreferences.SnowUser, "active": "=true"},                                                   // filters
+		map[string]string{"assigned_to": AppPreferences.SnowUser, "active": "=true", "state": "!=6"},                                   // filters
 		page,
 	)
 	return r, err
@@ -402,7 +402,7 @@ func (snow *SNOWStruct) GetMyRequestSCsForPage(page int) (returnMe []SnowInciden
 	returnMe, err = snow.SearchSnowFor(
 		"sc_request", // table
 		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state", "sys_class_name"}, // fields to return
-		map[string]string{"active": "=true", "state": "!=6", "requested_for": AppPreferences.SnowUser},             // filters
+		map[string]string{"requested_for": AppPreferences.SnowUser, "active": "=true", "state": "!=6"},             // filters
 		page,
 	)
 	return
@@ -411,7 +411,7 @@ func (snow *SNOWStruct) GetMyRequestReqItemsForPage(page int) (returnMe []SnowIn
 	returnMe, err = snow.SearchSnowFor(
 		"sc_req_item", // table
 		[]string{"number", "short_description", "sys_id", "priority", "sys_created_on", "state", "sys_class_name"}, // fields to return
-		map[string]string{"active": "=true", "state": "!=6", "requested_for": AppPreferences.SnowUser},             // filters
+		map[string]string{"requested_for": AppPreferences.SnowUser, "active": "=true", "state": "!=6"},             // filters
 		page,
 	)
 	return
@@ -420,8 +420,8 @@ func (snow *SNOWStruct) GetMyRequestReqItemsForPage(page int) (returnMe []SnowIn
 func (snow *SNOWStruct) GetMyTeamIncidentsForPage(page int) ([]SnowIncident, error) {
 	r, err := snow.SearchSnowFor(
 		"task", // table
-		[]string{"number", "short_description", "variables.contract_title", "sys_id", "priority", "sys_created_on", "state"}, // fields to return
-		map[string]string{"assigned_to": "=", "active": "=true", "assignment_group": AppPreferences.SnowGroup},               // filters
+		[]string{"number", "short_description", "variables.contract_title", "sys_id", "priority", "sys_created_on", "state"},   // fields to return
+		map[string]string{"assigned_to": "=", "active": "=true", "state": "!=6", "assignment_group": AppPreferences.SnowGroup}, // filters
 		page,
 	)
 	return r, err
